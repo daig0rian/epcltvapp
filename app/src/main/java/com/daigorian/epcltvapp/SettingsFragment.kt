@@ -36,7 +36,7 @@ class SettingsFragment : GuidedStepSupportFragment(){
             GuidedAction.Builder(requireContext())
                 .id(PORT_NUM)
                 .title(Settings.getPORT_NUM(requireContext()).toString())
-                .description("EPGStation の port番号")
+                .description(getString(R.string.port_number_of_epgstation))
                 .editable(true)
                 .inputType(InputType.TYPE_CLASS_NUMBER)
                 .editInputType(InputType.TYPE_CLASS_NUMBER)
@@ -95,7 +95,7 @@ class SettingsFragment : GuidedStepSupportFragment(){
                 }
                 action.id == PORT_NUM -> {
                     if (action.title.toString().toInt() !in 0 .. 65535){
-                        Toast.makeText(requireContext(), "有効なport番号は 0 から 65535 までです", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(), getString(R.string.valid_port_number_are_from_0_to_65535), Toast.LENGTH_SHORT).show()
                         return  GuidedAction.ACTION_ID_CURRENT
                     }
                     Settings.setIP_PORT_NUM(requireContext(),action.title.toString().toInt())

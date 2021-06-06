@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">epcltvapp</string>
+    <string name="browse_title">EPGStation</string>
+    <string name="settings">設定</string>
+    <string name="recent_videos">最近の録画</string>
+    <string name="rule_id_is_x">ルールID : %1$</string>
+    <string name="play_ts">TSを再生</string>
+    <string name="play_x">%1$sを再生</string>
+    <string name="videos_in_same_rule">同じルールのビデオ</string>
+    <string name="search_results">検索結果</string>
+    <string name="connect_epgstation_failed">EPGStationに接続できませんでした. 設定メニューからIPアドレスを確認してください</string>
+    <string name="ip_addr_of_epgstation">EPGStationのIPアドレス</string>
+    <string name="number_of_items_to_get_at_one_time">APIで一度に取得するアイテムの数</string>
+    <string name="movie_player">録画を再生するプレーヤー</string>
+    <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
+    <string name="port_number_of_epgstation">EPGStation の port番号</string>
+    <string name="valid_port_number_are_from_0_to_65535">有効なport番号は 0 から 65535 までです</string>
+</resources>

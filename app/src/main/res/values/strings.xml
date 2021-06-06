@@ -1,10 +1,6 @@
 <resources>
     <string name="app_name">epcltvapp</string>
-    <string name="browse_title">Videos by Your Company</string>
-    <string name="grid_view">Grid View</string>
-    <string name="error_fragment">Error Fragment</string>
-    <string name="personal_settings">Personal Settings</string>
-    <string name="movie">Movie</string>
+    <string name="browse_title">EPGStation</string>
 
     <!-- UI -->
     <string name="settings">Settings</string>
@@ -17,12 +13,12 @@
 
     <!-- Error messages -->
     <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPG Station IP Address from Settings menu.</string>
-    <string name="error_fragment_message">An error occurred</string>
-    <string name="dismiss_error">Dismiss</string>
     <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
     <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
     <string name="movie_player">Movie Player</string>
     <string name="please_install_external_player">Please Install External Player</string>
+    <string name="port_number_of_epgstation">Port Number of EPGStation</string>
+    <string name="valid_port_number_are_from_0_to_65535">Valid Port Numbers are from 0 to 65535</string>
 
 
 </resources>
