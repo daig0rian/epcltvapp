@@ -15,7 +15,11 @@ import androidx.leanback.widget.*
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 import java.util.*
+import kotlin.math.roundToInt
 
 /**
  * A wrapper fragment for leanback details screens.
@@ -23,7 +27,7 @@ import java.util.*
  */
 class VideoDetailsFragment : DetailsSupportFragment() {
 
-    private var mSelectedMovie: Movie? = null
+    private var mSelectedRecordedProgram: RecordedProgram? = null
 
     private lateinit var mDetailsBackground: DetailsSupportFragmentBackgroundController
     private lateinit var mPresenterSelector: ClassPresenterSelector
@@ -35,15 +39,15 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         mDetailsBackground = DetailsSupportFragmentBackgroundController(this)
 
-        mSelectedMovie = requireActivity().intent.getSerializableExtra(DetailsActivity.MOVIE) as Movie
-        if (mSelectedMovie != null) {
+        mSelectedRecordedProgram = requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram
+        if (mSelectedRecordedProgram != null) {
             mPresenterSelector = ClassPresenterSelector()
             mAdapter = ArrayObjectAdapter(mPresenterSelector)
             setupDetailsOverviewRow()
             setupDetailsOverviewRowPresenter()
             setupRelatedMovieListRow()
             adapter = mAdapter
-            initializeBackground(mSelectedMovie)
+            initializeBackground(mSelectedRecordedProgram!!)
             onItemViewClickedListener = ItemViewClickedListener()
         } else {
             val intent = Intent(requireContext(), MainActivity::class.java)
@@ -51,13 +55,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         }
     }
 
-    private fun initializeBackground(movie: Movie?) {
+    private fun initializeBackground(recorded: RecordedProgram) {
         mDetailsBackground.enableParallax()
         Glide.with(requireContext())
             .asBitmap()
             .centerCrop()
             .error(R.drawable.default_background)
-            .load(movie?.backgroundImageUrl)
+            .load(EpgStation.getThumbnailURL(recorded.id.toString()))
             .into<CustomTarget<Bitmap>>(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(
                     bitmap: Bitmap,
@@ -71,13 +75,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     }
 
     private fun setupDetailsOverviewRow() {
-        Log.d(TAG, "doInBackground: " + mSelectedMovie?.toString())
-        val row = DetailsOverviewRow(mSelectedMovie)
+        Log.d(TAG, "doInBackground: " + mSelectedRecordedProgram?.toString())
+        val row = DetailsOverviewRow(mSelectedRecordedProgram)
         row.imageDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         val width = convertDpToPixel(requireContext(), DETAIL_THUMB_WIDTH)
         val height = convertDpToPixel(requireContext(), DETAIL_THUMB_HEIGHT)
         Glide.with(requireContext())
-            .load(mSelectedMovie?.cardImageUrl)
+            .load(EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString()))
             .centerCrop()
             .error(R.drawable.default_background)
             .into<CustomTarget<Drawable>>(object : CustomTarget<Drawable>(width, height) {
@@ -94,27 +98,27 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         val actionAdapter = ArrayObjectAdapter()
 
-        actionAdapter.add(
-            Action(
-                ACTION_WATCH_TRAILER,
-                resources.getString(R.string.watch_trailer_1),
-                resources.getString(R.string.watch_trailer_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
-                ACTION_RENT,
-                resources.getString(R.string.rent_1),
-                resources.getString(R.string.rent_2)
-            )
-        )
-        actionAdapter.add(
-            Action(
-                ACTION_BUY,
-                resources.getString(R.string.buy_1),
-                resources.getString(R.string.buy_2)
-            )
-        )
+        mSelectedRecordedProgram?.let {
+            // オリジナルのTSがある場合は "TS を再生" アクションアダプタを追加
+            if (it.original) {
+                actionAdapter.add(
+                    Action(
+                        ACTION_WATCH_ORIGINAL_TS,
+                        getString(R.string.play_ts)
+                    )
+                )
+            }
+            // エンコード済みがある場合は "XX を再生" アクションアダプタを追加
+            it.encoded?.forEach { encodedProgram ->
+                actionAdapter.add(
+                    Action(
+                        encodedProgram.encodedId,
+                        getString(R.string.play_x,encodedProgram.name)
+                    )
+                )
+            }
+        }
+
         row.actionsAdapter = actionAdapter
 
         mAdapter.add(row)
@@ -135,35 +139,42 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         detailsPresenter.isParticipatingEntranceTransition = true
 
         detailsPresenter.onActionClickedListener = OnActionClickedListener { action ->
-            if (action.id == ACTION_WATCH_TRAILER) {
-                val intent = Intent(requireContext(), PlaybackActivity::class.java)
-                intent.putExtra(DetailsActivity.MOVIE, mSelectedMovie)
-                startActivity(intent)
-            } else {
-                Toast.makeText(requireContext(), action.toString(), Toast.LENGTH_SHORT).show()
-            }
+
+            val intent = Intent(requireContext(), PlaybackActivity::class.java)
+            intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)
+            intent.putExtra(DetailsActivity.ACTIONID, action.id)
+            startActivity(intent)
+
         }
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
     }
 
     private fun setupRelatedMovieListRow() {
-        val subcategories = arrayOf(getString(R.string.related_movies))
-        val list = MovieList.list
 
-        Collections.shuffle(list)
-        val listRowAdapter = ArrayObjectAdapter(CardPresenter())
-        for (j in 0 until NUM_COLS) {
-            listRowAdapter.add(list[j % 5])
+        //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
+        mSelectedRecordedProgram?.ruleId?.let{
+            val listRowAdapter = ArrayObjectAdapter(CardPresenter())
+            EpgStation.api.getRecorded(rule = mSelectedRecordedProgram?.ruleId).enqueue(object : Callback<GetRecordedResponse> {
+                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                    response.body()!!.recorded.forEach {
+                        listRowAdapter.add(it)
+                    }
+                }
+                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+                }
+            })
+
+            val header = HeaderItem(0, getString(R.string.videos_in_same_rule))
+            mAdapter.add(ListRow(header, listRowAdapter))
+            mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
         }
-
-        val header = HeaderItem(0, subcategories[0])
-        mAdapter.add(ListRow(header, listRowAdapter))
-        mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
     }
 
     private fun convertDpToPixel(context: Context, dp: Int): Int {
         val density = context.applicationContext.resources.displayMetrics.density
-        return Math.round(dp.toFloat() * density)
+        return (dp.toFloat() * density).roundToInt()
     }
 
     private inner class ItemViewClickedListener : OnItemViewClickedListener {
@@ -173,10 +184,10 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             rowViewHolder: RowPresenter.ViewHolder,
             row: Row
         ) {
-            if (item is Movie) {
+            if (item is RecordedProgram) {
                 Log.d(TAG, "Item: $item")
                 val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(resources.getString(R.string.movie), mSelectedMovie)
+                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
 
                 val bundle =
                     ActivityOptionsCompat.makeSceneTransitionAnimation(
@@ -193,9 +204,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     companion object {
         private const val TAG = "VideoDetailsFragment"
 
-        private const val ACTION_WATCH_TRAILER = 1L
-        private const val ACTION_RENT = 2L
-        private const val ACTION_BUY = 3L
+        internal const val ACTION_WATCH_ORIGINAL_TS = 0L
 
         private const val DETAIL_THUMB_WIDTH = 274
         private const val DETAIL_THUMB_HEIGHT = 274

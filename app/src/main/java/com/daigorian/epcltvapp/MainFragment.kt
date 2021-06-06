@@ -22,6 +22,11 @@ import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import java.util.*
 
+//Retrofit 2
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+
 /**
  * Loads a grid of cards with movies to browse.
  */
@@ -75,31 +80,76 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun loadRows() {
-        val list = MovieList.list
 
+
+        //縦の列を作る
         val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
-        val cardPresenter = CardPresenter()
+        var numOfRow = 0L
 
-        for (i in 0 until NUM_ROWS) {
-            if (i != 0) {
-                Collections.shuffle(list)
-            }
-            val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-            for (j in 0 until NUM_COLS) {
-                listRowAdapter.add(list[j % 5])
-            }
-            val header = HeaderItem(i.toLong(), MovieList.MOVIE_CATEGORY[i])
-            rowsAdapter.add(ListRow(header, listRowAdapter))
-        }
-
-        val gridHeader = HeaderItem(NUM_ROWS.toLong(), "PREFERENCES")
+        //最初の横の列 設定
+        val gridHeader = HeaderItem(numOfRow++, getString(R.string.settings))
 
         val mGridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(mGridPresenter)
-        gridRowAdapter.add(resources.getString(R.string.grid_view))
-        gridRowAdapter.add(getString(R.string.error_fragment))
-        gridRowAdapter.add(resources.getString(R.string.personal_settings))
+        gridRowAdapter.add(resources.getString(R.string.settings))
         rowsAdapter.add(ListRow(gridHeader, gridRowAdapter))
+
+        //横の列を作る
+        //カードの表示の処理を行うCardPresenterは横の列ごとに再利用するので取っておく。
+        val cardPresenter = CardPresenter()
+        //最初の横の列を追加。"最近の録画"
+        val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+        val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
+
+        //APIで最近の録画を取得して、それをカードに加えていく。
+        EpgStation.api.getRecorded().enqueue(object : Callback<GetRecordedResponse> {
+            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                response.body()!!.recorded.forEach {
+                    listRowAdapter.add(it)
+                }
+            }
+            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                Log.d(TAG,"loadRows() getRecorded API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+            }
+        })
+
+        // 完成した横の列を、縦の列に加える。
+        rowsAdapter.add(ListRow(header, listRowAdapter))
+
+        //次の横の列。録画ルール。録画ルールの数だけ行が増える。
+        EpgStation.api.getRulesList().enqueue(object : Callback<Array<RuleList>> {
+            override fun onResponse(call: Call<Array<RuleList>>, response: Response<Array<RuleList>>) {
+                response.body()?.forEach { rule ->
+
+                    //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                    val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
+                        getString(R.string.rule_id_is_x, rule.id.toString())
+                    }else{
+                        rule.keyword
+                    }
+
+                    val ruleListRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    val ruleHeader = HeaderItem(numOfRow++, keyword)
+                    EpgStation.api.getRecorded(rule=rule.id).enqueue(object : Callback<GetRecordedResponse> {
+                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                            response.body()!!.recorded.forEach { recordedProgram ->
+                                ruleListRowAdapter.add(recordedProgram)
+                            }
+                        }
+                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                            Log.d(TAG,"loadRows() getRecorded API Failure")
+                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_SHORT).show()
+                        }
+                    })
+                    rowsAdapter.add(ListRow(ruleHeader, ruleListRowAdapter))
+                }
+            }
+            override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
+                Log.d(TAG,"loadRows() getRulesList API Failure")
+                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_SHORT).show()
+            }
+        })
 
         adapter = rowsAdapter
     }
@@ -122,10 +172,10 @@ class MainFragment : BrowseSupportFragment() {
             row: Row
         ) {
 
-            if (item is Movie) {
+            if (item is RecordedProgram) {
                 Log.d(TAG, "Item: $item")
                 val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(DetailsActivity.MOVIE, item)
+                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
 
                 val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
                     activity!!,
@@ -150,8 +200,8 @@ class MainFragment : BrowseSupportFragment() {
             itemViewHolder: Presenter.ViewHolder?, item: Any?,
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
-            if (item is Movie) {
-                mBackgroundUri = item.backgroundImageUrl
+            if (item is RecordedProgram) {
+                mBackgroundUri = EpgStation.getThumbnailURL(item.id.toString())
                 startBackgroundTimer()
             }
         }
@@ -215,7 +265,5 @@ class MainFragment : BrowseSupportFragment() {
         private const val BACKGROUND_UPDATE_DELAY = 300
         private const val GRID_ITEM_WIDTH = 200
         private const val GRID_ITEM_HEIGHT = 200
-        private const val NUM_ROWS = 6
-        private const val NUM_COLS = 15
     }
 }

@@ -3,6 +3,7 @@ package com.daigorian.epcltvapp
 import okhttp3.OkHttpClient
 import retrofit2.Call
 import retrofit2.Retrofit
+import retrofit2.Retrofit.Builder
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
 import java.util.concurrent.TimeUnit
@@ -26,7 +27,7 @@ object EpgStation {
         fun getRulesList(): Call<Array<RuleList>>
     }
 
-    private var ip:String = "192.168.0.0"
+    private var ip:String = "192.168.11.2"
     private var port:Int = 8888
     private var default_limit:Int = 24
 
@@ -43,13 +44,13 @@ object EpgStation {
         return getBaseURL() + "recorded/" + id +"/file?encodedId=" + encid
     }
 
-    private var okHttpClient: OkHttpClient? = OkHttpClient.Builder()
+    private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
         .writeTimeout(5, TimeUnit.SECONDS)
         .build()
 
-    var api = Retrofit.Builder()
+    var api: ApiInterface = Builder()
         .addConverterFactory(GsonConverterFactory.create())
         .baseUrl(getBaseURL())
         .client(okHttpClient)
@@ -59,7 +60,7 @@ object EpgStation {
         ip = _ip
         port = _port
         default_limit = _default_limit
-        api = Retrofit.Builder()
+        api = Builder()
             .addConverterFactory(GsonConverterFactory.create())
             .baseUrl(getBaseURL())
             .client(okHttpClient)

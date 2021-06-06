@@ -41,20 +41,18 @@ class CardPresenter : Presenter() {
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
-        val movie = item as Movie
+        val recordedProgram = item as RecordedProgram
         val cardView = viewHolder.view as ImageCardView
 
         Log.d(TAG, "onBindViewHolder")
-        if (movie.cardImageUrl != null) {
-            cardView.titleText = movie.title
-            cardView.contentText = movie.studio
-            cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
-            Glide.with(viewHolder.view.context)
-                .load(movie.cardImageUrl)
-                .centerCrop()
-                .error(mDefaultCardImage)
-                .into(cardView.mainImageView)
-        }
+        cardView.titleText = recordedProgram.name
+        cardView.contentText = recordedProgram.description
+        cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
+        Glide.with(viewHolder.view.context)
+            .load(EpgStation.getThumbnailURL(recordedProgram.id.toString()))
+            .centerCrop()
+            .error(mDefaultCardImage)
+            .into(cardView.mainImageView)
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {

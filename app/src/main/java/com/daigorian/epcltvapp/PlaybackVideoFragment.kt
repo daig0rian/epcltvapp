@@ -16,8 +16,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val (_, title, description, _, _, videoUrl) =
-            activity?.intent?.getSerializableExtra(DetailsActivity.MOVIE) as Movie
+        val recordedProgram =
+            activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram
+        val actionId =
+            activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID) as Long
 
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
         val playerAdapter = MediaPlayerAdapter(context)
@@ -25,11 +27,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         mTransportControlGlue = PlaybackTransportControlGlue(activity, playerAdapter)
         mTransportControlGlue.host = glueHost
-        mTransportControlGlue.title = title
-        mTransportControlGlue.subtitle = description
+        mTransportControlGlue.title = recordedProgram.name
+        mTransportControlGlue.subtitle = recordedProgram.description
         mTransportControlGlue.playWhenPrepared()
 
-        playerAdapter.setDataSource(Uri.parse(videoUrl))
+        val movieUrl = if (actionId == VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS) {
+            EpgStation.getTsVideoURL(recordedProgram.id.toString())
+        } else {
+            EpgStation.getEncodedVideoURL(recordedProgram.id.toString(),actionId.toString())
+        }
+
+        playerAdapter.setDataSource(Uri.parse(movieUrl))
     }
 
     override fun onPause() {

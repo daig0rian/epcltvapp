@@ -1,19 +1,19 @@
 <resources>
     <string name="app_name">epcltvapp</string>
     <string name="browse_title">Videos by Your Company</string>
-    <string name="related_movies">Related Videos</string>
+    <string name="videos_in_same_rule">Videos in same Rule</string>
     <string name="grid_view">Grid View</string>
     <string name="error_fragment">Error Fragment</string>
     <string name="personal_settings">Personal Settings</string>
-    <string name="watch_trailer_1">Watch trailer</string>
-    <string name="watch_trailer_2">FREE</string>
-    <string name="rent_1">Rent By Day</string>
-    <string name="rent_2">From $1.99</string>
-    <string name="buy_1">Buy and Own</string>
-    <string name="buy_2">AT $9.99</string>
     <string name="movie">Movie</string>
 
     <!-- Error messages -->
     <string name="error_fragment_message">An error occurred</string>
     <string name="dismiss_error">Dismiss</string>
+    <string name="settings">Settings</string>
+    <string name="recent_videos">Recent videos</string>
+    <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPG Station IP Address from Settings menu.</string>
+    <string name="rule_id_is_x">Roule ID : %1$s</string>
+    <string name="play_ts">Play TS</string>
+    <string name="play_x">Play %1$s</string>
 </resources>
