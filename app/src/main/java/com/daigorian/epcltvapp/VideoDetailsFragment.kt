@@ -130,7 +130,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val detailsPresenter = FullWidthDetailsOverviewRowPresenter(DetailsDescriptionPresenter())
         detailsPresenter.backgroundColor =
             ContextCompat.getColor(requireContext(), R.color.selected_background)
-        detailsPresenter
         // Hook up transition element.
         val sharedElementHelper = FullWidthDetailsOverviewSharedElementHelper()
         sharedElementHelper.setSharedElementEnterTransition(
