@@ -156,8 +156,9 @@ class MainFragment : BrowseSupportFragment() {
 
     private fun setupEventListeners() {
         setOnSearchClickedListener {
-            Toast.makeText(requireContext(), "Implement your own in-app search", Toast.LENGTH_LONG)
-                .show()
+            Intent(activity, SearchActivity::class.java).also { intent ->
+                startActivity(intent)
+            }
         }
 
         onItemViewClickedListener = ItemViewClickedListener()
