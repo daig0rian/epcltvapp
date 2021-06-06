@@ -1,0 +1,26 @@
+EPGStation で録画を見る プライバシーポリシー
+第三者に個人を特定できる情報を提供することはありません。
+
+個人情報の管理には最新の注意を払い、以下に掲げた通りに扱います。
+
+音声検索
+アプリ内検索においてリモコンに代わり音声で検索を行えるよう音声レコーディングを使用しています
+開発者側が音声データを収集することはありません。
+ 
+
+免責事項
+利用者が本アプリを利用して生じた損害に関して、開発元は責任を負わないものとします。
+
+
+"Watch recordings on EPGStation" Privacy Policy
+We do not provide any personally identifiable information to third parties.
+
+We will pay the latest attention to the management of personal information and handle it as listed below.
+
+Voice search
+Voice recording is used for in-app search so that you can search by voice instead of the remote control.
+The developer does not collect audio data.
+ 
+
+Disclaimer
+The developer shall not be liable for any damages caused by the user using this application.
