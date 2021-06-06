@@ -17,7 +17,8 @@
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.Epcltvapp">
+        android:theme="@style/Theme.Epcltvapp"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:banner="@drawable/app_icon_your_company"
