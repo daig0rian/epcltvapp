@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.os.Bundle
 import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -23,7 +24,7 @@ class BrowseErrorActivity : FragmentActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         if (savedInstanceState == null) {
-            getSupportFragmentManager().beginTransaction()
+            supportFragmentManager.beginTransaction()
                 .replace(R.id.main_browse_fragment, MainFragment())
                 .commitNow()
         }
@@ -43,7 +44,7 @@ class BrowseErrorActivity : FragmentActivity() {
             .add(R.id.main_browse_fragment, mSpinnerFragment)
             .commit()
 
-        val handler = Handler()
+        val handler = Handler(Looper.getMainLooper())
         handler.postDelayed({
             supportFragmentManager
                 .beginTransaction()
@@ -57,7 +58,7 @@ class BrowseErrorActivity : FragmentActivity() {
         override fun onCreateView(
             inflater: LayoutInflater, container: ViewGroup?,
             savedInstanceState: Bundle?
-        ): View? {
+        ): View {
             val progressBar = ProgressBar(container?.context)
             if (container is FrameLayout) {
                 val layoutParams =
@@ -69,8 +70,8 @@ class BrowseErrorActivity : FragmentActivity() {
     }
 
     companion object {
-        private val TIMER_DELAY = 3000L
-        private val SPINNER_WIDTH = 100
-        private val SPINNER_HEIGHT = 100
+        private const val TIMER_DELAY = 3000L
+        private const val SPINNER_WIDTH = 100
+        private const val SPINNER_HEIGHT = 100
     }
 }

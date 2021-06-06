@@ -1,6 +1,5 @@
 package com.daigorian.epcltvapp
 
-import android.app.Activity
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 
@@ -15,7 +14,7 @@ class DetailsActivity : FragmentActivity() {
         if (savedInstanceState == null) {
             supportFragmentManager.beginTransaction()
                 .replace(R.id.details_fragment, VideoDetailsFragment())
-                .commitNow();
+                .commitNow()
         }
     }
 

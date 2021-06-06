@@ -23,7 +23,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val playerAdapter = MediaPlayerAdapter(context)
         playerAdapter.setRepeatAction(PlaybackControlsRow.RepeatAction.INDEX_NONE)
 
-        mTransportControlGlue = PlaybackTransportControlGlue(getActivity(), playerAdapter)
+        mTransportControlGlue = PlaybackTransportControlGlue(activity, playerAdapter)
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = title
         mTransportControlGlue.subtitle = description

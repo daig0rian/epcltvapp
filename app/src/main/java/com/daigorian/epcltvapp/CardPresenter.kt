@@ -19,7 +19,7 @@ class CardPresenter : Presenter() {
     private var sSelectedBackgroundColor: Int by Delegates.notNull()
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
 
-    override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
+    override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         Log.d(TAG, "onCreateViewHolder")
 
         sDefaultBackgroundColor = ContextCompat.getColor(parent.context, R.color.default_background)
@@ -37,10 +37,10 @@ class CardPresenter : Presenter() {
         cardView.isFocusable = true
         cardView.isFocusableInTouchMode = true
         updateCardBackgroundColor(cardView, false)
-        return Presenter.ViewHolder(cardView)
+        return ViewHolder(cardView)
     }
 
-    override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any) {
+    override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
         val movie = item as Movie
         val cardView = viewHolder.view as ImageCardView
 
@@ -57,7 +57,7 @@ class CardPresenter : Presenter() {
         }
     }
 
-    override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) {
+    override fun onUnbindViewHolder(viewHolder: ViewHolder) {
         Log.d(TAG, "onUnbindViewHolder")
         val cardView = viewHolder.view as ImageCardView
         // Remove references to images so that the garbage collector can free up memory
@@ -74,9 +74,9 @@ class CardPresenter : Presenter() {
     }
 
     companion object {
-        private val TAG = "CardPresenter"
+        private const val TAG = "CardPresenter"
 
-        private val CARD_WIDTH = 313
-        private val CARD_HEIGHT = 176
+        private const val CARD_WIDTH = 313
+        private const val CARD_HEIGHT = 176
     }
 }
