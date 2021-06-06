@@ -1,0 +1,4 @@
+<resources>
+
+    <style name="Theme.Epcltvapp" parent="@style/Theme.Leanback" />
+</resources>
