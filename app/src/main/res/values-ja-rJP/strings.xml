@@ -4,7 +4,7 @@
     <string name="browse_title">EPGStation</string>
     <string name="settings">設定</string>
     <string name="recent_videos">最近の録画</string>
-    <string name="rule_id_is_x">ルールID : %1$</string>
+    <string name="rule_id_is_x">ルールID %1$s</string>
     <string name="play_ts">TSを再生</string>
     <string name="play_x">%1$sを再生</string>
     <string name="videos_in_same_rule">同じルールのビデオ</string>

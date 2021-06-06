@@ -85,7 +85,7 @@ class MainFragment : BrowseSupportFragment() {
         isHeadersTransitionOnBackEnabled = true
 
         // set fastLane (or headers) background color
-        brandColor = ContextCompat.getColor(requireContext(), R.color.fastlane_background)
+        brandColor = ContextCompat.getColor(requireContext(), R.color.background_epgstation)
         // set search icon color
         searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.search_opaque)
     }

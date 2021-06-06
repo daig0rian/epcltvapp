@@ -5,17 +5,17 @@
     <!-- UI -->
     <string name="settings">Settings</string>
     <string name="recent_videos">Recent videos</string>
-    <string name="rule_id_is_x">Roule ID : %1$s</string>
+    <string name="rule_id_is_x">Rule ID %1$s</string>
     <string name="play_ts">Play TS</string>
     <string name="play_x">Play %1$s</string>
     <string name="videos_in_same_rule">Videos in same Rule</string>
     <string name="search_results">Search Result</string>
+    <string name="movie_player">Movie Player</string>
+    <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
+    <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
 
     <!-- Error messages -->
     <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPG Station IP Address from Settings menu.</string>
-    <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
-    <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
-    <string name="movie_player">Movie Player</string>
     <string name="please_install_external_player">Please Install External Player</string>
     <string name="port_number_of_epgstation">Port Number of EPGStation</string>
     <string name="valid_port_number_are_from_0_to_65535">Valid Port Numbers are from 0 to 65535</string>
