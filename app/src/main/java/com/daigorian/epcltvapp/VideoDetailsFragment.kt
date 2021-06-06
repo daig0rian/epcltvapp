@@ -1,9 +1,11 @@
 package com.daigorian.epcltvapp
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -18,7 +20,6 @@ import com.bumptech.glide.request.transition.Transition
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import java.util.*
 import kotlin.math.roundToInt
 
 /**
@@ -140,10 +141,41 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         detailsPresenter.onActionClickedListener = OnActionClickedListener { action ->
 
-            val intent = Intent(requireContext(), PlaybackActivity::class.java)
-            intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)
-            intent.putExtra(DetailsActivity.ACTIONID, action.id)
-            startActivity(intent)
+            val playerId = Settings.getPLAYER_ID(requireContext())
+            if( playerId == Settings.PLAYER_ID_INTERNAL) {
+                //内蔵プレーヤー
+                val intent = Intent(requireContext(), PlaybackActivity::class.java)
+                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)
+                intent.putExtra(DetailsActivity.ACTIONID, action.id)
+                startActivity(intent)
+
+            }else{
+                //外部プレーヤー
+                val urlStrings = if (action.id == ACTION_WATCH_ORIGINAL_TS) {
+                    EpgStation.getTsVideoURL(mSelectedRecordedProgram?.id.toString())
+                } else {
+                    EpgStation.getEncodedVideoURL(mSelectedRecordedProgram?.id.toString(),action.id.toString())
+                }
+
+                val uri = Uri.parse(urlStrings)
+
+                val extPlayerIntent = Intent(Intent.ACTION_VIEW)
+                val extPlayerPackageName = Settings.PLAYER_ID_TO_PACKAGE[playerId]
+
+                extPlayerIntent.setPackage(extPlayerPackageName)
+                extPlayerIntent.setDataAndTypeAndNormalize(uri, "video/*")
+                extPlayerIntent.putExtra("title", mSelectedRecordedProgram!!.name)
+
+                try {
+                    startActivity(extPlayerIntent)
+                } catch (ex: ActivityNotFoundException) {
+                    //外部プレーヤーがインストールされていないためGoogle Play Marketを表示
+                    val marketIntent = Intent(Intent.ACTION_VIEW)
+                    marketIntent.data = Uri.parse("market://details?id=$extPlayerPackageName")
+                    startActivity(marketIntent)
+                    Toast.makeText(requireContext(), getString(R.string.please_install_external_player), Toast.LENGTH_LONG).show()
+                }
+            }
 
         }
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
@@ -208,7 +240,5 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         private const val DETAIL_THUMB_WIDTH = 274
         private const val DETAIL_THUMB_HEIGHT = 274
-
-        private const val NUM_COLS = 10
     }
 }

@@ -22,6 +22,7 @@
     <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
     <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
     <string name="movie_player">Movie Player</string>
+    <string name="please_install_external_player">Please Install External Player</string>
 
 
 </resources>

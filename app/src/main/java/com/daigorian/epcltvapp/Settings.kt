@@ -27,7 +27,7 @@ object Settings {
         FETCH_LIMIT_96 to 96)
 
     val FETCH_LIMIT_ID_TO_DESCRIPTION = mapOf(
-        FETCH_LIMIT_24 to "デフォルト",
+        FETCH_LIMIT_24 to "Default",
         FETCH_LIMIT_48 to "",
         FETCH_LIMIT_72 to "",
         FETCH_LIMIT_96 to "")
@@ -40,23 +40,23 @@ object Settings {
     const val PLAYER_ID_MX = 42L
 
     val PLAYER_ID_TO_PACKAGE = mapOf(
-        PLAYER_ID_VLC to "org.videolan.vlc",
         PLAYER_ID_MX to "com.mxtech.videoplayer.ad",
+        PLAYER_ID_VLC to "org.videolan.vlc",
         PLAYER_ID_INTERNAL to "internal"
     )
     val PLAYER_ID_TO_NAME = mapOf(
-        PLAYER_ID_VLC to "VLC",
         PLAYER_ID_MX to "MX Player",
+        PLAYER_ID_VLC to "VLC",
         PLAYER_ID_INTERNAL to "Internal",
     )
     val PLAYER_ID_TO_DESCRIPTION = mapOf(
-        PLAYER_ID_VLC to "デフォルト",
-        PLAYER_ID_MX to "",
-        PLAYER_ID_INTERNAL to "非推奨",
+        PLAYER_ID_MX to "Default",
+        PLAYER_ID_VLC to "",
+        PLAYER_ID_INTERNAL to "Not Recommended",
     )
 
     const val PLAYER_ID_KEY = "PLAYER_ID"
-    const val PLAYER_ID_DEFAULT = PLAYER_ID_VLC
+    const val PLAYER_ID_DEFAULT = PLAYER_ID_MX
 
     fun loadDefaultPreferencesIfNotExist(context: Context){
         val sharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)

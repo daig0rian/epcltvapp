@@ -128,7 +128,7 @@ class MainFragment : BrowseSupportFragment() {
             }
             override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
             }
         })
 
@@ -156,7 +156,7 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                             Log.d(TAG,"loadRows() getRecorded API Failure")
-                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
                         }
                     })
                     //最初の行が最近の録画になり、最終行が設定になるように常に二番目に加える。
@@ -165,7 +165,7 @@ class MainFragment : BrowseSupportFragment() {
             }
             override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRulesList API Failure")
-                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
             }
         })
 
@@ -208,7 +208,7 @@ class MainFragment : BrowseSupportFragment() {
                     val intent = Intent(context!!, SettingsActivity::class.java)
                     startActivity(intent)
                 } else {
-                    Toast.makeText(context!!, item, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context!!, item, Toast.LENGTH_LONG).show()
                 }
             }
         }
