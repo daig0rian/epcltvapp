@@ -39,8 +39,8 @@
         </activity>
         <activity android:name=".DetailsActivity" />
         <activity android:name=".PlaybackActivity" />
-        <activity android:name=".BrowseErrorActivity" />
         <activity android:name=".SearchActivity" />
+        <activity android:name=".SettingsActivity" />
     </application>
 
 </manifest>

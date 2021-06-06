@@ -19,6 +19,9 @@
     <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPG Station IP Address from Settings menu.</string>
     <string name="error_fragment_message">An error occurred</string>
     <string name="dismiss_error">Dismiss</string>
+    <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
+    <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
+    <string name="movie_player">Movie Player</string>
 
 
 </resources>

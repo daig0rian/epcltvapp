@@ -1,8 +1,8 @@
 package com.daigorian.epcltvapp
 
+import android.content.Context
 import okhttp3.OkHttpClient
 import retrofit2.Call
-import retrofit2.Retrofit
 import retrofit2.Retrofit.Builder
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
@@ -27,9 +27,9 @@ object EpgStation {
         fun getRulesList(): Call<Array<RuleList>>
     }
 
-    private var ip:String = "192.168.11.2"
-    private var port:Int = 8888
-    private var default_limit:Int = 24
+    private var ip:String = Settings.IP_ADDR_DEFAULT
+    private var port:Int = Settings.PORT_NUM_DEFAULT
+    private var default_limit:Int = Settings.FETCH_LIMIT_DEFAULT
 
     private fun getBaseURL():String{
         return "http://$ip:$port/api/"
@@ -56,10 +56,10 @@ object EpgStation {
         .client(okHttpClient)
         .build().create(ApiInterface::class.java)
 
-    fun initAPI(_ip:String,_port:Int,_default_limit:Int ){
-        ip = _ip
-        port = _port
-        default_limit = _default_limit
+    fun reloadAPI(context: Context){
+        ip = Settings.getIP_ADDRESS(context)
+        port = Settings.getPORT_NUM(context)
+        default_limit = Settings.getFETCH_LIMIT(context)
         api = Builder()
             .addConverterFactory(GsonConverterFactory.create())
             .baseUrl(getBaseURL())

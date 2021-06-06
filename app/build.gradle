@@ -35,4 +35,10 @@ dependencies {
     //EPGStation API を利用するための retrofit2
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
+
+    def preference_version = "1.1.1"
+    // Java language implementation
+    implementation "androidx.preference:preference:$preference_version"
+    // Kotlin
+    implementation "androidx.preference:preference-ktx:$preference_version"
 }
