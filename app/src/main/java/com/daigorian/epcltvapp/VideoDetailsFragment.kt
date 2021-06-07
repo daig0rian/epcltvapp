@@ -169,10 +169,15 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     startActivity(extPlayerIntent)
                 } catch (ex: ActivityNotFoundException) {
                     //外部プレーヤーがインストールされていないためGoogle Play Marketを表示
-                    val marketIntent = Intent(Intent.ACTION_VIEW)
-                    marketIntent.data = Uri.parse("market://details?id=$extPlayerPackageName")
-                    startActivity(marketIntent)
                     Toast.makeText(requireContext(), getString(R.string.please_install_external_player), Toast.LENGTH_LONG).show()
+
+                    try{
+                        val marketIntent = Intent(Intent.ACTION_VIEW)
+                        marketIntent.data = Uri.parse("market://details?id=$extPlayerPackageName")
+                        startActivity(marketIntent)
+                    } catch (ex: ActivityNotFoundException) {
+                        //Google Play Marketすらないからどうにもできない
+                    }
                 }
             }
 
