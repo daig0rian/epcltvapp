@@ -27,7 +27,7 @@
         <activity
             android:name=".MainActivity"
             android:banner="@drawable/ic_banner"
-            android:icon="@drawable/ic_banner"
+            android:icon="@mipmap/ic_launcher"
             android:label="@string/app_name"
             android:logo="@drawable/ic_banner"
             android:screenOrientation="landscape">
@@ -37,10 +37,14 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".DetailsActivity" />
-        <activity android:name=".PlaybackActivity" />
-        <activity android:name=".SearchActivity" />
-        <activity android:name=".SettingsActivity" />
+        <activity android:name=".DetailsActivity"
+            android:screenOrientation="landscape"/>
+        <activity android:name=".PlaybackActivity"
+            android:screenOrientation="landscape"/>
+        <activity android:name=".SearchActivity"
+            android:screenOrientation="landscape"/>
+        <activity android:name=".SettingsActivity"
+            android:screenOrientation="landscape"/>
     </application>
 
 </manifest>
