@@ -1,0 +1,38 @@
+<PreferenceScreen
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:title="@string/settings_title">
+
+    <EditTextPreference
+        app:title=       "@string/ip_addr_of_epgstation"
+        app:key=         "@string/pref_key_ip_addr"
+        app:defaultValue="@string/pref_val_ip_addr_default"
+        app:dialogLayout="@xml/preference_single_line_edittext"
+        app:useSimpleSummaryProvider="true"
+        />
+    <EditTextPreference
+        app:title=       "@string/port_number_of_epgstation"
+        app:key=         "@string/pref_key_port_num"
+        app:defaultValue="@string/pref_val_port_num_default"
+        app:dialogLayout="@xml/preference_single_line_edittext"
+        app:useSimpleSummaryProvider="true"
+        />
+    <ListPreference
+        app:title=       "@string/number_of_items_to_get_at_one_time"
+        app:key=         "@string/pref_key_fetch_limit"
+        app:defaultValue="@string/pref_val_fetch_limit_default"
+        app:entries=     "@array/pref_options_fetch_limit_label"
+        app:entryValues= "@array/pref_options_fetch_limit_val"
+        app:useSimpleSummaryProvider="true"
+        />
+
+    <ListPreference
+        app:key=         "@string/pref_key_player"
+        app:defaultValue="@string/pref_val_player_default"
+        app:title=       "@string/movie_player"
+        app:entries=     "@array/pref_options_movie_player_label"
+        app:entryValues= "@array/pref_options_movie_player_val"
+        app:useSimpleSummaryProvider="true"
+        />
+
+
+</PreferenceScreen>

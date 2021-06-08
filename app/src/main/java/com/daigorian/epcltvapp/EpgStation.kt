@@ -27,9 +27,29 @@ object EpgStation {
         fun getRulesList(): Call<Array<RuleList>>
     }
 
-    private var ip:String = Settings.IP_ADDR_DEFAULT
-    private var port:Int = Settings.PORT_NUM_DEFAULT
-    private var default_limit:Int = Settings.FETCH_LIMIT_DEFAULT
+    private var ip:String = "192.168.0.0"
+    private var port:String = "8888"
+    private var default_limit:Int = 24
+        set(value) {
+            field = value
+        }
+    private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
+        .connectTimeout(1, TimeUnit.SECONDS)
+        .readTimeout(5, TimeUnit.SECONDS)
+        .writeTimeout(5, TimeUnit.SECONDS)
+        .build()
+
+    var api: ApiInterface? = null
+
+    fun InitAPI(_ip:String, _port:String){
+        ip = _ip
+        port = _port
+        api = Builder()
+            .addConverterFactory(GsonConverterFactory.create())
+            .baseUrl(getBaseURL())
+            .client(okHttpClient)
+            .build().create(ApiInterface::class.java)
+    }
 
     private fun getBaseURL():String{
         return "http://$ip:$port/api/"
@@ -44,26 +64,4 @@ object EpgStation {
         return getBaseURL() + "recorded/" + id +"/file?encodedId=" + encid
     }
 
-    private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
-        .connectTimeout(5, TimeUnit.SECONDS)
-        .readTimeout(5, TimeUnit.SECONDS)
-        .writeTimeout(5, TimeUnit.SECONDS)
-        .build()
-
-    var api: ApiInterface = Builder()
-        .addConverterFactory(GsonConverterFactory.create())
-        .baseUrl(getBaseURL())
-        .client(okHttpClient)
-        .build().create(ApiInterface::class.java)
-
-    fun reloadAPI(context: Context){
-        ip = Settings.getIP_ADDRESS(context)
-        port = Settings.getPORT_NUM(context)
-        default_limit = Settings.getFETCH_LIMIT(context)
-        api = Builder()
-            .addConverterFactory(GsonConverterFactory.create())
-            .baseUrl(getBaseURL())
-            .client(okHttpClient)
-            .build().create(ApiInterface::class.java)
-    }
 }

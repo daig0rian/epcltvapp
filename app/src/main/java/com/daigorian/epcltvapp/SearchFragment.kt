@@ -39,7 +39,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
         if (!TextUtils.isEmpty(query)) {
 
-            EpgStation.api.getRecorded(keyword = query,reverse = true).enqueue(object :
+            EpgStation.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
                 Callback<GetRecordedResponse> {
                 override fun onResponse(
                     call: Call<GetRecordedResponse>,

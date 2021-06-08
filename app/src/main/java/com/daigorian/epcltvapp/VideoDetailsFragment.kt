@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import androidx.leanback.app.DetailsSupportFragment
 import androidx.leanback.app.DetailsSupportFragmentBackgroundController
 import androidx.leanback.widget.*
+import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
@@ -140,8 +141,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         detailsPresenter.onActionClickedListener = OnActionClickedListener { action ->
 
-            val playerId = Settings.getPLAYER_ID(requireContext())
-            if( playerId == Settings.PLAYER_ID_INTERNAL) {
+            val playerPkgName = PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(getString(R.string.pref_key_player),"")
+            if( playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)) {
                 //内蔵プレーヤー
                 val intent = Intent(requireContext(), PlaybackActivity::class.java)
                 intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)
@@ -159,9 +160,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 val uri = Uri.parse(urlStrings)
 
                 val extPlayerIntent = Intent(Intent.ACTION_VIEW)
-                val extPlayerPackageName = Settings.PLAYER_ID_TO_PACKAGE[playerId]
 
-                extPlayerIntent.setPackage(extPlayerPackageName)
+                extPlayerIntent.setPackage(playerPkgName)
                 extPlayerIntent.setDataAndTypeAndNormalize(uri, "video/*")
                 extPlayerIntent.putExtra("title", mSelectedRecordedProgram!!.name)
 
@@ -173,7 +173,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
                     try{
                         val marketIntent = Intent(Intent.ACTION_VIEW)
-                        marketIntent.data = Uri.parse("market://details?id=$extPlayerPackageName")
+                        marketIntent.data = Uri.parse("market://details?id=$playerPkgName")
                         startActivity(marketIntent)
                     } catch (ex: ActivityNotFoundException) {
                         //Google Play Marketすらないからどうにもできない
@@ -190,7 +190,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
         mSelectedRecordedProgram?.ruleId?.let{
             val listRowAdapter = ArrayObjectAdapter(CardPresenter())
-            EpgStation.api.getRecorded(rule = mSelectedRecordedProgram?.ruleId).enqueue(object : Callback<GetRecordedResponse> {
+            EpgStation.api?.getRecorded(rule = mSelectedRecordedProgram?.ruleId)?.enqueue(object : Callback<GetRecordedResponse> {
                 override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                     response.body()!!.recorded.forEach {
                         listRowAdapter.add(it)

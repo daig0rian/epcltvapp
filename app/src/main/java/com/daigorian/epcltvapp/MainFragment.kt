@@ -17,6 +17,7 @@ import androidx.core.content.ContextCompat
 import androidx.leanback.app.BackgroundManager
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.*
+import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
@@ -38,13 +39,22 @@ class MainFragment : BrowseSupportFragment() {
     private lateinit var mMetrics: DisplayMetrics
     private var mBackgroundTimer: Timer? = null
     private var mBackgroundUri: String? = null
+    private var mNeeds_reload_on_resume = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
         super.onCreate(savedInstanceState)
 
-        Settings.loadDefaultPreferencesIfNotExist(requireContext())
-        EpgStation.reloadAPI(requireContext())
+        if(!SettingsFragment.isPreferenceAllExists(requireContext())){
+            val intent = Intent(requireContext(), SettingsActivity::class.java)
+            startActivity(intent)
+            mNeeds_reload_on_resume = true
+        }else{
+            EpgStation.InitAPI(
+                PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_ip_addr),"")!!,
+                PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_port_num),"")!!
+            )
+        }
 
         prepareBackgroundManager()
 
@@ -57,8 +67,13 @@ class MainFragment : BrowseSupportFragment() {
 
     override fun onResume() {
         super.onResume()
-        if(Settings.hasChanged()){
+        if(mNeeds_reload_on_resume) {
+            EpgStation.InitAPI(
+                PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_ip_addr),"")!!,
+                PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_port_num),"")!!
+            )
             loadRows()
+            mNeeds_reload_on_resume = false
         }
 
     }
@@ -106,69 +121,70 @@ class MainFragment : BrowseSupportFragment() {
         rowsAdapter.add(ListRow(gridHeader, gridRowAdapter))
 
 
-
-        //動画のカードの表示の処理を行うCardPresenterは横の列ごとに設定する。
-        val cardPresenter = CardPresenter()
-
-        //横の列を作る
-        //APIで最近の録画を取得する。問題なく取得出来たら、一列追加してそれをカードに加えていく。
-        EpgStation.api.getRecorded().enqueue(object : Callback<GetRecordedResponse> {
-            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-
-                //の列を追加。"最近の録画"
-                val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
-                response.body()!!.recorded.forEach {
-                    listRowAdapter.add(it)
-                }
-                // 完成した横の列を、縦の列に加える。
-                // 非同期なのでAPIが終わるタイミングによって変な場所に挿入されることがあるので、
-                // Indexを指定して常にSettingsの次に加える
-                rowsAdapter.add(1,ListRow(header, listRowAdapter))
-            }
-            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
+        EpgStation.api?.let{  api ->
+            //動画のカードの表示の処理を行うCardPresenterは横の列ごとに設定する。
+            val cardPresenter = CardPresenter()
 
 
+            //横の列を作る
+            //APIで最近の録画を取得する。問題なく取得出来たら、一列追加してそれをカードに加えていく。
+            api.getRecorded().enqueue(object : Callback<GetRecordedResponse> {
+                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
 
-        //次の横の列。録画ルール。録画ルールの数だけ行が増える。
-        EpgStation.api.getRulesList().enqueue(object : Callback<Array<RuleList>> {
-            override fun onResponse(call: Call<Array<RuleList>>, response: Response<Array<RuleList>>) {
-                response.body()?.forEach { rule ->
-
-                    //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                    val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
-                        getString(R.string.rule_id_is_x, rule.id.toString())
-                    }else{
-                        rule.keyword
+                    //の列を追加。"最近の録画"
+                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
+                    response.body()!!.recorded.forEach {
+                        listRowAdapter.add(it)
                     }
-
-                    val ruleListRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val ruleHeader = HeaderItem(numOfRow++, keyword)
-                    EpgStation.api.getRecorded(rule=rule.id).enqueue(object : Callback<GetRecordedResponse> {
-                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            response.body()!!.recorded.forEach { recordedProgram ->
-                                ruleListRowAdapter.add(recordedProgram)
-                            }
-                        }
-                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                            Log.d(TAG,"loadRows() getRecorded API Failure")
-                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
-                        }
-                    })
-                    //最初の行が最近の録画になり、最終行が設定になるように常に二番目に加える。
-                    rowsAdapter.add(ListRow(ruleHeader, ruleListRowAdapter))
+                    // 完成した横の列を、縦の列に加える。
+                    // 非同期なのでAPIが終わるタイミングによって変な場所に挿入されることがあるので、
+                    // Indexを指定して常にSettingsの次に加える
+                    rowsAdapter.add(1,ListRow(header, listRowAdapter))
                 }
-            }
-            override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRulesList API Failure")
-                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
-            }
-        })
+                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Log.d(TAG,"loadRows() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                }
+            })
 
+
+
+            //次の横の列。録画ルール。録画ルールの数だけ行が増える。
+            api.getRulesList().enqueue(object : Callback<Array<RuleList>> {
+                override fun onResponse(call: Call<Array<RuleList>>, response: Response<Array<RuleList>>) {
+                    response.body()?.forEach { rule ->
+
+                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                        val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
+                            getString(R.string.rule_id_is_x, rule.id.toString())
+                        }else{
+                            rule.keyword
+                        }
+
+                        val ruleListRowAdapter = ArrayObjectAdapter(cardPresenter)
+                        val ruleHeader = HeaderItem(numOfRow++, keyword)
+                        api.getRecorded(rule=rule.id).enqueue(object : Callback<GetRecordedResponse> {
+                            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                                response.body()!!.recorded.forEach { recordedProgram ->
+                                    ruleListRowAdapter.add(recordedProgram)
+                                }
+                            }
+                            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                                Log.d(TAG,"loadRows() getRecorded API Failure")
+                                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
+                            }
+                        })
+                        //最初の行が最近の録画になり、最終行が設定になるように常に二番目に加える。
+                        rowsAdapter.add(ListRow(ruleHeader, ruleListRowAdapter))
+                    }
+                }
+                override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
+                    Log.d(TAG,"loadRows() getRulesList API Failure")
+                    Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
+                }
+            })
+        }
         adapter = rowsAdapter
     }
 
@@ -207,6 +223,7 @@ class MainFragment : BrowseSupportFragment() {
                 if (item.contains(getString(R.string.settings))) {
                     val intent = Intent(context!!, SettingsActivity::class.java)
                     startActivity(intent)
+                    mNeeds_reload_on_resume = true
                 } else {
                     Toast.makeText(context!!, item, Toast.LENGTH_LONG).show()
                 }
@@ -285,4 +302,6 @@ class MainFragment : BrowseSupportFragment() {
         private const val GRID_ITEM_WIDTH = 200
         private const val GRID_ITEM_HEIGHT = 200
     }
+
+
 }
