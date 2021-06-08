@@ -3,9 +3,9 @@
 ブラウザを持たないAndroid TV から EPGStationの録画を見るために開発されました
 
 ## 特徴
- AndroidTVのリモコンだけで操作が完結
- AndroidTVのリモコン内蔵マイクから録画済番組検索
- MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能
+ - AndroidTVのリモコンだけで操作が完結
+ - AndroidTVのリモコン内蔵マイクから録画済番組検索
+ - MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能
 
 ## デモ
 ![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
