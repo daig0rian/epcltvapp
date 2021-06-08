@@ -8,9 +8,9 @@
  MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能
 
 ## デモ
-![](https://github.com/daig0rian/epcltvapp/wiki/images/demo.gif)
+![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
 
-## VS.
+## V.S.
 ### Kodi + plugin.video.epgstation
 - （Google Play Storeの審査が通ったら）Google Play Sotreから一発で導入できてらくちん
 - 番組を音声検索できる
