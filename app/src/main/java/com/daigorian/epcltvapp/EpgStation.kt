@@ -12,7 +12,7 @@ object EpgStation {
     interface ApiInterface {
         @GET("recorded")
         fun getRecorded(
-            @Query("limit") limit: Int = default_limit,
+            @Query("limit") limit: Int = default_limit.toInt(),
             @Query("offset") offset: Int = 0,
             @Query("reverse") reverse: Boolean = false,
             @Query("rule") rule: Long? = null,
@@ -29,10 +29,8 @@ object EpgStation {
 
     private var ip:String = "192.168.0.0"
     private var port:String = "8888"
-    private var default_limit:Int = 24
-        set(value) {
-            field = value
-        }
+    var default_limit:String = "24"
+
     private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(1, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)

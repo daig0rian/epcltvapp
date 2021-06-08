@@ -39,7 +39,7 @@ class MainFragment : BrowseSupportFragment() {
     private lateinit var mMetrics: DisplayMetrics
     private var mBackgroundTimer: Timer? = null
     private var mBackgroundUri: String? = null
-    private var mNeeds_reload_on_resume = false
+    private var mNeedsReloadOnResume = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
@@ -48,12 +48,13 @@ class MainFragment : BrowseSupportFragment() {
         if(!SettingsFragment.isPreferenceAllExists(requireContext())){
             val intent = Intent(requireContext(), SettingsActivity::class.java)
             startActivity(intent)
-            mNeeds_reload_on_resume = true
+            mNeedsReloadOnResume = true
         }else{
             EpgStation.InitAPI(
                 PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_ip_addr),"")!!,
                 PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_port_num),"")!!
             )
+            EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_fetch_limit),"")!!
         }
 
         prepareBackgroundManager()
@@ -67,13 +68,13 @@ class MainFragment : BrowseSupportFragment() {
 
     override fun onResume() {
         super.onResume()
-        if(mNeeds_reload_on_resume) {
+        if(mNeedsReloadOnResume) {
             EpgStation.InitAPI(
                 PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_ip_addr),"")!!,
                 PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_port_num),"")!!
             )
             loadRows()
-            mNeeds_reload_on_resume = false
+            mNeedsReloadOnResume = false
         }
 
     }
@@ -223,7 +224,7 @@ class MainFragment : BrowseSupportFragment() {
                 if (item.contains(getString(R.string.settings))) {
                     val intent = Intent(context!!, SettingsActivity::class.java)
                     startActivity(intent)
-                    mNeeds_reload_on_resume = true
+                    mNeedsReloadOnResume = true
                 } else {
                     Toast.makeText(context!!, item, Toast.LENGTH_LONG).show()
                 }
