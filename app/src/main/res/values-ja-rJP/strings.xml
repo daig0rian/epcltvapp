@@ -21,7 +21,7 @@
     <string name="pref_options_fetch_limit_label_96">96</string>
     <string name="pref_options_movie_player_label_MX">MX Player (デフォルト)</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
-    <string name="pref_options_movie_player_label_INTERNAL">Internal (非推奨)</string>
+    <string name="pref_options_movie_player_label_INTERNAL">内蔵 (非推奨)</string>
     <string name="settings_title">\"EPGStationの録画を見る\" の設定</string>
     <string name="not_a_valid_ipv4_addr">%1$s は有効なIPv4アドレスではありません</string>
     <string name="not_a_valid_port_num">%1$s は有効なポート番号ではありません</string>
