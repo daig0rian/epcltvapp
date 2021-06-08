@@ -8,7 +8,7 @@
  MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能
 
 ## デモ
-
+![](https://github.com/daig0rian/epcltvapp/wiki/images/demo.gif)
 
 ## VS.
 ### Kodi + plugin.video.epgstation
