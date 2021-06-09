@@ -10,7 +10,7 @@
 ## デモ
 ![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
 
-## V.S.
+## 他のソリューションとの比較
 ### Kodi + plugin.video.epgstation
 - （Google Play Storeの審査が通ったら）Google Play Sotreから一発で導入できてらくちん
 - 番組を音声検索できる
