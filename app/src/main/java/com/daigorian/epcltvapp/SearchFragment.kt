@@ -8,6 +8,12 @@ import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.leanback.app.SearchSupportFragment
 import androidx.leanback.widget.*
+import com.daigorian.epcltvapp.epgstationcaller.EpgStation
+import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
+import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationv2caller.Records
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -38,8 +44,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         mRowsAdapter.add(ListRow(header, listRowAdapter))
 
         if (!TextUtils.isEmpty(query)) {
-
-            EpgStation.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
+            //V1
+            EpgStation?.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
                 Callback<GetRecordedResponse> {
                 override fun onResponse(
                     call: Call<GetRecordedResponse>,
@@ -51,6 +57,26 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                 }
 
                 override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Toast.makeText(
+                        context!!,
+                        R.string.connect_epgstation_failed,
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            })
+            //V2
+            EpgStationV2?.api?.getRecorded(keyword = query,isReverse = true)?.enqueue(object :
+                Callback<Records> {
+                override fun onResponse(
+                    call: Call<Records>,
+                    response: Response<Records>
+                ) {
+                    response.body()?.records?.forEach {
+                        listRowAdapter.add(it)
+                    }
+                }
+
+                override fun onFailure(call: Call<Records>, t: Throwable) {
                     Toast.makeText(
                         context!!,
                         R.string.connect_epgstation_failed,
@@ -70,20 +96,36 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
             row: Row
         ) {
 
-            if (item is RecordedProgram) {
-                Log.d(TAG, "item id : " + item.id + ", name:" + item)
-                val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
+            when (item) {
+                is RecordedProgram -> {
+                    //V1
+                    val intent = Intent(context!!, DetailsActivity::class.java)
+                    intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
 
-                val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                    activity!!,
-                    (itemViewHolder.view as ImageCardView).mainImageView,
-                    DetailsActivity.SHARED_ELEMENT_NAME
-                )
-                    .toBundle()
-                startActivity(intent, bundle)
-            } else if (item is String) {
-                Toast.makeText(context!!, item, Toast.LENGTH_SHORT).show()
+                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity!!,
+                        (itemViewHolder.view as ImageCardView).mainImageView,
+                        DetailsActivity.SHARED_ELEMENT_NAME
+                    )
+                        .toBundle()
+                    startActivity(intent, bundle)
+                }
+                is RecordedItem -> {
+                    //V2
+                    val intent = Intent(context!!, DetailsActivity::class.java)
+                    intent.putExtra(DetailsActivity.RECORDEDITEM, item)
+
+                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity!!,
+                        (itemViewHolder.view as ImageCardView).mainImageView,
+                        DetailsActivity.SHARED_ELEMENT_NAME
+                    )
+                        .toBundle()
+                    startActivity(intent, bundle)
+                }
+                is String -> {
+                    Toast.makeText(context!!, item, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

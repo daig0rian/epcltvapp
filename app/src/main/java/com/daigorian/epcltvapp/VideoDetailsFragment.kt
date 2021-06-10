@@ -18,6 +18,12 @@ import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
+import com.daigorian.epcltvapp.epgstationcaller.EpgStation
+import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
+import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationv2caller.Records
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -30,6 +36,7 @@ import kotlin.math.roundToInt
 class VideoDetailsFragment : DetailsSupportFragment() {
 
     private var mSelectedRecordedProgram: RecordedProgram? = null
+    private var mSelectedRecordedItem: RecordedItem? = null
 
     private lateinit var mDetailsBackground: DetailsSupportFragmentBackgroundController
     private lateinit var mPresenterSelector: ClassPresenterSelector
@@ -41,29 +48,46 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         mDetailsBackground = DetailsSupportFragmentBackgroundController(this)
 
-        mSelectedRecordedProgram = requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram
-        if (mSelectedRecordedProgram != null) {
-            mPresenterSelector = ClassPresenterSelector()
-            mAdapter = ArrayObjectAdapter(mPresenterSelector)
-            setupDetailsOverviewRow()
-            setupDetailsOverviewRowPresenter()
-            setupRelatedMovieListRow()
-            adapter = mAdapter
-            initializeBackground(mSelectedRecordedProgram!!)
-            onItemViewClickedListener = ItemViewClickedListener()
-        } else {
-            val intent = Intent(requireContext(), MainActivity::class.java)
-            startActivity(intent)
+        mSelectedRecordedProgram = requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
+        mSelectedRecordedItem= requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM) as RecordedItem?
+
+        when {
+            mSelectedRecordedProgram != null -> {
+                //V1
+                mPresenterSelector = ClassPresenterSelector()
+                mAdapter = ArrayObjectAdapter(mPresenterSelector)
+                setupDetailsOverviewRow()
+                setupDetailsOverviewRowPresenter()
+                setupRelatedMovieListRow()
+                adapter = mAdapter
+                initializeBackground(EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString()))
+                onItemViewClickedListener = ItemViewClickedListener()
+            }
+            mSelectedRecordedItem != null -> {
+                //V2
+                mPresenterSelector = ClassPresenterSelector()
+                mAdapter = ArrayObjectAdapter(mPresenterSelector)
+                setupDetailsOverviewRow()
+                setupDetailsOverviewRowPresenter()
+                setupRelatedMovieListRow()
+                adapter = mAdapter
+                initializeBackground(EpgStationV2.getThumbnailURL(mSelectedRecordedItem?.thumbnails?.get(0).toString()))
+                onItemViewClickedListener = ItemViewClickedListener()
+            }
+            else -> {
+                val intent = Intent(requireContext(), MainActivity::class.java)
+                startActivity(intent)
+            }
         }
     }
 
-    private fun initializeBackground(recorded: RecordedProgram) {
+    private fun initializeBackground(imageURL: String) {
         mDetailsBackground.enableParallax()
         Glide.with(requireContext())
             .asBitmap()
             .centerCrop()
             .error(R.drawable.default_background)
-            .load(EpgStation.getThumbnailURL(recorded.id.toString()))
+            .load(imageURL)
             .into<CustomTarget<Bitmap>>(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(
                     bitmap: Bitmap,
@@ -77,13 +101,28 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     }
 
     private fun setupDetailsOverviewRow() {
-        Log.d(TAG, "doInBackground: " + mSelectedRecordedProgram?.toString())
-        val row = DetailsOverviewRow(mSelectedRecordedProgram)
+        Log.d(TAG, "setupDetailsOverviewRow()")
+
+        val row = if (mSelectedRecordedProgram!=null){
+            //V1
+            DetailsOverviewRow(mSelectedRecordedProgram)
+        }else {
+            //V2
+            DetailsOverviewRow(mSelectedRecordedItem)
+        }
+        val urlString = if (mSelectedRecordedProgram!=null){
+            //V1
+            EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString())
+        }else {
+            //V2
+            EpgStationV2.getThumbnailURL(mSelectedRecordedItem?.thumbnails?.get(0).toString())
+        }
+
         row.imageDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         val width = convertDpToPixel(requireContext(), DETAIL_THUMB_WIDTH)
         val height = convertDpToPixel(requireContext(), DETAIL_THUMB_HEIGHT)
         Glide.with(requireContext())
-            .load(EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString()))
+            .load(urlString)
             .centerCrop()
             .error(R.drawable.default_background)
             .into<CustomTarget<Drawable>>(object : CustomTarget<Drawable>(width, height) {
@@ -101,6 +140,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val actionAdapter = ArrayObjectAdapter()
 
         mSelectedRecordedProgram?.let {
+            //V1
             // オリジナルのTSがある場合は "TS を再生" アクションアダプタを追加
             if (it.original) {
                 actionAdapter.add(
@@ -120,6 +160,19 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 )
             }
         }
+        mSelectedRecordedItem?.let {  recordedItem ->
+            //V2
+            recordedItem.videoFiles?.forEach { videoFIle ->
+                actionAdapter.add(
+                    Action(
+                        videoFIle.id,
+                        getString(R.string.play_x,videoFIle.name)
+                    )
+                )
+            }
+        }
+
+
 
         row.actionsAdapter = actionAdapter
 
@@ -145,16 +198,26 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             if( playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)) {
                 //内蔵プレーヤー
                 val intent = Intent(requireContext(), PlaybackActivity::class.java)
-                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)
+                mSelectedRecordedProgram?.let{intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)}
+                mSelectedRecordedItem?.let{intent.putExtra(DetailsActivity.RECORDEDITEM, mSelectedRecordedItem)}
                 intent.putExtra(DetailsActivity.ACTIONID, action.id)
                 startActivity(intent)
 
-            }else{
+            }else {
                 //外部プレーヤー
-                val urlStrings = if (action.id == ACTION_WATCH_ORIGINAL_TS) {
-                    EpgStation.getTsVideoURL(mSelectedRecordedProgram?.id.toString())
-                } else {
-                    EpgStation.getEncodedVideoURL(mSelectedRecordedProgram?.id.toString(),action.id.toString())
+                val urlStrings = if (mSelectedRecordedProgram != null) {
+                    //V1
+                    if (action.id == ACTION_WATCH_ORIGINAL_TS) {
+                        EpgStation.getTsVideoURL(mSelectedRecordedProgram?.id.toString())
+                    } else {
+                        EpgStation.getEncodedVideoURL(
+                            mSelectedRecordedProgram?.id.toString(),
+                            action.id.toString()
+                        )
+                    }
+                }else{
+                    //V2
+                    EpgStationV2.getVideoURL(action.id.toString())
                 }
 
                 val uri = Uri.parse(urlStrings)
@@ -163,7 +226,10 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
                 extPlayerIntent.setPackage(playerPkgName)
                 extPlayerIntent.setDataAndTypeAndNormalize(uri, "video/*")
-                extPlayerIntent.putExtra("title", mSelectedRecordedProgram!!.name)
+                //V1
+                mSelectedRecordedProgram?.let{extPlayerIntent.putExtra("title", mSelectedRecordedProgram?.name)}
+                //V2
+                mSelectedRecordedItem?.let{extPlayerIntent.putExtra("title", mSelectedRecordedItem?.name)}
 
                 try {
                     startActivity(extPlayerIntent)
@@ -189,6 +255,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
         mSelectedRecordedProgram?.ruleId?.let{
+            //V1
             val listRowAdapter = ArrayObjectAdapter(CardPresenter())
             EpgStation.api?.getRecorded(rule = mSelectedRecordedProgram?.ruleId)?.enqueue(object : Callback<GetRecordedResponse> {
                 override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
@@ -197,6 +264,25 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     }
                 }
                 override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+                }
+            })
+
+            val header = HeaderItem(0, getString(R.string.videos_in_same_rule))
+            mAdapter.add(ListRow(header, listRowAdapter))
+            mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+        }
+        mSelectedRecordedItem?.ruleId?.let{
+            //V2
+            val listRowAdapter = ArrayObjectAdapter(CardPresenter())
+            EpgStationV2.api?.getRecorded(ruleId = mSelectedRecordedItem?.ruleId)?.enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    response.body()!!.records.forEach {
+                        listRowAdapter.add(it)
+                    }
+                }
+                override fun onFailure(call: Call<Records>, t: Throwable) {
                     Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
                 }

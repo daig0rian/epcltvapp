@@ -8,6 +8,10 @@ import android.util.Log
 import android.view.ViewGroup
 
 import com.bumptech.glide.Glide
+import com.daigorian.epcltvapp.epgstationcaller.EpgStation
+import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import kotlin.properties.Delegates
 
 /**
@@ -41,18 +45,29 @@ class CardPresenter : Presenter() {
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
-        val recordedProgram = item as RecordedProgram
         val cardView = viewHolder.view as ImageCardView
+        cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
 
         Log.d(TAG, "onBindViewHolder")
-        cardView.titleText = recordedProgram.name
-        cardView.contentText = recordedProgram.description
-        cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
-        Glide.with(viewHolder.view.context)
-            .load(EpgStation.getThumbnailURL(recordedProgram.id.toString()))
-            .centerCrop()
-            .error(mDefaultCardImage)
-            .into(cardView.mainImageView)
+        if (item is RecordedProgram) {
+            //V1
+            cardView.titleText = item.name
+            cardView.contentText = item.description
+            Glide.with(viewHolder.view.context)
+                .load(EpgStation.getThumbnailURL(item.id.toString()))
+                .centerCrop()
+                .error(mDefaultCardImage)
+                .into(cardView.mainImageView)
+        }else if (item is RecordedItem) {
+            //V2
+            cardView.titleText = item.name
+            cardView.contentText = item.description
+            Glide.with(viewHolder.view.context)
+                .load(EpgStationV2.getThumbnailURL(item.thumbnails?.get(0).toString()))
+                .centerCrop()
+                .error(mDefaultCardImage)
+                .into(cardView.mainImageView)
+        }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {

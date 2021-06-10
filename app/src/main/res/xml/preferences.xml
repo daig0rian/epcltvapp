@@ -2,6 +2,14 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     app:title="@string/settings_title">
 
+    <ListPreference
+        app:title=       "@string/version_of_epgstation"
+        app:key=         "@string/pref_key_epgstation_version"
+        app:defaultValue="@string/pref_val_epgstation_version_default"
+        app:entries=     "@array/pref_options_epgstation_version_label"
+        app:entryValues= "@array/pref_options_epgstation_version_val"
+        app:useSimpleSummaryProvider="true"
+        />
     <EditTextPreference
         app:title=       "@string/ip_addr_of_epgstation"
         app:key=         "@string/pref_key_ip_addr"

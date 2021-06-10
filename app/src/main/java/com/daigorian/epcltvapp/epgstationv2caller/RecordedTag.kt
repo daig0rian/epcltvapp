@@ -1,16 +1,17 @@
-package com.daigorian.epcltvapp
+package com.daigorian.epcltvapp.epgstationv2caller
+//タグ情報
 
 import java.io.Serializable
 
-data class RecordedEncodingInfo(
-    val name : String,
-    val isEncoding: Boolean,
+data class RecordedTag(
+    val id:Long = 0, //録画 tag id
+    val name:String?, //タグ名
+    val color:String //色
 ): Serializable {
 
     override fun toString(): String {
-        return "RecordedEncodingInfo{" +
+        return "RecordedTag{" +
                 "name=" + name +
-                ", isEncoding='" + isEncoding + '\'' +
                 '}'
     }
 
@@ -18,5 +19,3 @@ data class RecordedEncodingInfo(
         internal const val serialVersionUID = 0L
     }
 }
-
-

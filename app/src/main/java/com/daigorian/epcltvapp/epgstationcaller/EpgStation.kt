@@ -1,6 +1,5 @@
-package com.daigorian.epcltvapp
+package com.daigorian.epcltvapp.epgstationcaller
 
-import android.content.Context
 import okhttp3.OkHttpClient
 import retrofit2.Call
 import retrofit2.Retrofit.Builder

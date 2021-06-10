@@ -45,6 +45,7 @@ class SettingsFragment : LeanbackPreferenceFragment()  {
         fun isPreferenceAllExists(context: Context):Boolean{
             val pref = PreferenceManager.getDefaultSharedPreferences(context)
             return (
+                    pref.contains(context.getString(R.string.pref_key_epgstation_version)) &&
                     pref.contains(context.getString(R.string.pref_key_ip_addr)) &&
                     pref.contains(context.getString(R.string.pref_key_port_num)) &&
                     pref.contains(context.getString(R.string.pref_key_fetch_limit)) &&

@@ -1,4 +1,4 @@
-package com.daigorian.epcltvapp
+package com.daigorian.epcltvapp.epgstationcaller
 
 import java.io.Serializable
 
