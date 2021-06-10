@@ -3,6 +3,9 @@
 
 ブラウザを持たないAndroid TV から EPGStationの録画を見るために開発されました
 
+## Google Play URL
+https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
+
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
  - Android TVのリモコンだけで操作が完結
