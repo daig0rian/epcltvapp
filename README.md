@@ -26,17 +26,16 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
 ## 他のソリューションとの比較
 ### Kodi + plugin.video.epgstation
-- （Google Play Storeの審査が通ったら）Google Play Sotreから一発で導入できてらくちん
+- Google Play Sotreから一発で導入できてらくちん
 - 番組を音声検索できる
 - ルールごとに録画済一覧を見ることができる。
-
 
 ## 今後やりたい
  - 検索履歴を残して再検索を楽にする
  - 動画リストの一番右に「さらに読み込む」ボタンの追加
- - FireTV対応
+ - 割と入手性の良い端末であるAmazon FireTVシリーズへの対応、Amazonのストアでの公開
 
-## 今後もきっとやらない
+## たぶんできない
  - 録画予約関連UIの実装
    -  ソファーにLeanback（ふんぞり返り）ながらリモコンでやる作業ではないのではないか説
    -  ソファーでスマホからEPGStationの秀逸なUIを操作するのが現実的ではないのではないか説
