@@ -1,7 +1,7 @@
 # EPGStation の録画を見る
 "EPGStationの録画を見る"  はAndroid TV向けに設計されたEPGStation クライアントアプリです。
 
-ブラウザを持たないAndroid TV から EPGStationの録画を見るために開発されました
+Webブラウザを持たないAndroid TV から EPGStationの録画を見るために開発されました
 
 ## Google Play URL
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
