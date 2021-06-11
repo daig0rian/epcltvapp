@@ -12,6 +12,16 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - Android TVのリモコン内蔵マイクから録画済番組を声で検索
  - MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能を確保
 
+## 必要な環境
+ - EPGStation Version 1.x or 2.x　
+ - APIレベル28(Android 9.0)以上の Andorid TV 
+
+## テスト環境
+ - SONY BRAVIA KJ-43X8000H (4K液晶androidテレビ)
+ - Google Chromecast with Google TV snow　GA01919-JP (HDMIドングル型 Android TV端末) 
+ - EPGStatinn Version 1.7.6
+ - EPGStation Version 2.3.8
+ - 
 ## デモ
 ![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
 
@@ -25,14 +35,13 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 ## 今後やりたい
  - 検索履歴を残して再検索を楽にする
  - 動画リストの一番右に「さらに読み込む」ボタンの追加
+ - FireTV対応
 
 ## 今後もきっとやらない
  - 録画予約関連UIの実装
    -  ソファーにLeanback（ふんぞり返り）ながらリモコンでやる作業ではないのではないか説
    -  ソファーでスマホからEPGStationの秀逸なUIを操作するのが現実的ではないのではないか説
 
-## TODO
- - ~~審査用に著作権に問題のない動画をインポートしたEPGStation インスタンスの作成~~ 完了
-
-## 現在の状況
- - GooglePlayStore Consoleからオープンテストで公開する手続き実施済（初めての経験でいまいちうまくいっているかわからない）
+## 現在の公開状況
+ - Google Play Sotreでの公開審査完了 (3日程度で完了)
+ - Andorid TV 端末への配信オプトイン審査完了 (1日未満で完了)
