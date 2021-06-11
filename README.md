@@ -41,5 +41,5 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
    -  ソファーでスマホからEPGStationの秀逸なUIを操作するのが現実的ではないのではないか説
 
 ## 現在の公開状況
- - Google Play Sotreでの公開審査完了 (3日程度で完了)
- - Andorid TV 端末への配信オプトイン審査完了 (1日未満で完了)
+ - 2021/06/10 Google Play Sotreでの公開審査完了 (ストア登録から３日くらいかかったかな)
+ - 2021/06/11 Andorid TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
