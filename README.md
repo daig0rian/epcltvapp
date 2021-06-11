@@ -21,7 +21,6 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - Google Chromecast with Google TV snow　GA01919-JP (HDMIドングル型 Android TV端末) 
  - EPGStatinn Version 1.7.6
  - EPGStation Version 2.3.8
- - 
 ## デモ
 ![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
 
