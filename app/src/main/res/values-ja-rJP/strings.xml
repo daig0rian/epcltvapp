@@ -25,7 +25,7 @@
     <string name="settings_title">\"EPGStationの録画を見る\" の設定</string>
     <string name="not_a_valid_ipv4_addr">%1$s は有効なIPv4アドレスではありません</string>
     <string name="not_a_valid_port_num">%1$s は有効なポート番号ではありません</string>
-    <string name="pref_options_epgstation_version_label_2">2</string>
-    <string name="pref_options_epgstation_version_label_1">1</string>
+    <string name="pref_options_epgstation_version_label_2">version 2.x.x</string>
+    <string name="pref_options_epgstation_version_label_1">version 1.x.x</string>
     <string name="version_of_epgstation">EPGStationのバージョン</string>
 </resources>

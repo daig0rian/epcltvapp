@@ -34,8 +34,8 @@
     <string name="pref_key_player"              translatable="false">KEY_PLAYER</string>
     <string name="pref_val_player_default"      translatable="false">@string/pref_options_movie_player_val_MX</string>
 
-    <string name="pref_options_epgstation_version_label_2">2</string>
-    <string name="pref_options_epgstation_version_label_1">1</string>
+    <string name="pref_options_epgstation_version_label_2">version 2.x.x</string>
+    <string name="pref_options_epgstation_version_label_1">version 1.x.x</string>
 
     <string-array name="pref_options_epgstation_version_label" >
         <item>@string/pref_options_epgstation_version_label_2</item>
