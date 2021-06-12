@@ -29,15 +29,6 @@ antroid TV 端末上のPlay Storeでは daigorian と検索すると見つかり
  - EPGStatinn Version 1.7.6
  - EPGStation Version 2.3.8
 
-## 他のソリューションとの比較
-### Kodi + plugin.video.epgstation
-- Google Play Sotreから一発で導入できてらくちん
-- 番組を音声検索できる
-- ルールごとに録画済一覧を見ることができる。
-
-### Kodi + Harekaze/pvr.epgstation
-- EPGStation Version 2.x.x系に対応している
-
 ## 今後やりたい
  - 検索履歴を残して再検索を楽にする
  - 動画リストの一番右に「さらに読み込む」ボタンの追加
