@@ -16,7 +16,7 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - MX Player やVLCといった外部動画プレーヤーに対応することで高い再生性能を確保
 
 ## 必要な環境
- - EPGStation Version 1.x or 2.x　
+ - EPGStation Version 1.x.x or 2.x.x　
  - APIレベル28(Android 9.0)以上の Andorid TV 
 
 ## テスト環境
@@ -30,6 +30,9 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 - Google Play Sotreから一発で導入できてらくちん
 - 番組を音声検索できる
 - ルールごとに録画済一覧を見ることができる。
+
+### Kodi + Harekaze/pvr.epgstation
+- EPGStation Version 2.x.x系に対応している
 
 ## 今後やりたい
  - 検索履歴を残して再検索を楽にする
