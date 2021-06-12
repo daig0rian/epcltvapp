@@ -28,10 +28,13 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - EPGStatinn Version 1.7.6
  - EPGStation Version 2.3.8
 
-## 今後やりたい
- - 検索履歴を残して再検索を楽にする
+## 今後やりたいこと(バックログ)
  - 動画リストの一番右に「さらに読み込む」ボタンの追加
  - 割と入手性の良い端末であるAmazon FireTVシリーズへの対応、Amazonのストアでの公開
+ - 検索履歴を残して再検索を楽にする
+ - 初回起動時のOnboarding画面の追加
+ - 設定画面をLeanbackSettingsFragmentに変えてかっこよくする
+ - 録画情報の表示画面が5行から伸びないのを直したい（調査着手したけど直し方がわからないのでペンディング中）
 
 ## たぶんできない
  - 録画予約関連UIの実装
