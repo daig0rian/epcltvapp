@@ -9,8 +9,8 @@ Webブラウザを持たないAndroid TV から EPGStationの録画を見るた�
 ## Google Play URL
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
- - パソコンで上記URLにアクセスして Androi TV端末へ送信 するのが一番楽なインストール方法です。
- - antroid TV 端末上のPlay Storeでは daigorian と検索すると見つかります。
+ - パソコンで上記URLにアクセスして Android TV端末へ送信 するのが一番楽なインストール方法です。
+ - Android TV 端末上のPlay Storeでは daigorian と検索すると見つかります。
 
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
@@ -20,12 +20,12 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
 ## 必要な環境
  - EPGStation Version 1.x.x or 2.x.x　
- - APIレベル28(Android 9.0)以上の Andorid TV 
+ - APIレベル28(Android 9.0)以上の Android TV
 
 ## テスト環境
  - SONY BRAVIA KJ-43X8000H (4K液晶androidテレビ)
  - Google Chromecast with Google TV snow　GA01919-JP (HDMIドングル型 Android TV端末) 
- - EPGStatinn Version 1.7.6
+ - EPGStation Version 1.7.6
  - EPGStation Version 2.3.8
 
 ## 今後やりたいこと
@@ -43,5 +43,5 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
    -  ソファーでスマホからEPGStationの秀逸なUIを操作するのが現実的という説
 
 ## 現在の公開状況
- - 2021/06/10 Google Play Sotreでの公開審査完了 (ストア登録から３日くらいかかったかな)
- - 2021/06/11 Andorid TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
+ - 2021/06/10 Google Play Storeでの公開審査完了 (ストア登録から３日くらいかかったかな)
+ - 2021/06/11 Android TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
