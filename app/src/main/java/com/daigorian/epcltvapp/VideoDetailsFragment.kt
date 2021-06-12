@@ -53,7 +53,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         when {
             mSelectedRecordedProgram != null -> {
-                //V1
+                // EPGStation Version 1.x.x
                 mPresenterSelector = ClassPresenterSelector()
                 mAdapter = ArrayObjectAdapter(mPresenterSelector)
                 setupDetailsOverviewRow()
@@ -64,7 +64,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 onItemViewClickedListener = ItemViewClickedListener()
             }
             mSelectedRecordedItem != null -> {
-                //V2
+                // EPGStation Version 2.x.x
                 mPresenterSelector = ClassPresenterSelector()
                 mAdapter = ArrayObjectAdapter(mPresenterSelector)
                 setupDetailsOverviewRow()
@@ -104,17 +104,17 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         Log.d(TAG, "setupDetailsOverviewRow()")
 
         val row = if (mSelectedRecordedProgram!=null){
-            //V1
+            // EPGStation Version 1.x.x
             DetailsOverviewRow(mSelectedRecordedProgram)
         }else {
-            //V2
+            // EPGStation Version 2.x.x
             DetailsOverviewRow(mSelectedRecordedItem)
         }
         val urlString = if (mSelectedRecordedProgram!=null){
-            //V1
+            // EPGStation Version 1.x.x
             EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString())
         }else {
-            //V2
+            // EPGStation Version 2.x.x
             EpgStationV2.getThumbnailURL(mSelectedRecordedItem?.thumbnails?.get(0).toString())
         }
 
@@ -140,7 +140,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val actionAdapter = ArrayObjectAdapter()
 
         mSelectedRecordedProgram?.let {
-            //V1
+            // EPGStation Version 1.x.x
             // オリジナルのTSがある場合は "TS を再生" アクションアダプタを追加
             if (it.original) {
                 actionAdapter.add(
@@ -161,7 +161,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             }
         }
         mSelectedRecordedItem?.let {  recordedItem ->
-            //V2
+            // EPGStation Version 2.x.x
             recordedItem.videoFiles?.forEach { videoFIle ->
                 actionAdapter.add(
                     Action(
@@ -196,53 +196,54 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
             val playerPkgName = PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(getString(R.string.pref_key_player),"")
             if( playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)) {
-                //内蔵プレーヤー
+                //Preferenceで内蔵プレーヤーが選ばれていた場合
                 val intent = Intent(requireContext(), PlaybackActivity::class.java)
+                //EPGStation Version 1.x.x
                 mSelectedRecordedProgram?.let{intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)}
+                //EPGStation Version 2.x.x
                 mSelectedRecordedItem?.let{intent.putExtra(DetailsActivity.RECORDEDITEM, mSelectedRecordedItem)}
                 intent.putExtra(DetailsActivity.ACTIONID, action.id)
                 startActivity(intent)
 
             }else {
-                //外部プレーヤー
+                // Preferenceで外部プレーヤーが選ばれていた場合
                 val urlStrings = if (mSelectedRecordedProgram != null) {
-                    //V1
+                    // EPGStation Version 1.x.x
                     if (action.id == ACTION_WATCH_ORIGINAL_TS) {
+                        // TSだった場合
                         EpgStation.getTsVideoURL(mSelectedRecordedProgram?.id.toString())
                     } else {
+                        // Encodedだった場合
                         EpgStation.getEncodedVideoURL(
                             mSelectedRecordedProgram?.id.toString(),
-                            action.id.toString()
-                        )
+                            action.id.toString()  )
                     }
                 }else{
-                    //V2
+                    // EPGStation Version 2.x.x
                     EpgStationV2.getVideoURL(action.id.toString())
                 }
 
                 val uri = Uri.parse(urlStrings)
-
                 val extPlayerIntent = Intent(Intent.ACTION_VIEW)
-
                 extPlayerIntent.setPackage(playerPkgName)
                 extPlayerIntent.setDataAndTypeAndNormalize(uri, "video/*")
-                //V1
+                // EPGStation Version 1.x.x
                 mSelectedRecordedProgram?.let{extPlayerIntent.putExtra("title", mSelectedRecordedProgram?.name)}
-                //V2
+                // EPGStation Version 2.x.x
                 mSelectedRecordedItem?.let{extPlayerIntent.putExtra("title", mSelectedRecordedItem?.name)}
 
                 try {
                     startActivity(extPlayerIntent)
                 } catch (ex: ActivityNotFoundException) {
-                    //外部プレーヤーがインストールされていないためGoogle Play Marketを表示
+                    //外部プレーヤーがインストールされていなからインストールしてねのメッセージを表示
                     Toast.makeText(requireContext(), getString(R.string.please_install_external_player), Toast.LENGTH_LONG).show()
-
                     try{
+                        //Google Play Storeで外部プレイヤーのページを表示
                         val marketIntent = Intent(Intent.ACTION_VIEW)
                         marketIntent.data = Uri.parse("market://details?id=$playerPkgName")
                         startActivity(marketIntent)
                     } catch (ex: ActivityNotFoundException) {
-                        //Google Play Marketすらないからどうにもできない
+                        //Google Play Storeすら導入されていないからどうしようもできない。
                     }
                 }
             }
@@ -251,15 +252,16 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
     }
 
+
     private fun setupRelatedMovieListRow() {
 
         //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
         mSelectedRecordedProgram?.ruleId?.let{
-            //V1
+            // EPGStation Version 1.x.x
             val listRowAdapter = ArrayObjectAdapter(CardPresenter())
             EpgStation.api?.getRecorded(rule = mSelectedRecordedProgram?.ruleId)?.enqueue(object : Callback<GetRecordedResponse> {
                 override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                    response.body()!!.recorded.forEach {
+                    response.body()?.recorded?.forEach {
                         listRowAdapter.add(it)
                     }
                 }
@@ -274,11 +276,11 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
         }
         mSelectedRecordedItem?.ruleId?.let{
-            //V2
+            // EPGStation Version 2.x.x
             val listRowAdapter = ArrayObjectAdapter(CardPresenter())
             EpgStationV2.api?.getRecorded(ruleId = mSelectedRecordedItem?.ruleId)?.enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                    response.body()!!.records.forEach {
+                    response.body()?.records?.forEach {
                         listRowAdapter.add(it)
                     }
                 }
