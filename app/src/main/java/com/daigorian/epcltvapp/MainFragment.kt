@@ -48,30 +48,14 @@ class MainFragment : BrowseSupportFragment() {
         super.onCreate(savedInstanceState)
 
         if(!SettingsFragment.isPreferenceAllExists(requireContext())){
+            //設定されていないPreference項目があった場合は設定画面を開く
             val intent = Intent(requireContext(), SettingsActivity::class.java)
             startActivity(intent)
             mNeedsReloadOnResume = true
+
         }else{
-            val apiVerssion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
-            if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_1)) {
-                EpgStation.InitAPI(
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_port_num), "")!!
-                )
-                EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_fetch_limit), "")!!
-            }else if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_2)) {
-                EpgStationV2.initAPI(
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_port_num), "")!!
-                )
-                EpgStationV2.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_fetch_limit), "")!!
-            }
+            //設定が最初から読み込めた場合はそれに合わせてAPIを初期化
+            initEPGStationApi()
         }
 
         prepareBackgroundManager()
@@ -86,29 +70,9 @@ class MainFragment : BrowseSupportFragment() {
     override fun onResume() {
         super.onResume()
         if(mNeedsReloadOnResume) {
-            val apiVerssion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
-            if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_1)) {
-                EpgStation.InitAPI(
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_port_num), "")!!
-                )
-                EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_fetch_limit), "")!!
-                EpgStationV2.api = null //使わなくなったほうのAPIは nullにする
-
-            }else if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_2)) {
-                EpgStationV2.initAPI(
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                    PreferenceManager.getDefaultSharedPreferences(context)
-                        .getString(getString(R.string.pref_key_port_num), "")!!
-                )
-                EpgStationV2.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_fetch_limit), "")!!
-                EpgStation.api = null //使わなくなったほうのAPIは nullにする
-            }
+            //設定画面から戻ってきたので設定を再読み込みする
+            initEPGStationApi()
+            //行をロードしなおす
             loadRows()
             mNeedsReloadOnResume = false
         }
@@ -119,6 +83,35 @@ class MainFragment : BrowseSupportFragment() {
         super.onDestroy()
         Log.d(TAG, "onDestroy: " + mBackgroundTimer?.toString())
         mBackgroundTimer?.cancel()
+    }
+
+    private fun initEPGStationApi(){
+        //Preferenceに設定されているAPIバージョン、IPアドレス、ポート番号、１回あたりの取得数を読み込んでAPIをセットアップする。
+        EpgStation.api = null //apiをいったん初期化
+        EpgStationV2.api = null //apiをいったん初期化
+
+        val apiVerssion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
+        if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_1)) {
+            //Preferenceに EPGStation Version 1　が設定されていた場合
+            EpgStation.initAPI(
+                PreferenceManager.getDefaultSharedPreferences(context)
+                    .getString(getString(R.string.pref_key_ip_addr), "")!!,
+                PreferenceManager.getDefaultSharedPreferences(context)
+                    .getString(getString(R.string.pref_key_port_num), "")!! )
+            EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(getString(R.string.pref_key_fetch_limit), "")!!
+
+        }else if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_2)) {
+            //Preferenceに EPGStation Version 2　が設定されていた場合
+            EpgStationV2.initAPI(
+                PreferenceManager.getDefaultSharedPreferences(context)
+                    .getString(getString(R.string.pref_key_ip_addr), "")!!,
+                PreferenceManager.getDefaultSharedPreferences(context)
+                    .getString(getString(R.string.pref_key_port_num), "")!! )
+            EpgStationV2.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
+                .getString(getString(R.string.pref_key_fetch_limit), "")!!
+
+        }
     }
 
     private fun prepareBackgroundManager() {

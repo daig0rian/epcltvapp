@@ -38,7 +38,7 @@ object EpgStation {
 
     var api: ApiInterface? = null
 
-    fun InitAPI(_ip:String, _port:String){
+    fun initAPI(_ip:String, _port:String){
         ip = _ip
         port = _port
         api = Builder()
