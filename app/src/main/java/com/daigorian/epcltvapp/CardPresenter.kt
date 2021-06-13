@@ -20,6 +20,7 @@ import kotlin.properties.Delegates
  */
 class CardPresenter : Presenter() {
     private var mDefaultCardImage: Drawable? = null
+    private var mOnRecordingCardImage: Drawable? = null
     private var sSelectedBackgroundColor: Int by Delegates.notNull()
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
 
@@ -29,7 +30,8 @@ class CardPresenter : Presenter() {
         sDefaultBackgroundColor = ContextCompat.getColor(parent.context, R.color.default_background)
         sSelectedBackgroundColor =
             ContextCompat.getColor(parent.context, R.color.selected_background)
-        mDefaultCardImage = ContextCompat.getDrawable(parent.context, R.drawable.movie)
+        mDefaultCardImage = ContextCompat.getDrawable(parent.context, R.drawable.no_iamge)
+        mOnRecordingCardImage = ContextCompat.getDrawable(parent.context, R.drawable.on_rec)
 
         val cardView = object : ImageCardView(parent.context) {
             override fun setSelected(selected: Boolean) {
@@ -50,22 +52,25 @@ class CardPresenter : Presenter() {
 
         Log.d(TAG, "onBindViewHolder")
         if (item is RecordedProgram) {
-            //V1
+            // EPGStation Version 1.x.x
             cardView.titleText = item.name
             cardView.contentText = item.description
+            //録画中なら録画中アイコンを出す。
             Glide.with(viewHolder.view.context)
                 .load(EpgStation.getThumbnailURL(item.id.toString()))
                 .centerCrop()
-                .error(mDefaultCardImage)
+                .error(if(item.recording){mOnRecordingCardImage}else{mDefaultCardImage})
                 .into(cardView.mainImageView)
+
         }else if (item is RecordedItem) {
-            //V2
+            // EPGStation Version 2.x.x
             cardView.titleText = item.name
             cardView.contentText = item.description
+            //サムネのURLから画像をロードする。失敗した場合、録画中なら録画中アイコンを出す。そうでなければNO IMAGEアイコン。
             Glide.with(viewHolder.view.context)
-                .load(EpgStationV2.getThumbnailURL(item.thumbnails?.get(0).toString()))
+                .load(if(!item.thumbnails.isNullOrEmpty()){EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())}else{""})
                 .centerCrop()
-                .error(mDefaultCardImage)
+                .error(if(item.isRecording){mOnRecordingCardImage}else{mDefaultCardImage})
                 .into(cardView.mainImageView)
         }
     }
