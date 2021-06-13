@@ -355,9 +355,24 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             row: Row
         ) {
             if (item is RecordedProgram) {
+                //EPGStation Version 1.x.x
                 Log.d(TAG, "Item: $item")
                 val intent = Intent(context!!, DetailsActivity::class.java)
                 intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
+
+                val bundle =
+                    ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity!!,
+                        (itemViewHolder?.view as ImageCardView).mainImageView,
+                        DetailsActivity.SHARED_ELEMENT_NAME
+                    )
+                        .toBundle()
+                startActivity(intent, bundle)
+            } else if (item is RecordedItem) {
+                //EPGStation Version 2.x.x
+                Log.d(TAG, "Item: $item")
+                val intent = Intent(context!!, DetailsActivity::class.java)
+                intent.putExtra(DetailsActivity.RECORDEDITEM, item)
 
                 val bundle =
                     ActivityOptionsCompat.makeSceneTransitionAnimation(
