@@ -22,6 +22,13 @@ object EpgStationV2 {
             @Query("hasOriginalFile") hasOriginalFile: Boolean? = null,
         ): Call<Records>
 
+        @GET("recording")
+        fun getRecording(
+            @Query("offset") offset: Int = 0,
+            @Query("limit") limit: Int = default_limit.toInt(),
+            @Query("isHalfWidth") isHalfWidth: Boolean = false,
+        ): Call<Records>
+
         @GET("rules")
         fun getRules(
             @Query("offset") offset: Int = 0,
