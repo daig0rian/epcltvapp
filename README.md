@@ -29,7 +29,7 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - EPGStation Version 2.3.8
 
 ## 今後やりたいこと
- - 動画リストの一番右に「さらに読み込む」ボタンの追加
+ - ~~動画リストの一番右に「さらに読み込む」ボタンの追加~~ DONE!
  - 割と入手性の良い端末であるAmazon FireTVシリーズへの対応、Amazonのストアでの公開
  - 検索履歴を残して再検索を楽にする
  - 初回起動時のOnboarding画面の追加
