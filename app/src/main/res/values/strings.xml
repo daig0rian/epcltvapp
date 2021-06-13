@@ -89,6 +89,7 @@
     <string name="pref_options_movie_player_val_VLC"      translatable="false">org.videolan.vlc</string>
     <string name="pref_options_movie_player_val_INTERNAL" translatable="false">com.daigorian.internal</string>
     <string name="version_of_epgstation">Version of EPGStation</string>
+    <string name="reload">Reload</string>
 
     <string-array name="pref_options_movie_player_val" >
         <item>@string/pref_options_movie_player_val_MX</item>

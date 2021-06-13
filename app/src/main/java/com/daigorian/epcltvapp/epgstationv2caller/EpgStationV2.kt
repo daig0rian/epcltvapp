@@ -12,12 +12,12 @@ object EpgStationV2 {
         @GET("recorded")
         fun getRecorded(
             @Query("isHalfWidth") isHalfWidth: Boolean = false,
-            @Query("offset") offset: Int = 0,
-            @Query("limit") limit: Int = default_limit.toInt(),
+            @Query("offset") offset: Long = 0,
+            @Query("limit") limit: Long = default_limit.toLong(),
             @Query("isReverse") isReverse: Boolean = false,
             @Query("ruleId") ruleId: Long? = null,
-            @Query("channelId") channelId: Int? = null,
-            @Query("genre") genre: Int? = null,
+            @Query("channelId") channelId: Long? = null,
+            @Query("genre") genre: Long? = null,
             @Query("keyword") keyword: String? = null,
             @Query("hasOriginalFile") hasOriginalFile: Boolean? = null,
         ): Call<Records>
@@ -37,6 +37,8 @@ object EpgStationV2 {
             @Query("keyword") keyword: String? = null,
         ): Call<Rules>
     }
+
+
 
     private var ip:String = "192.168.0.0"
     private var port:String = "8888"

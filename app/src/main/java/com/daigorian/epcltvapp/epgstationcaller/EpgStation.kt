@@ -11,12 +11,12 @@ object EpgStation {
     interface ApiInterface {
         @GET("recorded")
         fun getRecorded(
-            @Query("limit") limit: Int = default_limit.toInt(),
-            @Query("offset") offset: Int = 0,
+            @Query("limit") limit: Long = default_limit.toLong(),
+            @Query("offset") offset: Long = 0,
             @Query("reverse") reverse: Boolean = false,
             @Query("rule") rule: Long? = null,
-            @Query("genre1") genre1: Int? = null,
-            @Query("channel") channel: Int? = null,
+            @Query("genre1") genre1: Long? = null,
+            @Query("channel") channel: Long? = null,
             @Query("keyword") keyword: String? = null,
             @Query("hasTs") hasTs: Boolean? = null,
             @Query("recording") recording: Boolean? = null

@@ -142,12 +142,13 @@ class MainFragment : BrowseSupportFragment() {
         val rowsAdapter = MainMenuAdapter(ListRowPresenter())
         var numOfRow = 0L
 
-        //最後の横の列 設定
+        //"設定"　のボタンが乗る行
         val gridHeader = HeaderItem(numOfRow++, getString(R.string.settings))
 
-        val mGridPresenter = GridItemPresenter()
-        val gridRowAdapter = ArrayObjectAdapter(mGridPresenter)
+        val gridPresenter = GridItemPresenter()
+        val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
+        gridRowAdapter.add(resources.getString(R.string.reload))
         rowsAdapter.addSettings(ListRow(gridHeader, gridRowAdapter))
 
 
@@ -155,20 +156,28 @@ class MainFragment : BrowseSupportFragment() {
         val cardPresenter = CardPresenter()
 
 
-        //横の列を作る
         //APIで最近の録画を取得する。問題なく取得出来たら、一列追加してそれをカードに加えていく。
         // EPGStation V1.x.x
         EpgStation.api?.getRecorded()?.enqueue(object : Callback<GetRecordedResponse> {
             override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                response.body()?.let { getRecordedResponse ->
+                    //"最近の録画"の行を追加。
+                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    val header = HeaderItem(numOfRow++, getString(R.string.recent_videos))
 
-                //の列を追加。"最近の録画"
-                val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
-                response.body()?.recorded?.forEach {
-                    listRowAdapter.add(it)
+                    //APIのレスポンスをひとつづつアイテムとして加える。
+                    getRecordedResponse.recorded.forEach {  recordedProgram ->
+                        listRowAdapter.add(recordedProgram)
+                    }
+                    //続きがあるなら"次を読み込む"を置く。
+                    val numOfItem = getRecordedResponse.recorded.count().toLong()
+                    if (numOfItem < getRecordedResponse.total) {
+                        listRowAdapter.add(GetRecordedParam(offset =numOfItem))
+                    }
+
+                    // 完成した横の列を、縦の列に加える。
+                    rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
                 }
-                // 完成した横の列を、縦の列に加える。
-                rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
             }
             override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRecorded API Failure")
@@ -179,15 +188,17 @@ class MainFragment : BrowseSupportFragment() {
         // EPGStation V2.x.x
         EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
             override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                if(response.body()?.records?.isNotEmpty() == true) {
-                    //"録画中"の列を追加。
-                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val header = HeaderItem(numOfRow++, getString(R.string.now_on_recording))
-                    response.body()?.records?.forEach {
-                        listRowAdapter.add(it)
+                response.body()?.let { getRecordingResponse ->
+                    if (getRecordingResponse.records.isNotEmpty()) {
+                        //"録画中"の列を追加。
+                        val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                        val header = HeaderItem(numOfRow++, getString(R.string.now_on_recording))
+                        getRecordingResponse.records.forEach {
+                            listRowAdapter.add(it)
+                        }
+                        // 完成した横の列を、縦の列に加える。
+                        rowsAdapter.addOnRecording(ListRow(header, listRowAdapter))
                     }
-                    // 完成した横の列を、縦の列に加える。
-                    rowsAdapter.addOnRecording(ListRow(header, listRowAdapter))
                 }
             }
             override fun onFailure(call: Call<Records>, t: Throwable) {
@@ -197,15 +208,23 @@ class MainFragment : BrowseSupportFragment() {
         })
         EpgStationV2.api?.getRecorded()?.enqueue(object : Callback<Records> {
             override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                response.body()?.let { getRecordedResponse ->
+                    //"最近の録画"の列を追加。
+                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    val header = HeaderItem(numOfRow++, getString(R.string.recent_videos))
+                    getRecordedResponse.records.forEach {
+                        listRowAdapter.add(it)
+                    }
 
-                //"最近の録画"の列を追加。
-                val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
-                response.body()?.records?.forEach {
-                    listRowAdapter.add(it)
+                    //続きがあるなら"次を読み込む"を置く。
+                    val numOfItem = getRecordedResponse.records.count().toLong()
+                    if (numOfItem < getRecordedResponse.total) {
+                        listRowAdapter.add(GetRecordedParamV2(offset =numOfItem))
+                    }
+
+                    // 完成した横の列を、縦の列に加える。
+                    rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
                 }
-                // 完成した横の列を、縦の列に加える。
-                rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
             }
             override fun onFailure(call: Call<Records>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRecorded API Failure")
@@ -231,8 +250,15 @@ class MainFragment : BrowseSupportFragment() {
                     val ruleHeader = HeaderItem(numOfRow++, keyword)
                     EpgStation.api?.getRecorded(rule=rule.id)?.enqueue(object : Callback<GetRecordedResponse> {
                         override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            response.body()?.recorded?.forEach { recordedProgram ->
-                                ruleListRowAdapter.add(recordedProgram)
+                            response.body()?.let { getRecordedResponse ->
+                                getRecordedResponse.recorded.forEach { recordedProgram ->
+                                    ruleListRowAdapter.add(recordedProgram)
+                                }
+                                //続きがあるなら"次を読み込む"を置く。
+                                val numOfItem = getRecordedResponse.recorded.count().toLong()
+                                if (numOfItem < getRecordedResponse.total) {
+                                    ruleListRowAdapter.add(GetRecordedParam(rule=rule.id,offset = numOfItem))
+                                }
                             }
                         }
                         override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
@@ -263,9 +289,17 @@ class MainFragment : BrowseSupportFragment() {
                     val ruleHeader = HeaderItem(numOfRow++, keyword)
                     EpgStationV2.api?.getRecorded(ruleId= rule.id)?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                            response.body()?.records?.forEach { recordedItem ->
-                                ruleListRowAdapter.add(recordedItem)
+                            response.body()?.let { getRecordedResponse ->
+                                getRecordedResponse.records.forEach { recordedItem ->
+                                    ruleListRowAdapter.add(recordedItem)
+                                }
+                                //続きがあるなら"次を読み込む"を置く。
+                                val numOfItem = getRecordedResponse.records.count().toLong()
+                                if (numOfItem < getRecordedResponse.total) {
+                                    ruleListRowAdapter.add(GetRecordedParamV2(ruleId=rule.id,offset = numOfItem))
+                                }
                             }
+
                         }
                         override fun onFailure(call: Call<Records>, t: Throwable) {
                             Log.d(TAG,"loadRows() getRecorded API Failure")
@@ -303,37 +337,50 @@ class MainFragment : BrowseSupportFragment() {
             row: Row
         ) {
 
-            if (item is RecordedProgram) {
-                Log.d(TAG, "Item: $item")
-                val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
+            when (item) {
+                is RecordedProgram -> {
+                    // EPGStation Version 1.x.x のアイテム
+                    Log.d(TAG, "Item: $item")
+                    val intent = Intent(context!!, DetailsActivity::class.java)
+                    intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
 
-                val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                    activity!!,
-                    (itemViewHolder.view as ImageCardView).mainImageView,
-                    DetailsActivity.SHARED_ELEMENT_NAME
-                )
-                    .toBundle()
-                startActivity(intent, bundle)
-            } else if (item is RecordedItem) {
-                Log.d(TAG, "Item: $item")
-                val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(DetailsActivity.RECORDEDITEM, item)
+                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity!!,
+                        (itemViewHolder.view as ImageCardView).mainImageView,
+                        DetailsActivity.SHARED_ELEMENT_NAME
+                    )
+                        .toBundle()
+                    startActivity(intent, bundle)
+                }
+                is RecordedItem -> {
+                    // EPGStation Version 2.x.x のアイテム
+                    Log.d(TAG, "Item: $item")
+                    val intent = Intent(context!!, DetailsActivity::class.java)
+                    intent.putExtra(DetailsActivity.RECORDEDITEM, item)
 
-                val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                    activity!!,
-                    (itemViewHolder.view as ImageCardView).mainImageView,
-                    DetailsActivity.SHARED_ELEMENT_NAME
-                )
-                    .toBundle()
-                startActivity(intent, bundle)
-            } else if (item is String) {
-                if (item.contains(getString(R.string.settings))) {
-                    val intent = Intent(context!!, SettingsActivity::class.java)
-                    startActivity(intent)
-                    mNeedsReloadOnResume = true
-                } else {
-                    Toast.makeText(context!!, item, Toast.LENGTH_LONG).show()
+                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
+                        activity!!,
+                        (itemViewHolder.view as ImageCardView).mainImageView,
+                        DetailsActivity.SHARED_ELEMENT_NAME
+                    )
+                        .toBundle()
+                    startActivity(intent, bundle)
+                }
+                is String -> {
+                    //設定、再読み込みなどのアイテム
+                    when {
+                        item.contains(getString(R.string.settings)) -> {
+                            val intent = Intent(context!!, SettingsActivity::class.java)
+                            startActivity(intent)
+                            mNeedsReloadOnResume = true
+                        }
+                        item.contains(getString(R.string.reload)) -> {
+                            loadRows()
+                        }
+                        else -> {
+                            Toast.makeText(context!!, item, Toast.LENGTH_LONG).show()
+                        }
+                    }
                 }
             }
         }
@@ -344,21 +391,108 @@ class MainFragment : BrowseSupportFragment() {
             itemViewHolder: Presenter.ViewHolder?, item: Any?,
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
-            if (item is RecordedProgram) {
-                //V1
-                mBackgroundUri = EpgStation.getThumbnailURL(item.id.toString())
-                startBackgroundTimer()
-            }else if (item is RecordedItem) {
-                //V2
-                mBackgroundUri = if(!item.thumbnails.isNullOrEmpty())
-                {
-                    EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
+            when (item) {
+                is RecordedProgram -> {
+                    // EPGStation Version 1.x.x
+                    mBackgroundUri = EpgStation.getThumbnailURL(item.id.toString())
+                    startBackgroundTimer()
                 }
-                else
-                {
-                    ""
+                is RecordedItem -> {
+                    // EPGStation Version 2.x.x
+                    mBackgroundUri = if(!item.thumbnails.isNullOrEmpty()) {
+                        EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
+                    } else {
+                        ""
+                    }
+                    startBackgroundTimer()
                 }
-                startBackgroundTimer()
+                is GetRecordedParam -> {
+                    // EPGStation Version 1.x.x の続きを取得するアイテム
+                    val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
+
+                    //APIで続きを取得して続きに加えていく
+                    // EPGStation V1.x.x
+                    EpgStation.api?.getRecorded(
+                        limit = item.limit,
+                        offset = item.offset,
+                        reverse = item.reverse,
+                        rule = item.rule,
+                        genre1 = item.genre1,
+                        channel = item.channel,
+                        keyword = item.keyword,
+                        hasTs = item.hasTs,
+                        recording = item.recording
+                    )?.enqueue(object : Callback<GetRecordedResponse> {
+                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                            response.body()?.let { getRecordedResponse ->
+
+                                //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
+                                //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
+                                getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
+                                    if(index == 0) {
+                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                    }else{
+                                        adapter.add(recordedProgram)
+                                    }
+                                }
+                                //続きがあるなら"次を読み込む"を置く。
+                                val numOfItem = getRecordedResponse.recorded.count().toLong() + item.offset
+                                if (numOfItem < getRecordedResponse.total) {
+                                    adapter.add(item.copy(offset = numOfItem))
+                                }
+
+                            }
+                        }
+                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                            Log.d(TAG,"loadRows() getRecorded API Failure")
+                            Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                        }
+                    })
+                }
+                is GetRecordedParamV2 -> {
+                    // EPGStation Version 1.x.x の続きを取得するアイテム
+                    val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
+
+                    //APIで続きを取得して続きに加えていく
+                    // EPGStation V2.x.x
+                    EpgStationV2.api?.getRecorded(
+                        isHalfWidth = item.isHalfWidth,
+                        offset = item.offset,
+                        limit = item.limit,
+                        isReverse = item.isReverse,
+                        ruleId = item.ruleId,
+                        channelId = item.channelId,
+                        genre = item.genre,
+                        keyword = item.keyword,
+                        hasOriginalFile = item.hasOriginalFile
+                    )?.enqueue(object : Callback<Records> {
+                        override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                            response.body()?.let { response ->
+
+                                //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
+                                //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
+                                response.records.forEachIndexed {  index, recordedProgram ->
+                                    if(index == 0) {
+                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                    }else{
+                                        adapter.add(recordedProgram)
+                                    }
+                                }
+                                //続きがあるなら"次を読み込む"を置く。
+                                val numOfItem = response.records.count().toLong() + item.offset
+                                if (numOfItem < response.total) {
+                                    adapter.add(item.copy(offset = numOfItem))
+                                }
+
+                            }
+                        }
+                        override fun onFailure(call: Call<Records>, t: Throwable) {
+                            Log.d(TAG,"loadRows() getRecorded API Failure")
+                            Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                        }
+                    })
+                }
+
             }
         }
     }

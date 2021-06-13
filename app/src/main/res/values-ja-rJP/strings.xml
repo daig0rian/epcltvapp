@@ -29,4 +29,5 @@
     <string name="pref_options_epgstation_version_label_1">version 1.x.x</string>
     <string name="version_of_epgstation">EPGStationのバージョン</string>
     <string name="now_on_recording">録画中</string>
+    <string name="reload">録画の再読み込み</string>
 </resources>

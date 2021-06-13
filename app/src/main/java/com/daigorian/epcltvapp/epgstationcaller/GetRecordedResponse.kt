@@ -7,5 +7,5 @@ import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
  */
 data class GetRecordedResponse(
     val recorded: List<RecordedProgram>,
-    val total: Int
+    val total: Long
 )
