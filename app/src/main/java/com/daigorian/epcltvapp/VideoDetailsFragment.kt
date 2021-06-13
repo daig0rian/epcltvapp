@@ -11,6 +11,7 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.leanback.app.DetailsSupportFragment
 import androidx.leanback.app.DetailsSupportFragmentBackgroundController
 import androidx.leanback.widget.*
@@ -48,7 +49,10 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         mDetailsBackground = DetailsSupportFragmentBackgroundController(this)
 
+        // EPGStationのバージョンによってintentで渡されてくるオブジェクトタイプが違う。
+        // EPGStation Version 1.x.x
         mSelectedRecordedProgram = requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
+        // EPGStation Version 2.x.x
         mSelectedRecordedItem= requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM) as RecordedItem?
 
         when {
@@ -71,7 +75,15 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 setupDetailsOverviewRowPresenter()
                 setupRelatedMovieListRow()
                 adapter = mAdapter
-                initializeBackground(EpgStationV2.getThumbnailURL(mSelectedRecordedItem?.thumbnails?.get(0).toString()))
+                initializeBackground(
+                    EpgStationV2.getThumbnailURL(
+                        if(mSelectedRecordedItem?.thumbnails?.isNotEmpty() == true)
+                            {
+                                mSelectedRecordedItem?.thumbnails?.get(0).toString()
+                            }else{
+                                ""
+                            })
+                )
                 onItemViewClickedListener = ItemViewClickedListener()
             }
             else -> {
@@ -96,6 +108,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     mDetailsBackground.coverBitmap = bitmap
                     mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size())
                 }
+
                 override fun onLoadCleared( placeholder: Drawable?) {}
             })
     }
@@ -115,7 +128,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString())
         }else {
             // EPGStation Version 2.x.x
-            EpgStationV2.getThumbnailURL(mSelectedRecordedItem?.thumbnails?.get(0).toString())
+            EpgStationV2.getThumbnailURL(
+                if(mSelectedRecordedItem?.thumbnails?.isNotEmpty() == true)
+                {
+                    mSelectedRecordedItem?.thumbnails?.get(0).toString()
+                }else{
+                    ""
+                })
         }
 
         row.imageDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
@@ -132,6 +151,33 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 ) {
                     Log.d(TAG, "details overview card image url ready: $drawable")
                     row.imageDrawable = drawable
+                    mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size())
+                }
+
+                override fun onLoadFailed(errorDrawable: Drawable?) {
+                    //サムネのロードが失敗したので、録画中かどうか調べてだし分けする。
+                    super.onLoadFailed(errorDrawable)
+                    Log.d(TAG, "details overview card image url read on fail: $errorDrawable")
+                    mSelectedRecordedProgram?.let {
+                        // EPGStation Version 1.x.x
+                        if (it.recording) {
+                            row.imageDrawable =
+                                ContextCompat.getDrawable(context!!, R.drawable.on_rec)
+                        } else{
+                            row.imageDrawable=
+                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge)
+                        }
+                    }
+                    mSelectedRecordedItem?.let{
+                        // EPGStation Version 2.x.x
+                        if (it.isRecording){
+                            row.imageDrawable =
+                                ContextCompat.getDrawable(context!!, R.drawable.on_rec)
+                        } else{
+                            row.imageDrawable=
+                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge)
+                        }
+                    }
                     mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size())
                 }
                 override fun onLoadCleared( placeholder: Drawable?) {}

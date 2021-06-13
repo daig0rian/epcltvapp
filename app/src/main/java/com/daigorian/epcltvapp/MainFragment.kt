@@ -90,8 +90,8 @@ class MainFragment : BrowseSupportFragment() {
         EpgStation.api = null //apiをいったん初期化
         EpgStationV2.api = null //apiをいったん初期化
 
-        val apiVerssion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
-        if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_1)) {
+        val apiVersion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
+        if (apiVersion == getString(R.string.pref_options_epgstation_version_val_1)) {
             //Preferenceに EPGStation Version 1　が設定されていた場合
             EpgStation.initAPI(
                 PreferenceManager.getDefaultSharedPreferences(context)
@@ -101,7 +101,7 @@ class MainFragment : BrowseSupportFragment() {
             EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
                 .getString(getString(R.string.pref_key_fetch_limit), "")!!
 
-        }else if (apiVerssion == getString(R.string.pref_options_epgstation_version_val_2)) {
+        }else if (apiVersion == getString(R.string.pref_options_epgstation_version_val_2)) {
             //Preferenceに EPGStation Version 2　が設定されていた場合
             EpgStationV2.initAPI(
                 PreferenceManager.getDefaultSharedPreferences(context)
@@ -139,16 +139,16 @@ class MainFragment : BrowseSupportFragment() {
 
 
         //縦の列を作る
-        val rowsAdapter = ArrayObjectAdapter(ListRowPresenter())
+        val rowsAdapter = MainMenuAdapter(ListRowPresenter())
         var numOfRow = 0L
 
-        //最初の横の列 設定
+        //最後の横の列 設定
         val gridHeader = HeaderItem(numOfRow++, getString(R.string.settings))
 
         val mGridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(mGridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
-        rowsAdapter.add(ListRow(gridHeader, gridRowAdapter))
+        rowsAdapter.addSettings(ListRow(gridHeader, gridRowAdapter))
 
 
         //動画のカードの表示の処理を行うCardPresenterは横の列ごとに設定する。
@@ -157,6 +157,7 @@ class MainFragment : BrowseSupportFragment() {
 
         //横の列を作る
         //APIで最近の録画を取得する。問題なく取得出来たら、一列追加してそれをカードに加えていく。
+        // EPGStation V1.x.x
         EpgStation.api?.getRecorded()?.enqueue(object : Callback<GetRecordedResponse> {
             override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
 
@@ -167,11 +168,29 @@ class MainFragment : BrowseSupportFragment() {
                     listRowAdapter.add(it)
                 }
                 // 完成した横の列を、縦の列に加える。
-                // 非同期なのでAPIが終わるタイミングによって変な場所に挿入されることがあるので、
-                // Indexを指定して常にSettingsの次に加える
-                rowsAdapter.add(1,ListRow(header, listRowAdapter))
+                rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
             }
             override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                Log.d(TAG,"loadRows() getRecorded API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+            }
+        })
+
+        // EPGStation V2.x.x
+        EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
+            override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                if(response.body()?.records?.isNotEmpty() == true) {
+                    //"録画中"の列を追加。
+                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
+                    val header = HeaderItem(numOfRow++, getString(R.string.now_on_recording))
+                    response.body()?.records?.forEach {
+                        listRowAdapter.add(it)
+                    }
+                    // 完成した横の列を、縦の列に加える。
+                    rowsAdapter.addOnRecording(ListRow(header, listRowAdapter))
+                }
+            }
+            override fun onFailure(call: Call<Records>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRecorded API Failure")
                 Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
             }
@@ -179,16 +198,14 @@ class MainFragment : BrowseSupportFragment() {
         EpgStationV2.api?.getRecorded()?.enqueue(object : Callback<Records> {
             override fun onResponse(call: Call<Records>, response: Response<Records>) {
 
-                //の列を追加。"最近の録画"
+                //"最近の録画"の列を追加。
                 val listRowAdapter = ArrayObjectAdapter(cardPresenter)
                 val header = HeaderItem(numOfRow++ , getString(R.string.recent_videos))
                 response.body()?.records?.forEach {
                     listRowAdapter.add(it)
                 }
                 // 完成した横の列を、縦の列に加える。
-                // 非同期なのでAPIが終わるタイミングによって変な場所に挿入されることがあるので、
-                // Indexを指定して常にSettingsの次に加える
-                rowsAdapter.add(1,ListRow(header, listRowAdapter))
+                rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
             }
             override fun onFailure(call: Call<Records>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRecorded API Failure")
@@ -223,8 +240,7 @@ class MainFragment : BrowseSupportFragment() {
                             Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
                         }
                     })
-                    //最初の行が最近の録画になり、最終行が設定になるように常に二番目に加える。
-                    rowsAdapter.add(ListRow(ruleHeader, ruleListRowAdapter))
+                    rowsAdapter.addRecordedByRules(ListRow(ruleHeader, ruleListRowAdapter))
                 }
             }
             override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
@@ -256,8 +272,7 @@ class MainFragment : BrowseSupportFragment() {
                             Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
                         }
                     })
-                    //最初の行が最近の録画になり、最終行が設定になるように常に二番目に加える。
-                    rowsAdapter.add(ListRow(ruleHeader, ruleListRowAdapter))
+                    rowsAdapter.addRecordedByRules(ListRow(ruleHeader, ruleListRowAdapter))
                 }
             }
             override fun onFailure(call: Call<Rules>, t: Throwable) {
@@ -335,7 +350,14 @@ class MainFragment : BrowseSupportFragment() {
                 startBackgroundTimer()
             }else if (item is RecordedItem) {
                 //V2
-                mBackgroundUri = EpgStationV2.getThumbnailURL(item.thumbnails?.get(0).toString())
+                mBackgroundUri = if(!item.thumbnails.isNullOrEmpty())
+                {
+                    EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
+                }
+                else
+                {
+                    ""
+                }
                 startBackgroundTimer()
             }
         }
@@ -392,6 +414,56 @@ class MainFragment : BrowseSupportFragment() {
 
         override fun onUnbindViewHolder(viewHolder: ViewHolder) {}
     }
+
+    private inner class MainMenuAdapter(presenter: Presenter?) : ArrayObjectAdapter(presenter) {
+
+        //メニューはこの順番で並びます。非同期に項目が追加されるので挿入位置地をこのクラスで管理します
+        private var numOfOnRecoding = 0
+        private var numOfRecentlyRecorded = 0
+        private var numOfDivider1 = 0
+        private var numOfRecordedByRules = 0
+        private var numOfDivider2 = 0
+        private var numOfSettings = 0
+
+        fun addOnRecording(item: Any?) {
+            val index = numOfOnRecoding
+            if (numOfDivider1==0){
+                super.add(numOfRecentlyRecorded,DividerRow())
+                numOfDivider1++
+            }
+            super.add(index,item)
+            numOfRecentlyRecorded++
+        }
+        fun addRecentlyRecorded(item: Any?) {
+            val index = numOfOnRecoding + numOfRecentlyRecorded
+            if (numOfDivider1==0){
+                super.add(numOfRecentlyRecorded,DividerRow())
+                numOfDivider1++
+            }
+            super.add(index,item)
+            numOfRecentlyRecorded++
+        }
+
+        fun addRecordedByRules(item: Any?) {
+            val index = numOfOnRecoding + numOfRecentlyRecorded + numOfDivider1 + numOfRecordedByRules
+
+            if (numOfDivider2==0){
+                super.add(index,DividerRow())
+                numOfDivider2++
+            }
+            super.add(index,item)
+            numOfRecordedByRules++
+        }
+        fun addSettings(item: Any?) {
+            val index = numOfOnRecoding + numOfRecentlyRecorded + numOfDivider1 + numOfRecordedByRules + numOfDivider2 + numOfSettings
+            super.add(index,item)
+            numOfSettings++
+        }
+
+        
+
+    }
+
 
     companion object {
         private const val TAG = "MainFragment"
