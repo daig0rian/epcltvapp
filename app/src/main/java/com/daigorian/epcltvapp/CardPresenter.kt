@@ -12,6 +12,7 @@ import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import kotlin.properties.Delegates
 
@@ -83,6 +84,11 @@ class CardPresenter : Presenter() {
             }
             is GetRecordedParam -> {
                 // EPGStation Version 1.x.x の先を読み込むBOX。ただ黒いBOX
+                cardView.titleText = ""
+                cardView.contentText = ""
+            }
+            is GetRecordedParamV2 -> {
+                // EPGStation Version 2.x.x の先を読み込むBOX。ただ黒いBOX
                 cardView.titleText = ""
                 cardView.contentText = ""
             }
