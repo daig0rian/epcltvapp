@@ -3,7 +3,6 @@ package com.daigorian.epcltvapp
 import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
-import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.leanback.app.SearchSupportFragment
@@ -29,8 +28,14 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         super.onCreate(savedInstanceState)
         setSearchResultProvider(this)
         setOnItemViewClickedListener(ItemViewClickedListener())
-    }
 
+        //もしAmazon Fire TV端末だった場合インアプリ音声検索は使えないのでコールバックをオーバーライドする
+        if (requireContext().packageManager.hasSystemFeature(AMAZON_FEATURE_FIRE_TV)) {
+            setSpeechRecognitionCallback {
+                //Do nothing
+            }
+        }
+    }
 
     override fun onQueryTextChange(newQuery: String?): Boolean {
         mRowsAdapter.clear()
@@ -44,8 +49,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         mRowsAdapter.add(ListRow(header, listRowAdapter))
 
         if (!TextUtils.isEmpty(query)) {
-            //V1
-            EpgStation?.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
+            // EPGStation Version 1.x.x
+            EpgStation.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
                 Callback<GetRecordedResponse> {
                 override fun onResponse(
                     call: Call<GetRecordedResponse>,
@@ -64,8 +69,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                     ).show()
                 }
             })
-            //V2
-            EpgStationV2?.api?.getRecorded(keyword = query,isReverse = true)?.enqueue(object :
+            // EPGStation Version 2.x.x
+            EpgStationV2.api?.getRecorded(keyword = query,isReverse = true)?.enqueue(object :
                 Callback<Records> {
                 override fun onResponse(
                     call: Call<Records>,
@@ -98,7 +103,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
             when (item) {
                 is RecordedProgram -> {
-                    //V1
+                    // EPGStation Version 1.x.x
                     val intent = Intent(context!!, DetailsActivity::class.java)
                     intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
 
@@ -111,7 +116,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                     startActivity(intent, bundle)
                 }
                 is RecordedItem -> {
-                    //V2
+                    /// EPGStation Version 2.x.x
                     val intent = Intent(context!!, DetailsActivity::class.java)
                     intent.putExtra(DetailsActivity.RECORDEDITEM, item)
 
@@ -132,7 +137,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
 
     companion object {
-        private val TAG = "SearchFragment"
+        private const val TAG = "SearchFragment"
+        private const val AMAZON_FEATURE_FIRE_TV = "amazon.hardware.fire_tv"
 
     }
 }

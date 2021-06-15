@@ -9,10 +9,10 @@ android {
 
     defaultConfig {
         applicationId "com.daigorian.epcltvapp"
-        minSdkVersion 28
+        minSdkVersion 22
         targetSdkVersion 30
-        versionCode 8
-        versionName "1.8"
+        versionCode 9
+        versionName "1.9"
 
     }
 

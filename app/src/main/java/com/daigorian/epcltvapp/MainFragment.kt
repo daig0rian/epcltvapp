@@ -120,7 +120,11 @@ class MainFragment : BrowseSupportFragment() {
         mBackgroundManager.attach(requireActivity().window)
         mDefaultBackground = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         mMetrics = DisplayMetrics()
-        requireActivity().display?.getRealMetrics(mMetrics)
+        //from API LEVEL 30
+        //requireActivity().display?.getRealMetrics(mMetrics)
+        //for lower API LEVEL
+        requireActivity().windowManager.defaultDisplay.getMetrics(mMetrics)
+
     }
 
     private fun setupUIElements() {
