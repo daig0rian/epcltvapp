@@ -10,7 +10,7 @@ Webブラウザを持たないAndroid TV から EPGStationの録画を見るた�
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
  - パソコンで上記URLにアクセスして Android TV端末へ送信 するのが一番楽なインストール方法です。
- - Android TV 端末上のPlay Storeでは daigorian と検索すると見つかります。
+ - Android TV 端末上のPlay Storeでは epgst と検索すると見つかります。
 
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
