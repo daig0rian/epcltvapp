@@ -12,8 +12,8 @@ class SettingsFragment : LeanbackPreferenceFragment()  {
         setPreferencesFromResource(R.xml.preferences, rootKey)
 
         //IPアドレスの入力時バリデーション
-        val ipAddrPref = preferenceScreen.findPreference(getText(R.string.pref_key_ip_addr)) as EditTextPreference?
-        ipAddrPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
+        val ipAddressPref = preferenceScreen.findPreference(getText(R.string.pref_key_ip_addr)) as EditTextPreference?
+        ipAddressPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
             val regex = Regex(pattern ="""^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$""")
             if (value.toString().matches(regex)){
                 true
@@ -44,12 +44,12 @@ class SettingsFragment : LeanbackPreferenceFragment()  {
         fun isPreferenceAllExists(context: Context):Boolean{
             val pref = PreferenceManager.getDefaultSharedPreferences(context)
             return (
-                    pref.contains(context.getString(R.string.pref_key_epgstation_version)) &&
-                    pref.contains(context.getString(R.string.pref_key_ip_addr)) &&
-                    pref.contains(context.getString(R.string.pref_key_port_num)) &&
-                    pref.contains(context.getString(R.string.pref_key_fetch_limit)) &&
-                    pref.contains(context.getString(R.string.pref_key_player))
-                    )
+                pref.contains(context.getString(R.string.pref_key_ip_addr)) &&
+                pref.contains(context.getString(R.string.pref_key_port_num)) &&
+                pref.contains(context.getString(R.string.pref_key_fetch_limit)) &&
+                pref.contains(context.getString(R.string.pref_key_player)) &&
+                pref.contains(context.getString(R.string.pref_key_num_of_history))
+            )
         }
     }
 

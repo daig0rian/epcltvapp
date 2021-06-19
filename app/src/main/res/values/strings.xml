@@ -16,40 +16,29 @@
     <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
     <string name="port_number_of_epgstation">Port Number of EPGStation</string>
     <string name="number_of_items_to_get_at_one_time">Number of items to get from API at one time</string>
+    <string name="version_of_epgstation">Version of EPGStation</string>
+    <string name="reload">Reload</string>
+    <string name="num_of_history">Number of search histories</string>
+
 
     <!-- Error messages -->
     <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPGStation IP Address from Settings menu.</string>
     <string name="please_install_external_player">Please Install External Player</string>
     <string name="not_a_valid_ipv4_addr">%1$s is not a Valid IPV4 Address</string>
     <string name="not_a_valid_port_num">%1$s is not a Valid Port Number</string>
+    <string name="programs_not_found">No program was found containing %1$s is not found</string>
 
     <!-- Preferences-->
-    <string name="pref_key_epgstation_version"  translatable="false">KEY_EPGSTATION_VERSION</string>
-    <string name="pref_val_epgstation_version_default"     translatable="false">@string/pref_options_epgstation_version_val_2</string>
-    <string name="pref_key_ip_addr"             translatable="false">KEY_IP_ADDR</string>
-    <string name="pref_val_ip_addr_default"     translatable="false">192.168.0.0</string>
-    <string name="pref_key_port_num"            translatable="false">KEY_PORT_NUM</string>
-    <string name="pref_val_port_num_default"    translatable="false">8888</string>
-    <string name="pref_key_fetch_limit"         translatable="false">KEY_FETCH_LIMIT</string>
-    <string name="pref_val_fetch_limit_default" translatable="false">@string/pref_options_fetch_limit_val_24</string>
-    <string name="pref_key_player"              translatable="false">KEY_PLAYER</string>
-    <string name="pref_val_player_default"      translatable="false">@string/pref_options_movie_player_val_MX</string>
-
-    <string name="pref_options_epgstation_version_label_2">version 2.x.x</string>
-    <string name="pref_options_epgstation_version_label_1">version 1.x.x</string>
-
-    <string-array name="pref_options_epgstation_version_label" >
-        <item>@string/pref_options_epgstation_version_label_2</item>
-        <item>@string/pref_options_epgstation_version_label_1</item>
-    </string-array>
-
-    <string name="pref_options_epgstation_version_val_2" translatable="false">2</string>
-    <string name="pref_options_epgstation_version_val_1" translatable="false">1</string>
-
-    <string-array name="pref_options_epgstation_version_val" >
-        <item>@string/pref_options_epgstation_version_val_2</item>
-        <item>@string/pref_options_epgstation_version_val_1</item>
-    </string-array>
+    <string name="pref_key_ip_addr"                translatable="false">KEY_IP_ADDR</string>
+    <string name="pref_val_ip_addr_default"        translatable="false">192.168.0.0</string>
+    <string name="pref_key_port_num"               translatable="false">KEY_PORT_NUM</string>
+    <string name="pref_val_port_num_default"       translatable="false">8888</string>
+    <string name="pref_key_fetch_limit"            translatable="false">KEY_FETCH_LIMIT</string>
+    <string name="pref_val_fetch_limit_default"    translatable="false">@string/pref_options_fetch_limit_val_24</string>
+    <string name="pref_key_player"                 translatable="false">KEY_PLAYER</string>
+    <string name="pref_val_player_default"         translatable="false">@string/pref_options_movie_player_val_MX</string>
+    <string name="pref_key_num_of_history"         translatable="false">KEY_NUM_OF_HISTORY</string>
+    <string name="pref_val_num_of_history_default" translatable="false">@string/pref_options_num_of_history_val_3</string>
 
     <string name="pref_options_fetch_limit_label_24">24 (Default)</string>
     <string name="pref_options_fetch_limit_label_48">48</string>
@@ -88,12 +77,43 @@
     <string name="pref_options_movie_player_val_MX"       translatable="false">com.mxtech.videoplayer.ad</string>
     <string name="pref_options_movie_player_val_VLC"      translatable="false">org.videolan.vlc</string>
     <string name="pref_options_movie_player_val_INTERNAL" translatable="false">com.daigorian.internal</string>
-    <string name="version_of_epgstation">Version of EPGStation</string>
-    <string name="reload">Reload</string>
 
     <string-array name="pref_options_movie_player_val" >
         <item>@string/pref_options_movie_player_val_MX</item>
         <item>@string/pref_options_movie_player_val_VLC</item>
         <item>@string/pref_options_movie_player_val_INTERNAL</item>
     </string-array>
+
+
+    <string name="pref_options_num_of_history_label_0" >0</string>
+    <string name="pref_options_num_of_history_label_1">1</string>
+    <string name="pref_options_num_of_history_label_2">2</string>
+    <string name="pref_options_num_of_history_label_3">3 (Default)</string>
+    <string name="pref_options_num_of_history_label_5">5</string>
+    <string name="pref_options_num_of_history_label_7">7</string>
+
+    <string-array name="pref_options_num_of_history_label" >
+        <item>@string/pref_options_num_of_history_label_0</item>
+        <item>@string/pref_options_num_of_history_label_1</item>
+        <item>@string/pref_options_num_of_history_label_2</item>
+        <item>@string/pref_options_num_of_history_label_3</item>
+        <item>@string/pref_options_num_of_history_label_5</item>
+        <item>@string/pref_options_num_of_history_label_7</item>
+    </string-array>
+    <string name="pref_options_num_of_history_val_0"  translatable="false">0</string>
+    <string name="pref_options_num_of_history_val_1" translatable="false">1</string>
+    <string name="pref_options_num_of_history_val_2" translatable="false">2</string>
+    <string name="pref_options_num_of_history_val_3" translatable="false">3</string>
+    <string name="pref_options_num_of_history_val_5" translatable="false">5</string>
+    <string name="pref_options_num_of_history_val_7" translatable="false">7</string>
+
+    <string-array name="pref_options_num_of_history_val" >
+        <item>@string/pref_options_num_of_history_val_0</item>
+        <item>@string/pref_options_num_of_history_val_1</item>
+        <item>@string/pref_options_num_of_history_val_2</item>
+        <item>@string/pref_options_num_of_history_val_3</item>
+        <item>@string/pref_options_num_of_history_val_5</item>
+        <item>@string/pref_options_num_of_history_val_7</item>
+    </string-array>
+
 </resources>
