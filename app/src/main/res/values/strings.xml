@@ -115,5 +115,6 @@
         <item>@string/pref_options_num_of_history_val_5</item>
         <item>@string/pref_options_num_of_history_val_7</item>
     </string-array>
+    <string name="by_rec_rules">By rules</string>
 
 </resources>

@@ -605,7 +605,7 @@ class MainFragment : BrowseSupportFragment() {
             numOfRecordedByRules++
 
             if (numOfRecordedByRules == 1) {
-                super.add(index,SectionRow("録画ルール"))
+                super.add(index,SectionRow(getString(R.string.by_rec_rules)))
                 numOfRecordedByRules++
             }
 
