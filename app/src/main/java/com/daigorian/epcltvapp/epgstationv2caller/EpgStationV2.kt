@@ -36,6 +36,10 @@ object EpgStationV2 {
             @Query("type") type: String? = null,
             @Query("keyword") keyword: String? = null,
         ): Call<Rules>
+
+        @GET("version")
+        fun getVersion(
+        ): Call<Version>
     }
 
 

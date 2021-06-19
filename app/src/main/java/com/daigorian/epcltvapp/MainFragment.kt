@@ -62,8 +62,6 @@ class MainFragment : BrowseSupportFragment() {
 
         setupUIElements()
 
-        loadRows()
-
         setupEventListeners()
     }
 
@@ -72,8 +70,6 @@ class MainFragment : BrowseSupportFragment() {
         if(mNeedsReloadOnResume) {
             //設定画面から戻ってきたので設定を再読み込みする
             initEPGStationApi()
-            //行をロードしなおす
-            loadRows()
             mNeedsReloadOnResume = false
         }
 
@@ -90,28 +86,43 @@ class MainFragment : BrowseSupportFragment() {
         EpgStation.api = null //apiをいったん初期化
         EpgStationV2.api = null //apiをいったん初期化
 
-        val apiVersion = PreferenceManager.getDefaultSharedPreferences(context).getString(getString(R.string.pref_key_epgstation_version),"")
-        if (apiVersion == getString(R.string.pref_options_epgstation_version_val_1)) {
-            //Preferenceに EPGStation Version 1　が設定されていた場合
-            EpgStation.initAPI(
-                PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_port_num), "")!! )
-            EpgStation.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                .getString(getString(R.string.pref_key_fetch_limit), "")!!
+        //設定値を取得
+        val ipAddress =  PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(getString(R.string.pref_key_ip_addr), "")!!
+        val port = PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(getString(R.string.pref_key_port_num), "")!!
+        val defaultLimit = PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(getString(R.string.pref_key_fetch_limit), "")!!
 
-        }else if (apiVersion == getString(R.string.pref_options_epgstation_version_val_2)) {
-            //Preferenceに EPGStation Version 2　が設定されていた場合
-            EpgStationV2.initAPI(
-                PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_ip_addr), "")!!,
-                PreferenceManager.getDefaultSharedPreferences(context)
-                    .getString(getString(R.string.pref_key_port_num), "")!! )
-            EpgStationV2.default_limit = PreferenceManager.getDefaultSharedPreferences(context)
-                .getString(getString(R.string.pref_key_fetch_limit), "")!!
 
-        }
+        //バージョンチェックして適切なバージョンのAPIを初期化
+        EpgStationV2VersionChecker(ipAddress,port).api.getVersion().enqueue(object : Callback<Version> {
+            override fun onResponse(call: Call<Version>, response: Response<Version>) {
+                if(response.body() != null) {
+                    //Version 2で初期化
+                    Log.d(TAG,"initEPGStationApi() detect Version 2.x.x")
+                    EpgStationV2.initAPI(ipAddress,port )
+                    EpgStationV2.default_limit = defaultLimit
+                    loadRows()
+                }else{
+                    //Version 1で初期化
+                    Log.d(TAG,"initEPGStationApi() detect Version 1.x.x")
+                    EpgStationV2.api = null
+                    EpgStation.initAPI(ipAddress,port )
+                    EpgStation.default_limit = defaultLimit
+                    loadRows()
+                }
+            }
+            override fun onFailure(call: Call<Version>, t: Throwable) {
+                Log.d(TAG,"initEPGStationApi() getVersion API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                loadRows()
+
+            }
+        })
+
+
+
     }
 
     private fun prepareBackgroundManager() {
@@ -589,8 +600,16 @@ class MainFragment : BrowseSupportFragment() {
                 super.add(index,DividerRow())
                 numOfDivider2++
             }
+
             super.add(index,item)
             numOfRecordedByRules++
+
+            if (numOfRecordedByRules == 1) {
+                super.add(index,SectionRow("録画ルール"))
+                numOfRecordedByRules++
+            }
+
+
         }
         fun addSettings(item: Any?) {
             val index = numOfOnRecoding + numOfRecentlyRecorded + numOfDivider1 + numOfRecordedByRules + numOfDivider2 + numOfSettings
