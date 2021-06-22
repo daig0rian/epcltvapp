@@ -20,7 +20,7 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
 ## 必要な環境
  - EPGStation Version 1.x.x or 2.x.x　
- - APIレベル28(Android 9.0)以上の Android TV
+ - APIレベル22(Android 5.1,Lollipop MR1)以上の Android TV
 
 ## テスト環境
  - SONY BRAVIA KJ-43X8000H (4K液晶androidテレビ)
@@ -30,11 +30,12 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
 ## 今後やりたいこと
  - ~~動画リストの一番右に「さらに読み込む」ボタンの追加~~ DONE!
+ - ~~検索履歴を残して再検索を楽にする~~ DONE !
+ - 設定画面をLeanbackSettingsFragmentに変えてかっこよくする
+ - 検索画面をメイン画面とシームレスに接続する
  - 割と入手性の良い端末であるAmazon FireTVシリーズへの対応、Amazonのストアでの公開
- - 検索履歴を残して再検索を楽にする
  - 初回起動時のOnboarding画面の追加
  - ホームスクリーンに最近の録画を表示させることができる
- - 設定画面をLeanbackSettingsFragmentに変えてかっこよくする
  - 録画情報の表示画面が5行から伸びないのを直したい（調査着手したけど直し方がわからないのでペンディング中）
 
 ## たぶんできないこと
