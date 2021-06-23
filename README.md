@@ -31,7 +31,7 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 ## 今後やりたいこと
  - ~~動画リストの一番右に「さらに読み込む」ボタンの追加~~ DONE!
  - ~~検索履歴を残して再検索を楽にする~~ DONE !
- - 設定画面をLeanbackSettingsFragmentに変えてかっこよくする
+ - ~~設定画面をLeanbackSettingsFragmentに変えてかっこよくする~~  DONE !
  - 検索画面をメイン画面とシームレスに接続する
  - 割と入手性の良い端末であるAmazon FireTVシリーズへの対応、Amazonのストアでの公開
  - 初回起動時のOnboarding画面の追加
