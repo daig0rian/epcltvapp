@@ -88,11 +88,12 @@ class MainFragment : BrowseSupportFragment() {
 
         //設定値を取得
         val ipAddress =  PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_ip_addr), "")!!
+            .getString(getString(R.string.pref_key_ip_addr), getString(R.string.pref_val_ip_addr_default))!!
         val port = PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_port_num), "")!!
+            .getString(getString(R.string.pref_key_port_num), getString(R.string.pref_val_port_num_default))!!
         val defaultLimit = PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_fetch_limit), "")!!
+            .getString(getString(R.string.pref_key_fetch_limit), getString(R.string.pref_val_fetch_limit_default
+            ))!!
 
 
         //バージョンチェックして適切なバージョンのAPIを初期化
