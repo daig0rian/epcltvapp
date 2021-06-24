@@ -13,9 +13,9 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - Android TV 端末上のPlay Storeでは epgst と検索すると見つかります。
 
 ## Amazon app ストア
-審査通らないので断念しました。
-[リリース](https://github.com/daig0rian/epcltvapp/releases)のページにある apk リンクを [Downloader](https://www.amazon.co.jp/dp/B01N0BP507) を使って直接ロードしてください。
-設定 > マイFire TV > 開発者オプション > 不明ソースからのアプリ 　を　"オン" にする必要があります。
+ - 審査通らないので断念しました。
+ - [リリース](https://github.com/daig0rian/epcltvapp/releases)のページにある apk リンクを [Downloader](https://www.amazon.co.jp/dp/B01N0BP507) を使って直接ロードしてください。
+ - 設定 > マイFire TV > 開発者オプション > 不明ソースからのアプリ 　を　"オン" にする必要があります。
 
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
