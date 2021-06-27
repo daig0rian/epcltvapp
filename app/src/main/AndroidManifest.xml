@@ -45,8 +45,7 @@
             android:theme="@style/CustomizedSearch"
             android:screenOrientation="landscape"/>
         <activity android:name=".SettingsActivity"
-            android:theme="@style/LeanbackPreferences"
-            android:screenOrientation="landscape"/>
+            android:theme="@style/LeanbackPreferences"/>
     </application>
 
 </manifest>
