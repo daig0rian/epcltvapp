@@ -4,15 +4,17 @@
        <item name="android:colorPrimary">@color/background_epgstation</item>
     </style>
 
-    <style name="LeanbackPreferences" parent="Theme.Leanback">
+    <style name="LeanbackPreferences" parent="@style/Theme.Epcltvapp">
         <item name="preferenceTheme">@style/PreferenceThemeOverlay.v14.Leanback</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:backgroundDimEnabled">true</item>
-        <item name="android:colorPrimary">@color/background_epgstation</item>
     </style>
 
-    <style name="CustomizedSearchActivity" parent="Theme.Leanback">
+
+    <style name="CustomizedSearch" parent="@style/Theme.Epcltvapp">
+        <item name="android:windowBackground">@color/background_epgstation</item>
     </style>
+
 
 </resources>

@@ -42,7 +42,7 @@
         <activity android:name=".PlaybackActivity"
             android:screenOrientation="landscape"/>
         <activity android:name=".SearchActivity"
-            android:theme="@style/CustomizedSearchActivity"
+            android:theme="@style/CustomizedSearch"
             android:screenOrientation="landscape"/>
         <activity android:name=".SettingsActivity"
             android:theme="@style/LeanbackPreferences"

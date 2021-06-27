@@ -35,14 +35,17 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         setSearchResultProvider(this)
         setOnItemViewClickedListener(ItemViewClickedListener())
         setOnItemViewSelectedListener(ItemViewSelectedListener())
+        //プレースホルダーに入る文字列
+        // XXXを音声検索　XXXを検索　というように状況に応じて後ろに文言がつく
+        super.setTitle("番組名")
 
         //もしAmazon Fire TV端末だった場合インアプリ音声検索は使えないのでコールバックをオーバーライドする
         if (requireContext().packageManager.hasSystemFeature(AMAZON_FEATURE_FIRE_TV)) {
             setSpeechRecognitionCallback {
                 //　Do nothing
-                //　TODO Amazon Fire TV端末だったら"音声検索" プレースホルダーも混乱を招くので消す
-                //　TODO Amazon Fire TV端末だったらマイクオーブも混乱を招くので消す
             }
+            //　TODO Amazon Fire TV端末だったら"音声検索" プレースホルダーも混乱を招くので消す
+            //　TODO Amazon Fire TV端末だったらマイクオーブも混乱を招くので消す
 
         }
         mRowsAdapter.clear()
