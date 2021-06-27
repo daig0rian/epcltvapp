@@ -76,7 +76,7 @@ class MainFragment : BrowseSupportFragment() {
     override fun onResume() {
         Log.i(TAG, "onResume")
         super.onResume()
-        if(mNeedsReloadOnResume) {
+        if(mNeedsReloadAllOnResume && SettingsFragment.isPreferenceAllExists(requireContext())) {
             //設定画面から戻ってきたので設定を再読み込みする
             initEPGStationApi()
             mNeedsReloadAllOnResume = false
