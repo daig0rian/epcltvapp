@@ -124,9 +124,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 return false
             }
             //ほかのパラメータの存在チェック
-            return (
-                    pref.contains(context.getString(R.string.pref_key_fetch_limit)) &&
-                            pref.contains(context.getString(R.string.pref_key_player)) &&
+            return (pref.contains(context.getString(R.string.pref_key_player)) &&
                             pref.contains(context.getString(R.string.pref_key_num_of_history))
                     )
         }

@@ -11,14 +11,9 @@
     <string name="search_results">検索結果</string>
     <string name="connect_epgstation_failed">EPGStationに接続できませんでした. 設定メニューからIPアドレスを確認してください</string>
     <string name="ip_addr_of_epgstation">EPGStationのIPアドレス</string>
-    <string name="number_of_items_to_get_at_one_time">APIで一度に取得するアイテムの数</string>
     <string name="movie_player">録画を再生するプレーヤー</string>
     <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
     <string name="port_number_of_epgstation">EPGStation の PORT番号</string>
-    <string name="pref_options_fetch_limit_label_24">24 (デフォルト)</string>
-    <string name="pref_options_fetch_limit_label_48">48</string>
-    <string name="pref_options_fetch_limit_label_72">72</string>
-    <string name="pref_options_fetch_limit_label_96">96</string>
     <string name="pref_options_movie_player_label_MX">MX Player (デフォルト)</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
     <string name="pref_options_movie_player_label_INTERNAL">内蔵 (非推奨)</string>

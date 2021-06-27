@@ -91,9 +91,6 @@ class MainFragment : BrowseSupportFragment() {
             .getString(getString(R.string.pref_key_ip_addr), getString(R.string.pref_val_ip_addr_default))!!
         val port = PreferenceManager.getDefaultSharedPreferences(context)
             .getString(getString(R.string.pref_key_port_num), getString(R.string.pref_val_port_num_default))!!
-        val defaultLimit = PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_fetch_limit), getString(R.string.pref_val_fetch_limit_default
-            ))!!
 
 
         //バージョンチェックして適切なバージョンのAPIを初期化
@@ -103,14 +100,12 @@ class MainFragment : BrowseSupportFragment() {
                     //Version 2で初期化
                     Log.d(TAG,"initEPGStationApi() detect Version 2.x.x")
                     EpgStationV2.initAPI(ipAddress,port )
-                    EpgStationV2.default_limit = defaultLimit
                     loadRows()
                 }else{
                     //Version 1で初期化
                     Log.d(TAG,"initEPGStationApi() detect Version 1.x.x")
                     EpgStationV2.api = null
                     EpgStation.initAPI(ipAddress,port )
-                    EpgStation.default_limit = defaultLimit
                     loadRows()
                 }
             }

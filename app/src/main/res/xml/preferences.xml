@@ -16,14 +16,6 @@
         app:dialogLayout="@xml/preference_single_line_edittext"
         app:useSimpleSummaryProvider="true"
         />
-    <ListPreference
-        app:title=       "@string/number_of_items_to_get_at_one_time"
-        app:key=         "@string/pref_key_fetch_limit"
-        app:defaultValue="@string/pref_val_fetch_limit_default"
-        app:entries=     "@array/pref_options_fetch_limit_label"
-        app:entryValues= "@array/pref_options_fetch_limit_val"
-        app:useSimpleSummaryProvider="true"
-        />
 
     <ListPreference
         app:key=         "@string/pref_key_player"
