@@ -63,7 +63,7 @@
     <string name="pref_options_num_of_history_label_2">2</string>
     <string name="pref_options_num_of_history_label_3">3 (Default)</string>
     <string name="pref_options_num_of_history_label_5">5</string>
-    <string name="pref_options_num_of_history_label_7">7</string>
+    <string name="pref_options_num_of_history_label_8">8</string>
 
     <string-array name="pref_options_num_of_history_label" >
         <item>@string/pref_options_num_of_history_label_0</item>
@@ -71,14 +71,14 @@
         <item>@string/pref_options_num_of_history_label_2</item>
         <item>@string/pref_options_num_of_history_label_3</item>
         <item>@string/pref_options_num_of_history_label_5</item>
-        <item>@string/pref_options_num_of_history_label_7</item>
+        <item>@string/pref_options_num_of_history_label_8</item>
     </string-array>
     <string name="pref_options_num_of_history_val_0"  translatable="false">0</string>
     <string name="pref_options_num_of_history_val_1" translatable="false">1</string>
     <string name="pref_options_num_of_history_val_2" translatable="false">2</string>
     <string name="pref_options_num_of_history_val_3" translatable="false">3</string>
     <string name="pref_options_num_of_history_val_5" translatable="false">5</string>
-    <string name="pref_options_num_of_history_val_7" translatable="false">7</string>
+    <string name="pref_options_num_of_history_val_8" translatable="false">8</string>
 
     <string-array name="pref_options_num_of_history_val" >
         <item>@string/pref_options_num_of_history_val_0</item>
@@ -86,7 +86,7 @@
         <item>@string/pref_options_num_of_history_val_2</item>
         <item>@string/pref_options_num_of_history_val_3</item>
         <item>@string/pref_options_num_of_history_val_5</item>
-        <item>@string/pref_options_num_of_history_val_7</item>
+        <item>@string/pref_options_num_of_history_val_8</item>
     </string-array>
     <string name="by_rec_rules">By rules</string>
     <string name="search_history">Search history</string>
