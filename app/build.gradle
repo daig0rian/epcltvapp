@@ -11,8 +11,8 @@ android {
         applicationId "com.daigorian.epcltvapp"
         minSdkVersion 22
         targetSdkVersion 30
-        versionCode 15
-        versionName "1.15"
+        versionCode 16
+        versionName "1.16"
 
     }
 
