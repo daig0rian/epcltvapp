@@ -41,17 +41,25 @@ class MainFragment : BrowseSupportFragment() {
     private lateinit var mMetrics: DisplayMetrics
     private var mBackgroundTimer: Timer? = null
     private var mBackgroundUri: String? = null
-    private var mNeedsReloadOnResume = false
+    private var mNeedsReloadAllOnResume = false
+    private var mNeedsReloadHistoryOnResume = false
+
+    private val mCardPresenter = CardPresenter()
+    private val mMainMenuListRowPresenter = ListRowPresenter()
+    private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
         super.onCreate(savedInstanceState)
 
+        adapter = mMainMenuAdapter
+
         if(!SettingsFragment.isPreferenceAllExists(requireContext())){
+            Log.i(TAG, "not all Preference exists")
             //設定されていないPreference項目があった場合は設定画面を開く
             val intent = Intent(requireContext(), SettingsActivity::class.java)
             startActivity(intent)
-            mNeedsReloadOnResume = true
+            mNeedsReloadAllOnResume = true
 
         }else{
             //設定が最初から読み込めた場合はそれに合わせてAPIを初期化
@@ -66,11 +74,26 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     override fun onResume() {
+        Log.i(TAG, "onResume")
         super.onResume()
         if(mNeedsReloadOnResume) {
             //設定画面から戻ってきたので設定を再読み込みする
             initEPGStationApi()
-            mNeedsReloadOnResume = false
+            mNeedsReloadAllOnResume = false
+        }
+        if(mNeedsReloadHistoryOnResume){
+            //履歴行の読み直し
+            mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+            SearchFragment.getHistory(requireContext()).asReversed().forEach{
+                val historyRow = contentsListRowBuilder(
+                    GetRecordedParam(keyword = it),
+                    GetRecordedParamV2(keyword = it),
+                    it
+                )
+                mMainMenuAdapter.addToCategory(Category.SEARCH_HISTORY,historyRow)
+            }
+            mNeedsReloadHistoryOnResume = false
+
         }
 
     }
@@ -148,101 +171,52 @@ class MainFragment : BrowseSupportFragment() {
 
     private fun loadRows() {
 
-
-        //縦の列を作る
-        val rowsAdapter = MainMenuAdapter(ListRowPresenter())
-        var numOfRow = 0L
-
-        //"設定"　のボタンが乗る行
-        val gridHeader = HeaderItem(numOfRow++, getString(R.string.settings))
-
-        val gridPresenter = GridItemPresenter()
-        val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
-        gridRowAdapter.add(resources.getString(R.string.settings))
-        gridRowAdapter.add(resources.getString(R.string.reload))
-        rowsAdapter.addSettings(ListRow(gridHeader, gridRowAdapter))
+        //内容クリア
+        mMainMenuAdapter.clear()
 
 
-        //動画のカードの表示の処理を行うCardPresenterは横の列ごとに設定する。
-        val cardPresenter = CardPresenter()
+        EpgStationV2.api?.let{ api ->
+            // EPGStation V2.x.x　の場合だけ録画中列を作る
+            val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
+            val header = HeaderItem( getString(R.string.now_on_recording))
+            mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
 
-
-        //APIで最近の録画を取得する。問題なく取得出来たら、一列追加してそれをカードに加えていく。
-        // EPGStation V1.x.x
-        EpgStation.api?.getRecorded()?.enqueue(object : Callback<GetRecordedResponse> {
-            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                response.body()?.let { getRecordedResponse ->
-                    //"最近の録画"の行を追加。
-                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val header = HeaderItem(numOfRow++, getString(R.string.recent_videos))
-
-                    //APIのレスポンスをひとつづつアイテムとして加える。
-                    getRecordedResponse.recorded.forEach {  recordedProgram ->
-                        listRowAdapter.add(recordedProgram)
-                    }
-                    //続きがあるなら"次を読み込む"を置く。
-                    val numOfItem = getRecordedResponse.recorded.count().toLong()
-                    if (numOfItem < getRecordedResponse.total) {
-                        listRowAdapter.add(GetRecordedParam(offset =numOfItem))
-                    }
-
-                    // 完成した横の列を、縦の列に加える。
-                    rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
-                }
-            }
-            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
-
-        // EPGStation V2.x.x
-        EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
-            override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                response.body()?.let { getRecordingResponse ->
-                    if (getRecordingResponse.records.isNotEmpty()) {
-                        //"録画中"の列を追加。
-                        val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                        val header = HeaderItem(numOfRow++, getString(R.string.now_on_recording))
-                        getRecordingResponse.records.forEach {
-                            listRowAdapter.add(it)
+            api.getRecording().enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    response.body()?.let { getRecordingResponse ->
+                        if (getRecordingResponse.records.isNotEmpty()) {
+                            //"録画中"の列を追加。
+                            getRecordingResponse.records.forEach {
+                                listRowAdapter.add(it)
+                            }
                         }
-                        // 完成した横の列を、縦の列に加える。
-                        rowsAdapter.addOnRecording(ListRow(header, listRowAdapter))
                     }
                 }
-            }
-            override fun onFailure(call: Call<Records>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
-        EpgStationV2.api?.getRecorded()?.enqueue(object : Callback<Records> {
-            override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                response.body()?.let { getRecordedResponse ->
-                    //"最近の録画"の列を追加。
-                    val listRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val header = HeaderItem(numOfRow++, getString(R.string.recent_videos))
-                    getRecordedResponse.records.forEach {
-                        listRowAdapter.add(it)
-                    }
-
-                    //続きがあるなら"次を読み込む"を置く。
-                    val numOfItem = getRecordedResponse.records.count().toLong()
-                    if (numOfItem < getRecordedResponse.total) {
-                        listRowAdapter.add(GetRecordedParamV2(offset =numOfItem))
-                    }
-
-                    // 完成した横の列を、縦の列に加える。
-                    rowsAdapter.addRecentlyRecorded(ListRow(header, listRowAdapter))
+                override fun onFailure(call: Call<Records>, t: Throwable) {
+                    Log.d(TAG,"loadRows() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
-            }
-            override fun onFailure(call: Call<Records>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
+            })
+        }
 
+        //最近の録画の列
+        val recentlyRecorded = contentsListRowBuilder(
+            GetRecordedParam(),
+            GetRecordedParamV2(),
+            getString(R.string.recent_videos)
+        )
+        mMainMenuAdapter.addToCategory(Category.RECENTLY_RECORDED,recentlyRecorded)
+
+
+        //履歴行の追加
+        SearchFragment.getHistory(requireContext()).asReversed().forEach{
+            val historyRow = contentsListRowBuilder(
+                GetRecordedParam(keyword = it),
+                GetRecordedParamV2(keyword = it),
+                it
+            )
+            mMainMenuAdapter.addToCategory(Category.SEARCH_HISTORY,historyRow)
+        }
 
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
@@ -256,28 +230,13 @@ class MainFragment : BrowseSupportFragment() {
                     }else{
                         rule.keyword
                     }
+                    val recordedByRule = contentsListRowBuilder(
+                        GetRecordedParam(rule= rule.id),
+                        GetRecordedParamV2(ruleId= rule.id),
+                        keyword
+                    )
+                    mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
 
-                    val ruleListRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val ruleHeader = HeaderItem(numOfRow++, keyword)
-                    EpgStation.api?.getRecorded(rule=rule.id)?.enqueue(object : Callback<GetRecordedResponse> {
-                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            response.body()?.let { getRecordedResponse ->
-                                getRecordedResponse.recorded.forEach { recordedProgram ->
-                                    ruleListRowAdapter.add(recordedProgram)
-                                }
-                                //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = getRecordedResponse.recorded.count().toLong()
-                                if (numOfItem < getRecordedResponse.total) {
-                                    ruleListRowAdapter.add(GetRecordedParam(rule=rule.id,offset = numOfItem))
-                                }
-                            }
-                        }
-                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                            Log.d(TAG,"loadRows() getRecorded API Failure")
-                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
-                        }
-                    })
-                    rowsAdapter.addRecordedByRules(ListRow(ruleHeader, ruleListRowAdapter))
                 }
             }
             override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
@@ -295,29 +254,12 @@ class MainFragment : BrowseSupportFragment() {
                     }else{
                         rule.searchOption?.keyword!!
                     }
-
-                    val ruleListRowAdapter = ArrayObjectAdapter(cardPresenter)
-                    val ruleHeader = HeaderItem(numOfRow++, keyword)
-                    EpgStationV2.api?.getRecorded(ruleId= rule.id)?.enqueue(object : Callback<Records> {
-                        override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                            response.body()?.let { getRecordedResponse ->
-                                getRecordedResponse.records.forEach { recordedItem ->
-                                    ruleListRowAdapter.add(recordedItem)
-                                }
-                                //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = getRecordedResponse.records.count().toLong()
-                                if (numOfItem < getRecordedResponse.total) {
-                                    ruleListRowAdapter.add(GetRecordedParamV2(ruleId=rule.id,offset = numOfItem))
-                                }
-                            }
-
-                        }
-                        override fun onFailure(call: Call<Records>, t: Throwable) {
-                            Log.d(TAG,"loadRows() getRecorded API Failure")
-                            Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
-                        }
-                    })
-                    rowsAdapter.addRecordedByRules(ListRow(ruleHeader, ruleListRowAdapter))
+                    val recordedByRule = contentsListRowBuilder(
+                        GetRecordedParam(rule= rule.id),
+                        GetRecordedParamV2(ruleId= rule.id),
+                        keyword
+                    )
+                    mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
                 }
             }
             override fun onFailure(call: Call<Rules>, t: Throwable) {
@@ -326,13 +268,21 @@ class MainFragment : BrowseSupportFragment() {
             }
         })
 
-        adapter = rowsAdapter
+        //"設定"　のボタンが乗る行
+        val gridHeader = HeaderItem(getString(R.string.settings))
+        val gridPresenter = GridItemPresenter()
+        val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
+        gridRowAdapter.add(resources.getString(R.string.settings))
+        gridRowAdapter.add(resources.getString(R.string.reload))
+        mMainMenuAdapter.addToCategory(Category.SETTINGS,ListRow(gridHeader, gridRowAdapter))
+
     }
 
     private fun setupEventListeners() {
         setOnSearchClickedListener {
             Intent(activity, SearchActivity::class.java).also { intent ->
                 startActivity(intent)
+                mNeedsReloadHistoryOnResume = true
             }
         }
 
@@ -383,7 +333,7 @@ class MainFragment : BrowseSupportFragment() {
                         item.contains(getString(R.string.settings)) -> {
                             val intent = Intent(context!!, SettingsActivity::class.java)
                             startActivity(intent)
-                            mNeedsReloadOnResume = true
+                            mNeedsReloadAllOnResume = true
                         }
                         item.contains(getString(R.string.reload)) -> {
                             loadRows()
@@ -396,6 +346,93 @@ class MainFragment : BrowseSupportFragment() {
             }
         }
     }
+
+    private fun contentsListRowBuilder(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String):ListRow{
+        // 空っぽの、タイトルだけ設定されたListRowを作る
+        val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
+        val header = HeaderItem(title)
+        val result = ListRow(header, listRowAdapter)
+
+        // APIのコールバックでListRowの中身をセットするように仕掛ける
+        // EPGStation V1.x.x
+        EpgStation.api?.getRecorded(
+            limit = v1Pram.limit,
+            offset = v1Pram.offset,
+            reverse = v1Pram.reverse,
+            rule = v1Pram.rule,
+            genre1 = v1Pram.genre1,
+            channel = v1Pram.channel,
+            keyword = v1Pram.keyword,
+            hasTs = v1Pram.hasTs,
+            recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
+
+            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                response.body()?.let { getRecordedResponse ->
+                    //APIのレスポンスをひとつづつアイテムとして加える。
+                    getRecordedResponse.recorded.forEach {  recordedProgram ->
+                        listRowAdapter.add(recordedProgram)
+                    }
+                    //続きがあるなら"次を読み込む"を置く。
+                    val numOfItem = getRecordedResponse.recorded.count().toLong()
+                    if (numOfItem < getRecordedResponse.total) {
+                        listRowAdapter.add(GetRecordedParam(limit = v1Pram.limit,
+                            offset = numOfItem,
+                            reverse = v1Pram.reverse,
+                            rule = v1Pram.rule,
+                            genre1 = v1Pram.genre1,
+                            channel = v1Pram.channel,
+                            keyword = v1Pram.keyword,
+                            hasTs = v1Pram.hasTs,
+                            recording = v1Pram.recording))
+                    }
+
+                }
+            }
+            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                Log.d(TAG,"loadRows() getRecorded API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+            }
+        })
+        EpgStationV2.api?.getRecorded(
+            isHalfWidth = v2Param.isHalfWidth,
+            offset = v2Param.offset,
+            limit = v2Param.limit,
+            isReverse = v2Param.isReverse,
+            ruleId = v2Param.ruleId,
+            channelId = v2Param.channelId,
+            genre = v2Param.genre,
+            keyword = v2Param.keyword,
+            hasOriginalFile = v2Param.hasOriginalFile )?.enqueue(object : Callback<Records> {
+            override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                response.body()?.let { getRecordedResponse ->
+                    //APIのレスポンスをひとつづつアイテムとして加える。
+                    getRecordedResponse.records.forEach {
+                        listRowAdapter.add(it)
+                    }
+                    //続きがあるなら"次を読み込む"を置く。
+                    val numOfItem = getRecordedResponse.records.count().toLong()
+                    if (numOfItem < getRecordedResponse.total) {
+                        listRowAdapter.add(GetRecordedParamV2(
+                            isHalfWidth = v2Param.isHalfWidth,
+                            offset = numOfItem,
+                            limit = v2Param.limit,
+                            isReverse = v2Param.isReverse,
+                            ruleId = v2Param.ruleId,
+                            channelId = v2Param.channelId,
+                            genre = v2Param.genre,
+                            keyword = v2Param.keyword,
+                            hasOriginalFile = v2Param.hasOriginalFile))
+                    }
+                }
+            }
+            override fun onFailure(call: Call<Records>, t: Throwable) {
+                Log.d(TAG,"loadRows() getRecorded API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+            }
+        })
+        return result
+    }
+
 
     private inner class ItemViewSelectedListener : OnItemViewSelectedListener {
         override fun onItemSelected(
@@ -560,60 +597,74 @@ class MainFragment : BrowseSupportFragment() {
         override fun onUnbindViewHolder(viewHolder: ViewHolder) {}
     }
 
+    enum class Category {
+        //メニューはこの順番で並びます。
+        ON_RECORDING,
+        RECENTLY_RECORDED,
+        SEARCH_HISTORY,
+        RECORDED_BY_RULES,
+        SETTINGS
+    }
+
     private inner class MainMenuAdapter(presenter: Presenter?) : ArrayObjectAdapter(presenter) {
 
-        //メニューはこの順番で並びます。非同期に項目が追加されるので挿入位置地をこのクラスで管理します
-        private var numOfOnRecoding = 0
-        private var numOfRecentlyRecorded = 0
-        private var numOfDivider1 = 0
-        private var numOfRecordedByRules = 0
-        private var numOfDivider2 = 0
-        private var numOfSettings = 0
+        private val numOfRowInCategory = IntArray(Category.values().size)
 
-        fun addOnRecording(item: Any?) {
-            val index = numOfOnRecoding
-            if (numOfDivider1==0){
-                super.add(numOfRecentlyRecorded,DividerRow())
-                numOfDivider1++
+        override fun clear() {
+            synchronized(this) {
+                numOfRowInCategory.forEachIndexed { index,_ ->
+                    numOfRowInCategory[index] = 0
+                }
+                super.clear()
             }
-            super.add(index,item)
-            numOfRecentlyRecorded++
-        }
-        fun addRecentlyRecorded(item: Any?) {
-            val index = numOfOnRecoding + numOfRecentlyRecorded
-            if (numOfDivider1==0){
-                super.add(numOfRecentlyRecorded,DividerRow())
-                numOfDivider1++
-            }
-            super.add(index,item)
-            numOfRecentlyRecorded++
         }
 
-        fun addRecordedByRules(item: Any?) {
-            val index = numOfOnRecoding + numOfRecentlyRecorded + numOfDivider1 + numOfRecordedByRules
+        fun addToCategory(cat:Category,item: Any?){
 
-            if (numOfDivider2==0){
-                super.add(index,DividerRow())
-                numOfDivider2++
-            }
+            synchronized(this){
+                //行を加える場所を計算する
+                val index = numOfRowInCategory.copyOfRange(0,cat.ordinal+1).sum()
+                //行を加える。
+                super.add(index,item)
+                numOfRowInCategory[cat.ordinal]++
 
-            super.add(index,item)
-            numOfRecordedByRules++
-
-            if (numOfRecordedByRules == 1) {
-                super.add(index,SectionRow(getString(R.string.by_rec_rules)))
-                numOfRecordedByRules++
-            }
-
-
+                //もし先ほど加えた行がそのカテゴリの最初の行だった場合
+                if(numOfRowInCategory[cat.ordinal] == 1){
+                    when(cat){
+                        Category.SEARCH_HISTORY ->{
+                            //検索履歴というセクション行を、さらに上に加える
+                            super.add(index,SectionRow(getString(R.string.search_history)))
+                            numOfRowInCategory[cat.ordinal]++
+                            //さらにその上に区切り線を乗せる。
+                            super.add(index,DividerRow())
+                            numOfRowInCategory[cat.ordinal]++
+                        }
+                        Category.RECORDED_BY_RULES ->{
+                            //検索結果というセクション行を、さらに上に加える
+                            super.add(index,SectionRow(getString(R.string.by_rec_rules)))
+                            numOfRowInCategory[cat.ordinal]++
+                            //さらにその上に区切り線を乗せる。
+                            super.add(index,DividerRow())
+                            numOfRowInCategory[cat.ordinal]++
+                        }
+                        Category.SETTINGS->{
+                            //その上に区切り線を乗せる。
+                            super.add(index,DividerRow())
+                            numOfRowInCategory[cat.ordinal]++
+                        }
+                    }
+                }
+            }//synchronized
         }
-        fun addSettings(item: Any?) {
-            val index = numOfOnRecoding + numOfRecentlyRecorded + numOfDivider1 + numOfRecordedByRules + numOfDivider2 + numOfSettings
-            super.add(index,item)
-            numOfSettings++
+
+        fun deleteCategory(cat:Category){
+            val start = numOfRowInCategory.copyOfRange(0,cat.ordinal).sum()
+            synchronized(this) {
+                super.removeItems(start ,numOfRowInCategory[cat.ordinal] )
+                numOfRowInCategory[cat.ordinal] = 0
+            }//synchronized
         }
 
-        
 
     }
 

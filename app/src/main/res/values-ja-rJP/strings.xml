@@ -32,4 +32,5 @@
     <string name="pref_options_num_of_history_label_5">5</string>
     <string name="pref_options_num_of_history_label_7">7</string>
     <string name="by_rec_rules">録画ルール</string>
+    <string name="search_history">検索履歴</string>
 </resources>
