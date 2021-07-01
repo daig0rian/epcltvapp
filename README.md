@@ -29,7 +29,7 @@ https://www.amazon.co.jp/dp/B0977CXK64/
  - Android 5.1 以上の Android TV
     または
  - すべての Amazon Fire TV 
-   - Fire TV ではンアプリ音声検索が使えません。(Fire TVの仕様)
+   - Fire TV ではインアプリ音声検索が使えません。(Fire TVの仕様)
 
 ## テスト環境
  - SONY ブラビア KJ-43X8000H (4K液晶androidテレビ)
