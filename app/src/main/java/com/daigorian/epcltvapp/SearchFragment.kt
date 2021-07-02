@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
+
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.leanback.app.SearchSupportFragment
@@ -37,19 +38,20 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         setOnItemViewSelectedListener(ItemViewSelectedListener())
         //プレースホルダーに入る文字列
         // XXXを音声検索　XXXを検索　というように状況に応じて後ろに文言がつく
-        super.setTitle("番組名")
+        super.setTitle(getString(R.string.program_name))
 
         //もしAmazon Fire TV端末だった場合インアプリ音声検索は使えないのでコールバックをオーバーライドする
         if (requireContext().packageManager.hasSystemFeature(AMAZON_FEATURE_FIRE_TV)) {
             setSpeechRecognitionCallback {
-                //　Do nothing
+                Log.i(TAG, "SpeechRecognitionCallback")
             }
             //　TODO Amazon Fire TV端末だったら"音声検索" プレースホルダーも混乱を招くので消す
             //　TODO Amazon Fire TV端末だったらマイクオーブも混乱を招くので消す
 
+
         }
         mRowsAdapter.clear()
-        getHistory(requireContext())?.forEach { queryHistory ->
+        getHistory(requireContext()).forEach { queryHistory ->
             addResultRow(query = queryHistory, recodeHistory=false,showErrorToast = false)
         }
 
@@ -312,11 +314,11 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                         hasOriginalFile = item.hasOriginalFile
                     )?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                            response.body()?.let { response ->
+                            response.body()?.let { responseBody ->
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
-                                response.records.forEachIndexed {  index, recordedProgram ->
+                                responseBody.records.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
                                         adapter.replace(adapter.indexOf(item),recordedProgram)
                                     }else{
@@ -324,8 +326,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                                     }
                                 }
                                 //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = response.records.count().toLong() + item.offset
-                                if (numOfItem < response.total) {
+                                val numOfItem = responseBody.records.count().toLong() + item.offset
+                                if (numOfItem < responseBody.total) {
                                     adapter.add(item.copy(offset = numOfItem))
                                 }
 

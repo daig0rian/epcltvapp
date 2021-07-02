@@ -90,5 +90,6 @@
     </string-array>
     <string name="by_rec_rules">By rules</string>
     <string name="search_history">Search history</string>
+    <string name="program_name">Program Name</string>
 
 </resources>
