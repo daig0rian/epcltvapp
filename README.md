@@ -9,13 +9,13 @@ Webブラウザを持たないAndroid TV から EPGStationの録画を見るた�
 ## Google Play URL
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
- - パソコンで上記URLにアクセスして Android TV端末へ送信 するのが一番楽なインストール方法です。
+ - PCのWebブラウザで上記URLにアクセスして Android TV端末へ送信 するのが一番楽なインストール方法です。
  - Android TV 端末上のPlay Storeでは epgst と検索すると見つかります。
 
 ## amazon appstore URL
 https://www.amazon.co.jp/dp/B0977CXK64/
 
- - パソコンでamazonにログインした状態で上記URLにアクセスすると Fire TV端末へ送信できます。
+ - PCのWebブラウザでamazonにログインした状態で上記URLにアクセスすると Fire TV端末へ送信できます。
  - Fire TV ではリモコンに話しかけるインアプリ音声検索が使えません。(Fire TVの仕様)
 
 ## 特徴
