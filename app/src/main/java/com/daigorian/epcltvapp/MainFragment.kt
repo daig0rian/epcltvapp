@@ -244,7 +244,7 @@ class MainFragment : BrowseSupportFragment() {
                 Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
             }
         })
-        EpgStationV2.api?.getRules()?.enqueue(object : Callback<Rules> {
+        EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 response.body()?.rules?.forEach { rule ->
 
@@ -515,11 +515,11 @@ class MainFragment : BrowseSupportFragment() {
                         hasOriginalFile = item.hasOriginalFile
                     )?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                            response.body()?.let { response ->
+                            response.body()?.let { responseRoot ->
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
-                                response.records.forEachIndexed {  index, recordedProgram ->
+                                responseRoot.records.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
                                         adapter.replace(adapter.indexOf(item),recordedProgram)
                                     }else{
@@ -527,8 +527,8 @@ class MainFragment : BrowseSupportFragment() {
                                     }
                                 }
                                 //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = response.records.count().toLong() + item.offset
-                                if (numOfItem < response.total) {
+                                val numOfItem = responseRoot.records.count().toLong() + item.offset
+                                if (numOfItem < responseRoot.total) {
                                     adapter.add(item.copy(offset = numOfItem))
                                 }
 
