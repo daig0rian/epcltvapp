@@ -23,7 +23,7 @@ object EpgStation {
         ): Call<GetRecordedResponse>
 
         @GET("rules/list")
-        fun getRulesList(): Call<Array<RuleList>>
+        fun getRulesList(): Call<List<RuleList>>
     }
 
     private var ip:String = "192.168.0.0"

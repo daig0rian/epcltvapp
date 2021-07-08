@@ -1,4 +1,5 @@
 package com.daigorian.epcltvapp
+import android.annotation.SuppressLint
 import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 
@@ -218,48 +219,56 @@ class MainFragment : BrowseSupportFragment() {
             mMainMenuAdapter.addToCategory(Category.SEARCH_HISTORY,historyRow)
         }
 
+        //ルールの並び順を表すフラグ。デフォルトfalse。
+        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
-        EpgStation.api?.getRulesList()?.enqueue(object : Callback<Array<RuleList>> {
-            override fun onResponse(call: Call<Array<RuleList>>, response: Response<Array<RuleList>>) {
-                response.body()?.forEach { rule ->
+        EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {
+            override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
+                response.body()?.let{ it ->
+                    val rules = if(isNewestFirst){it.reversed()}else{it}
+                    rules.forEach { rule ->
 
-                    //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                    val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
-                        getString(R.string.rule_id_is_x, rule.id.toString())
-                    }else{
-                        rule.keyword
+                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                        val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
+                            getString(R.string.rule_id_is_x, rule.id.toString())
+                        }else{
+                            rule.keyword
+                        }
+                        val recordedByRule = contentsListRowBuilder(
+                            GetRecordedParam(rule= rule.id),
+                            GetRecordedParamV2(ruleId= rule.id),
+                            keyword
+                        )
+                        mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
+
                     }
-                    val recordedByRule = contentsListRowBuilder(
-                        GetRecordedParam(rule= rule.id),
-                        GetRecordedParamV2(ruleId= rule.id),
-                        keyword
-                    )
-                    mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
-
                 }
             }
-            override fun onFailure(call: Call<Array<RuleList>>, t: Throwable) {
+            override fun onFailure(call: Call<List<RuleList>>, t: Throwable) {
                 Log.d(TAG,"loadRows() getRulesList API Failure")
                 Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
             }
         })
         EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
-                response.body()?.rules?.forEach { rule ->
+                response.body()?.rules?.let{ it ->
+                    val rules = if(isNewestFirst){it.reversed()}else{it}
+                    rules.forEach { rule ->
 
-                    //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                    val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
-                        getString(R.string.rule_id_is_x, rule.id.toString())
-                    }else{
-                        rule.searchOption?.keyword!!
+                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                        val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
+                            getString(R.string.rule_id_is_x, rule.id.toString())
+                        }else{
+                            rule.searchOption?.keyword!!
+                        }
+                        val recordedByRule = contentsListRowBuilder(
+                            GetRecordedParam(rule= rule.id),
+                            GetRecordedParamV2(ruleId= rule.id),
+                            keyword
+                        )
+                        mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
                     }
-                    val recordedByRule = contentsListRowBuilder(
-                        GetRecordedParam(rule= rule.id),
-                        GetRecordedParamV2(ruleId= rule.id),
-                        keyword
-                    )
-                    mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
                 }
             }
             override fun onFailure(call: Call<Rules>, t: Throwable) {
@@ -274,6 +283,13 @@ class MainFragment : BrowseSupportFragment() {
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
         gridRowAdapter.add(resources.getString(R.string.reload))
+        if (isNewestFirst){
+            gridRowAdapter.add(resources.getString(R.string.set_oldest_rule_first))
+        }else{
+            gridRowAdapter.add(resources.getString(R.string.set_newest_rule_first))
+        }
+
+
         mMainMenuAdapter.addToCategory(Category.SETTINGS,ListRow(gridHeader, gridRowAdapter))
 
     }
@@ -291,6 +307,7 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private inner class ItemViewClickedListener : OnItemViewClickedListener {
+        @SuppressLint("ApplySharedPref")
         override fun onItemClicked(
             itemViewHolder: Presenter.ViewHolder,
             item: Any,
@@ -336,6 +353,20 @@ class MainFragment : BrowseSupportFragment() {
                             mNeedsReloadAllOnResume = true
                         }
                         item.contains(getString(R.string.reload)) -> {
+                            loadRows()
+                        }
+                        item.contains(getString(R.string.set_newest_rule_first)) -> {
+                            PreferenceManager.getDefaultSharedPreferences(context)
+                                .edit()
+                                .putBoolean(getString(R.string.pref_key_rules_order_is_newest_first),true)
+                                .commit()
+                            loadRows()
+                        }
+                        item.contains(getString(R.string.set_oldest_rule_first)) -> {
+                            PreferenceManager.getDefaultSharedPreferences(context)
+                                .edit()
+                                .putBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
+                                .commit()
                             loadRows()
                         }
                         else -> {
