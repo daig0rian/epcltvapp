@@ -92,4 +92,8 @@
     <string name="search_history">Search history</string>
     <string name="program_name">Program Name</string>
 
+    <string name="pref_key_rules_order_is_newest_first"   translatable="false">KEY_RULES_ORDER_IS_NEWEST_FIRST</string>
+    <string name="set_newest_rule_first">Newest rule first</string>
+    <string name="set_oldest_rule_first">Oldest rule first</string>
+
 </resources>
