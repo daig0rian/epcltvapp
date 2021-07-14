@@ -48,7 +48,12 @@ https://www.amazon.co.jp/dp/B0977CXK64/
  - ~~割と入手性の良い端末であるAmazon FireTVシリーズへの対応~~  DONE !
  - ~~Amazonのストアでの公開~~  DONE !
  - ~~録画情報の表示画面が5行から伸びないのを直したい（直し方がわからない。）~~ DONE !
- - 内蔵プレイヤーでコメントとか表示してみたい。（何にも調べてない。）
+ - 見た目の改善
+   - カードビューをleanback showcase の Title + Descroption (Wide)にする。
+   - 設定ボタン等ををleanback showcase の ImageCardView with onFocusChange listener
+ - ルールのソート機能改善
+   - 細心の録画がある順番に並べる
+ - 内蔵プレイコメントとか表示してみたい。（何にも調べてない。）
 
 ## たぶんできないこと
  - 録画予約関連UIの実装
