@@ -1,7 +1,7 @@
 # EPGStation の録画を見る
-"EPGStationの録画を見る"  はAndroid TV向けに設計されたEPGStation クライアントアプリです。
+"EPGStationの録画を見る"  はAndroid TV / amazon Fire TV 向けに設計されたEPGStation クライアントアプリです。
 
-Webブラウザを持たないAndroid TV から EPGStationの録画を見るために開発されました
+リモコンの↑↓←→キー操作が基本となる Android TV / Fire TV から EPGStationの録画を見るために開発されました
 
 ## デモ
 ![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
@@ -27,7 +27,7 @@ https://www.amazon.co.jp/dp/B0977CXK64/
 ## 必要な環境
  - EPGStation Version 1.x.x or 2.x.x　
  - Android 5.1 以上の Android TV
-    または
+   - または
  - すべての Amazon Fire TV 
    - Fire TV ではインアプリ音声検索が使えません。(Fire TVの仕様)
 
