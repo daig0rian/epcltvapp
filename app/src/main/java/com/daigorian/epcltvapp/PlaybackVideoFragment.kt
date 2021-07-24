@@ -39,14 +39,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mTransportControlGlue.playWhenPrepared()
 
         val movieUrl = if(recordedProgram != null){
-            //V1
+            // EPGStation V1.x.x　
             if (actionId == VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS) {
                 EpgStation.getTsVideoURL(recordedProgram.id.toString())
             } else {
                 EpgStation.getEncodedVideoURL(recordedProgram.id.toString(),actionId.toString())
             }
         }else{
-            //v2
+            // EPGStation V2.x.x　
             EpgStationV2.getVideoURL(actionId.toString())
         }
 
