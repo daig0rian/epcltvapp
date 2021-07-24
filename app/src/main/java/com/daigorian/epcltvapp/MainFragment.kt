@@ -241,7 +241,6 @@ class MainFragment : BrowseSupportFragment() {
                             keyword
                         )
                         mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
-
                     }
                 }
             }
@@ -694,6 +693,39 @@ class MainFragment : BrowseSupportFragment() {
                 super.removeItems(start ,numOfRowInCategory[cat.ordinal] )
                 numOfRowInCategory[cat.ordinal] = 0
             }//synchronized
+        }
+
+        fun sortRulesByRecordedDate(){
+            synchronized(this){
+                //bubble sort で新しいのを下からあげていく
+                val startIndex = numOfRowInCategory.copyOfRange (0,Category.RECORDED_BY_RULES.ordinal).sum() +3
+                val endIndex = numOfRowInCategory.copyOfRange(0,Category.RECORDED_BY_RULES.ordinal+1).sum() -1
+                for(i in startIndex until endIndex){
+                    for(j in endIndex downTo i){
+                        //下のアイテムJ
+                        val itemJ = (get(j) as? ListRow)?.adapter
+                        //上のアイテムJ-1
+                        val itemJMinus1 = (get(j-1) as? ListRow)?.adapter
+
+                        if (itemJ != null && itemJ.size() >0){
+                            //下のアイテムに録画済の要素がある
+
+                            if (itemJMinus1 != null && itemJMinus1.size() >0) {
+                                //上のアイテムに録画済の要素がある
+                                val startTimeOfJ = (itemJ.get(0) as? RecordedProgram)?.startAt
+                                val startTimeOfJMinus1 = (itemJMinus1.get(0) as? RecordedProgram)?.startAt
+                                //下のアイテムが上のアイテムより録画時間が新しい
+                                if (startTimeOfJ != null && startTimeOfJMinus1 != null && startTimeOfJ > startTimeOfJMinus1) {
+                                    move(j, j - 1)
+                                }
+                            }else{
+                                //上のアイテムに録画済の要素がない
+                                move(j, j - 1)
+                            }
+                        }
+                    }
+                }
+            }
         }
 
 
