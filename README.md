@@ -52,7 +52,7 @@ https://www.amazon.co.jp/dp/B0977CXK64/
    - カードビューをleanback showcase の Title + Descroption (Wide)にする。
    - 設定ボタン等ををleanback showcase の ImageCardView with onFocusChange listener
  - ルールのソート機能改善
-   - 細心の録画がある順番に並べる
+   - 最新の録画がある順番に並べる
  - 内蔵プレイコメントとか表示してみたい。（何にも調べてない。）
 
 ## たぶんできないこと
