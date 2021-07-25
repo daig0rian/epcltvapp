@@ -9,7 +9,8 @@
     <string name="play_x">%1$sを再生</string>
     <string name="videos_in_same_rule">同じルールの録画</string>
     <string name="search_results">検索結果</string>
-    <string name="connect_epgstation_failed">EPGStationに接続できませんでした. 設定メニューからIPアドレスを確認してください</string>
+    <string name="connect_epgstation_failed">EPGStationに接続できませんでした.　</string>
+    <string name="please_check_ip_and_port">設定メニューからIPアドレスを確認してください. </string>
     <string name="ip_addr_of_epgstation">EPGStationのIPアドレス</string>
     <string name="movie_player">録画を再生するプレーヤー</string>
     <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
@@ -36,4 +37,7 @@
     <string name="program_name">番組名</string>
     <string name="set_newest_rule_first">録画ルールを新しい順に並べ替え</string>
     <string name="set_oldest_rule_first">録画ルールを古い順に並べ替え</string>
+    <string name="use_custom_base_url">API Base URLを編集する</string>
+    <string name="customize_base_url">API Base URL</string>
+
 </resources>

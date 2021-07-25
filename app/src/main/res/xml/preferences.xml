@@ -35,5 +35,18 @@
         app:useSimpleSummaryProvider="true"
         />
 
+    <SwitchPreference
+        app:key="@string/pref_key_use_custom_base_url"
+        app:defaultValue="false"
+        app:title="@string/use_custom_base_url" />
+
+    <EditTextPreference
+        app:title=       "@string/customize_base_url"
+        app:key=         "@string/pref_key_custom_base_url"
+        app:defaultValue="@string/pref_val_custom_base_url_default"
+        app:dialogLayout="@xml/preference_single_line_edittext"
+        app:useSimpleSummaryProvider="true"
+        />
+
 
 </PreferenceScreen>

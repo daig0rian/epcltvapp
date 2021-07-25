@@ -21,7 +21,8 @@
 
 
     <!-- Error messages -->
-    <string name="connect_epgstation_failed">Connect to EPGStation API failed. Please Check EPGStation IP Address from Settings menu.</string>
+    <string name="connect_epgstation_failed">Connect to EPGStation API failed. </string>
+    <string name="please_check_ip_and_port">Please Check EPGStation IP Address from Settings menu. </string>
     <string name="please_install_external_player">Please Install External Player</string>
     <string name="not_a_valid_ipv4_addr">%1$s is not a Valid IPV4 Address</string>
     <string name="not_a_valid_port_num">%1$s is not a Valid Port Number</string>
@@ -95,5 +96,12 @@
     <string name="pref_key_rules_order_is_newest_first"   translatable="false">KEY_RULES_ORDER_IS_NEWEST_FIRST</string>
     <string name="set_newest_rule_first">Newest rule first</string>
     <string name="set_oldest_rule_first">Oldest rule first</string>
+
+    <string name="pref_key_use_custom_base_url"   translatable="false">KEY_RULES_USE_CUSTOM_BASE_URL</string>
+    <string name="use_custom_base_url">Use a custom EPGStation API base URL</string>
+    <string name="pref_key_custom_base_url"   translatable="false">KEY_RULES_CUSTOM_BASE_URL</string>
+    <string name="customize_base_url">Customized Base URL</string>
+    <string name="pref_val_custom_base_url_default"        translatable="false">http://192.168.0.0:8888/api/</string>
+
 
 </resources>

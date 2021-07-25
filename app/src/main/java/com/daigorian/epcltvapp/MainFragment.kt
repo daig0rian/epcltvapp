@@ -30,6 +30,7 @@ import java.util.*
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.lang.Exception
 
 /**
  * Loads a grid of cards with movies to browse.
@@ -111,35 +112,70 @@ class MainFragment : BrowseSupportFragment() {
         EpgStationV2.api = null //apiをいったん初期化
 
         //設定値を取得
-        val ipAddress =  PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_ip_addr), getString(R.string.pref_val_ip_addr_default))!!
-        val port = PreferenceManager.getDefaultSharedPreferences(context)
-            .getString(getString(R.string.pref_key_port_num), getString(R.string.pref_val_port_num_default))!!
+        val pref = PreferenceManager.getDefaultSharedPreferences(context)
+        val useCustomBaseURL = pref.getBoolean(getString(R.string.pref_key_use_custom_base_url),false)
 
+        //base URL
+        var baseUrl = getString(R.string.pref_val_custom_base_url_default)
+
+        if (useCustomBaseURL) {
+            //カスタムURL ON の時はそちらを読み込む
+            baseUrl = pref.getString(
+                getString(R.string.pref_key_custom_base_url),
+                getString(R.string.pref_val_custom_base_url_default)
+            )!!
+
+        }else {
+            //カスタムURL OFF の時はIPとPortからURLを生成する
+            val ipAddress = pref.getString(
+                    getString(R.string.pref_key_ip_addr),
+                    getString(R.string.pref_val_ip_addr_default)
+                )!!
+            val port = pref.getString(
+                    getString(R.string.pref_key_port_num),
+                    getString(R.string.pref_val_port_num_default)
+                )!!
+            baseUrl = "http://$ipAddress:$port/api/"
+        }
 
         //バージョンチェックして適切なバージョンのAPIを初期化
-        EpgStationV2VersionChecker(ipAddress,port).api.getVersion().enqueue(object : Callback<Version> {
-            override fun onResponse(call: Call<Version>, response: Response<Version>) {
-                if(response.body() != null) {
-                    //Version 2で初期化
-                    Log.d(TAG,"initEPGStationApi() detect Version 2.x.x")
-                    EpgStationV2.initAPI(ipAddress,port )
-                    loadRows()
-                }else{
-                    //Version 1で初期化
-                    Log.d(TAG,"initEPGStationApi() detect Version 1.x.x")
-                    EpgStationV2.api = null
-                    EpgStation.initAPI(ipAddress,port )
-                    loadRows()
-                }
-            }
-            override fun onFailure(call: Call<Version>, t: Throwable) {
-                Log.d(TAG,"initEPGStationApi() getVersion API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-                loadRows()
+        try {
+            EpgStationV2VersionChecker(baseUrl).api.getVersion()
+                .enqueue(object : Callback<Version> {
+                    override fun onResponse(call: Call<Version>, response: Response<Version>) {
+                        if (response.body() != null) {
+                            //Version 2で初期化
+                            Log.d(TAG, "initEPGStationApi() detect Version 2.x.x")
+                            EpgStationV2.initAPI(baseUrl)
+                            loadRows()
+                        } else {
+                            //Version 1で初期化
+                            Log.d(TAG, "initEPGStationApi() detect Version 1.x.x")
+                            EpgStationV2.api = null
+                            EpgStation.initAPI(baseUrl)
+                            loadRows()
+                        }
+                    }
 
-            }
-        })
+                    override fun onFailure(call: Call<Version>, t: Throwable) {
+                        Log.d(TAG, "initEPGStationApi() getVersion API Failure")
+                        Toast.makeText(
+                            context!!,
+                            getString(R.string.connect_epgstation_failed) + "\n" + getString(R.string.please_check_ip_and_port) ,
+                            Toast.LENGTH_LONG
+                        ).show()
+                        loadRows()
+
+                    }
+                })
+        } catch(e:Exception){
+            Toast.makeText(
+                requireContext(),
+                getString(R.string.connect_epgstation_failed)  + "\n" +  e.message,
+                Toast.LENGTH_LONG
+            ).show()
+            loadRows()
+        }
 
 
 

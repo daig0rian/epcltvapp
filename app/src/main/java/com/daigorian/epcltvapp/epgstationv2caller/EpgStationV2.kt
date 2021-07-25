@@ -44,8 +44,7 @@ object EpgStationV2 {
 
 
 
-    private var ip:String = "192.168.0.0"
-    private var port:String = "8888"
+    private var baseUrl:String = "http://192.168.0.0:8888/api/"
     var default_limit:String = "24"
 
     private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -56,23 +55,20 @@ object EpgStationV2 {
 
     var api: ApiInterface? = null
 
-    fun initAPI(_ip:String, _port:String){
-        ip = _ip
-        port = _port
+    fun initAPI(_baseUrl:String){
+        baseUrl = _baseUrl
         api = Builder()
             .addConverterFactory(GsonConverterFactory.create())
-            .baseUrl(getBaseURL())
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .build().create(ApiInterface::class.java)
     }
 
-    private fun getBaseURL():String{
-        return "http://$ip:$port/api/"
-    }
     fun getThumbnailURL(id:String):String{
-        return getBaseURL() + "thumbnails/" + id
+        return baseUrl + "thumbnails/" + id
     }
+
     fun getVideoURL(id:String):String{
-        return getBaseURL() + "videos/" + id
+        return baseUrl + "videos/" + id
     }
 }

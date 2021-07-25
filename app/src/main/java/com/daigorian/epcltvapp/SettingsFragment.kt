@@ -90,9 +90,29 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                     Toast.makeText(activity, getString(R.string.not_a_valid_port_num,value.toString()), Toast.LENGTH_LONG).show()
                     false
                 }
-
             }
 
+            // カスタムベースURLを使うかどうかでUIをだし分け。
+            val useCustomBaseUrlPref =  preferenceScreen.findPreference(getText(R.string.pref_key_use_custom_base_url)) as SwitchPreference?
+            //初回ロード時
+            useCustomBaseUrlPref?.let{
+                enableCustomBaseUrlUI(it.isChecked)
+            }
+            //編集時
+            useCustomBaseUrlPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, newValue ->
+                enableCustomBaseUrlUI( newValue as Boolean )
+                true
+            }
+
+        }
+
+        private fun enableCustomBaseUrlUI(boolean: Boolean){
+            val ipAddressPref = preferenceScreen.findPreference(getText(R.string.pref_key_ip_addr)) as EditTextPreference?
+            ipAddressPref?.isVisible = !boolean
+            val portNumPref = preferenceScreen.findPreference(getText(R.string.pref_key_port_num)) as EditTextPreference?
+            portNumPref?.isVisible = !boolean
+            val customBaseUrlPref = preferenceScreen.findPreference(getText(R.string.pref_key_custom_base_url)) as EditTextPreference?
+            customBaseUrlPref?.isVisible = boolean
         }
 
 
@@ -125,7 +145,8 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
             }
             //ほかのパラメータの存在チェック
             return (pref.contains(context.getString(R.string.pref_key_player)) &&
-                            pref.contains(context.getString(R.string.pref_key_num_of_history))
+                    pref.contains(context.getString(R.string.pref_key_num_of_history))&&
+                    pref.contains(context.getString(R.string.pref_key_use_custom_base_url))
                     )
         }
 

@@ -8,8 +8,7 @@ import retrofit2.http.*
 import java.util.concurrent.TimeUnit
 
 class EpgStationV2VersionChecker(
-    val ip:String,
-    val port:String
+    baseUrl:String
 ) {
     interface ApiInterface {
          @GET("version")
@@ -25,12 +24,8 @@ class EpgStationV2VersionChecker(
 
     val api: ApiInterface =  Builder()
             .addConverterFactory(GsonConverterFactory.create())
-            .baseUrl(getBaseURL())
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .build().create(ApiInterface::class.java)
 
-
-    private fun getBaseURL():String{
-        return "http://$ip:$port/api/"
-    }
 }

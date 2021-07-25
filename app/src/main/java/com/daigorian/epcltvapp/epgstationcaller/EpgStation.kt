@@ -26,8 +26,7 @@ object EpgStation {
         fun getRulesList(): Call<List<RuleList>>
     }
 
-    private var ip:String = "192.168.0.0"
-    private var port:String = "8888"
+    private var baseUrl:String = "http://192.168.0.0:8888/api/"
     var default_limit:String = "24"
 
     private var okHttpClient: OkHttpClient = OkHttpClient.Builder()
@@ -38,27 +37,24 @@ object EpgStation {
 
     var api: ApiInterface? = null
 
-    fun initAPI(_ip:String, _port:String){
-        ip = _ip
-        port = _port
+    fun initAPI(_baseUrl:String){
+        baseUrl = _baseUrl
         api = Builder()
             .addConverterFactory(GsonConverterFactory.create())
-            .baseUrl(getBaseURL())
+            .baseUrl(baseUrl)
             .client(okHttpClient)
             .build().create(ApiInterface::class.java)
     }
 
-    private fun getBaseURL():String{
-        return "http://$ip:$port/api/"
-    }
+
     fun getThumbnailURL(id:String):String{
-        return getBaseURL() + "recorded/" + id + "/thumbnail"
+        return baseUrl + "recorded/" + id + "/thumbnail"
     }
     fun getTsVideoURL(id:String):String{
-        return getBaseURL() + "recorded/" + id + "/file"
+        return baseUrl + "recorded/" + id + "/file"
     }
     fun getEncodedVideoURL(id:String,encid:String):String{
-        return getBaseURL() + "recorded/" + id +"/file?encodedId=" + encid
+        return baseUrl + "recorded/" + id +"/file?encodedId=" + encid
     }
 
 }
