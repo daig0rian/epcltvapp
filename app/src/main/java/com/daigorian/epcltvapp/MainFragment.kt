@@ -22,6 +22,7 @@ import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.*
 import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import java.util.*
@@ -116,11 +117,9 @@ class MainFragment : BrowseSupportFragment() {
         val useCustomBaseURL = pref.getBoolean(getString(R.string.pref_key_use_custom_base_url),false)
 
         //base URL
-        var baseUrl = getString(R.string.pref_val_custom_base_url_default)
-
-        if (useCustomBaseURL) {
+        val baseUrl = if (useCustomBaseURL) {
             //カスタムURL ON の時はそちらを読み込む
-            baseUrl = pref.getString(
+             pref.getString(
                 getString(R.string.pref_key_custom_base_url),
                 getString(R.string.pref_val_custom_base_url_default)
             )!!
@@ -135,7 +134,7 @@ class MainFragment : BrowseSupportFragment() {
                     getString(R.string.pref_key_port_num),
                     getString(R.string.pref_val_port_num_default)
                 )!!
-            baseUrl = "http://$ipAddress:$port/api/"
+            "http://$ipAddress:$port/api/"
         }
 
         //バージョンチェックして適切なバージョンのAPIを初期化
@@ -614,8 +613,18 @@ class MainFragment : BrowseSupportFragment() {
     private fun updateBackground(uri: String?) {
         val width = mMetrics.widthPixels
         val height = mMetrics.heightPixels
+
+        //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
+            GlideUrl( uri, EpgStation.authForGlide)
+        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+            GlideUrl( uri, EpgStationV2.authForGlide)
+        }else{
+            GlideUrl ( uri )
+        }
+
         Glide.with(requireContext())
-            .load(uri)
+            .load(glideUrl)
             .centerCrop()
             .error(mDefaultBackground)
             .into<CustomTarget<Drawable>>(

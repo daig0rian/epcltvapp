@@ -17,6 +17,7 @@ import androidx.leanback.app.DetailsSupportFragmentBackgroundController
 import androidx.leanback.widget.*
 import androidx.preference.PreferenceManager
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
@@ -95,11 +96,21 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     private fun initializeBackground(imageURL: String) {
         mDetailsBackground.enableParallax()
+
+        //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
+            GlideUrl( imageURL, EpgStation.authForGlide)
+        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+            GlideUrl( imageURL, EpgStationV2.authForGlide)
+        }else{
+            GlideUrl ( imageURL )
+        }
+
         Glide.with(requireContext())
             .asBitmap()
             .centerCrop()
             .error(R.drawable.default_background)
-            .load(imageURL)
+            .load(glideUrl)
             .into<CustomTarget<Bitmap>>(object : CustomTarget<Bitmap>() {
                 override fun onResourceReady(
                     bitmap: Bitmap,
@@ -140,8 +151,18 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         row.imageDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         val width = convertDpToPixel(requireContext(), DETAIL_THUMB_WIDTH)
         val height = convertDpToPixel(requireContext(), DETAIL_THUMB_HEIGHT)
+
+        //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
+            GlideUrl( urlString, EpgStation.authForGlide)
+        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+            GlideUrl( urlString, EpgStationV2.authForGlide)
+        }else{
+            GlideUrl ( urlString )
+        }
+
         Glide.with(requireContext())
-            .load(urlString)
+            .load(glideUrl)
             .centerCrop()
             .error(R.drawable.default_background)
             .into<CustomTarget<Drawable>>(object : CustomTarget<Drawable>(width, height) {

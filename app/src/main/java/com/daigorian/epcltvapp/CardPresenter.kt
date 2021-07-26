@@ -8,6 +8,7 @@ import android.util.Log
 import android.view.ViewGroup
 
 import com.bumptech.glide.Glide
+import com.bumptech.glide.load.model.GlideUrl
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
@@ -63,9 +64,17 @@ class CardPresenter : Presenter() {
                 // EPGStation Version 1.x.x
                 cardView.titleText = item.name
                 cardView.contentText = item.description
+                val thumbnailURL = EpgStation.getThumbnailURL(item.id.toString())
+
+                //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+                val glideUrl = if(EpgStation.authForGlide!=null){
+                    GlideUrl ( thumbnailURL, EpgStation.authForGlide)
+                }else{
+                    GlideUrl ( thumbnailURL)
+                }
                 //録画中なら録画中アイコンを出す。
                 Glide.with(viewHolder.view.context)
-                    .load(EpgStation.getThumbnailURL(item.id.toString()))
+                    .load(glideUrl)
                     .centerCrop()
                     .error(if(item.recording){mOnRecordingCardImage}else{mDefaultCardImage})
                     .into(cardView.mainImageView)
@@ -76,8 +85,21 @@ class CardPresenter : Presenter() {
                 cardView.titleText = item.name
                 cardView.contentText = item.description
                 //サムネのURLから画像をロードする。失敗した場合、録画中なら録画中アイコンを出す。そうでなければNO IMAGEアイコン。
+
+                val thumbnailURL = if(!item.thumbnails.isNullOrEmpty()){
+                    EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
+                }else{
+                    ""
+                }
+                //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+                val glideUrl = if(EpgStationV2.authForGlide!=null){
+                    GlideUrl ( thumbnailURL, EpgStationV2.authForGlide)
+                }else{
+                    GlideUrl ( thumbnailURL)
+                }
+
                 Glide.with(viewHolder.view.context)
-                    .load(if(!item.thumbnails.isNullOrEmpty()){EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())}else{""})
+                    .load(glideUrl)
                     .centerCrop()
                     .error(if(item.isRecording){mOnRecordingCardImage}else{mDefaultCardImage})
                     .into(cardView.mainImageView)
