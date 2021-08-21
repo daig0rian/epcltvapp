@@ -515,7 +515,7 @@ class MainFragment : BrowseSupportFragment() {
                     mBackgroundUri = if(!item.thumbnails.isNullOrEmpty()) {
                         EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
                     } else {
-                        ""
+                        EpgStationV2.getThumbnailURL("") // ありえないURLでエラーに落とす。
                     }
                     startBackgroundTimer()
                 }

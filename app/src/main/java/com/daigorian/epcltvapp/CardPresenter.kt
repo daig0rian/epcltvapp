@@ -89,7 +89,7 @@ class CardPresenter : Presenter() {
                 val thumbnailURL = if(!item.thumbnails.isNullOrEmpty()){
                     EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
                 }else{
-                    ""
+                    EpgStationV2.getThumbnailURL("") // ありえないURL。必ず.error()になる。
                 }
                 //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
                 val glideUrl = if(EpgStationV2.authForGlide!=null){
