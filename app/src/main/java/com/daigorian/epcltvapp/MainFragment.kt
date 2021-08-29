@@ -31,7 +31,6 @@ import java.util.*
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
-import java.lang.Exception
 
 /**
  * Loads a grid of cards with movies to browse.
@@ -65,8 +64,13 @@ class MainFragment : BrowseSupportFragment() {
             mNeedsReloadAllOnResume = true
 
         }else{
+            // 画面をスライドインする前の状態にする
+            prepareEntranceTransition()
             //設定が最初から読み込めた場合はそれに合わせてAPIを初期化
+            //この中で loadRows()がよばれて録画が読み込まれる。
             initEPGStationApi()
+            // 画面をスライドインさせる。
+            startEntranceTransition()
         }
 
         prepareBackgroundManager()
@@ -325,6 +329,8 @@ class MainFragment : BrowseSupportFragment() {
 
 
         mMainMenuAdapter.addToCategory(Category.SETTINGS,ListRow(gridHeader, gridRowAdapter))
+
+
 
     }
 
