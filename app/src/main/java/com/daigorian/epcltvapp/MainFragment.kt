@@ -25,6 +25,7 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
+import com.daigorian.epcltvapp.presenter.CardPresenterSelector
 import java.util.*
 
 //Retrofit 2
@@ -46,7 +47,7 @@ class MainFragment : BrowseSupportFragment() {
     private var mNeedsReloadAllOnResume = false
     private var mNeedsReloadHistoryOnResume = false
 
-    private val mCardPresenter = CardPresenter()
+    private val mCardPresenter = CardPresenterSelector()
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 

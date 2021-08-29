@@ -1,4 +1,4 @@
-package com.daigorian.epcltvapp
+package com.daigorian.epcltvapp.presenter
 
 import android.graphics.drawable.Drawable
 import androidx.leanback.widget.ImageCardView
@@ -9,6 +9,7 @@ import android.view.ViewGroup
 
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
+import com.daigorian.epcltvapp.R
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
@@ -18,13 +19,12 @@ import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import kotlin.properties.Delegates
 
 /**
- * A CardPresenter is used to generate Views and bind Objects to them on demand.
+ * A OriginalCardPresenter is used to generate Views and bind Objects to them on demand.
  * It contains an ImageCardView.
  */
-class CardPresenter : Presenter() {
+class OriginalCardPresenter : Presenter() {
     private var mDefaultCardImage: Drawable? = null
     private var mOnRecordingCardImage: Drawable? = null
-    private var mGetNextCardImage: Drawable? = null
 
     private var sSelectedBackgroundColor: Int by Delegates.notNull()
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
@@ -37,9 +37,6 @@ class CardPresenter : Presenter() {
             ContextCompat.getColor(parent.context, R.color.selected_background)
         mDefaultCardImage = ContextCompat.getDrawable(parent.context, R.drawable.no_iamge)
         mOnRecordingCardImage = ContextCompat.getDrawable(parent.context, R.drawable.on_rec)
-        mGetNextCardImage = ContextCompat.getDrawable(parent.context,
-            R.drawable.lb_ic_more
-        )
 
         val cardView = object : ImageCardView(parent.context) {
             override fun setSelected(selected: Boolean) {
@@ -134,7 +131,7 @@ class CardPresenter : Presenter() {
     }
 
     companion object {
-        private const val TAG = "CardPresenter"
+        private const val TAG = "OriginalCardPresenter"
 
         private const val CARD_WIDTH = 313
         private const val CARD_HEIGHT = 176

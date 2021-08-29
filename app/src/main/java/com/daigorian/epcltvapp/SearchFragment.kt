@@ -19,6 +19,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Records
+import com.daigorian.epcltvapp.presenter.CardPresenterSelector
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -140,7 +141,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
         //まずは結果行を加える。（API呼出し後の処理の中の非同期処理で加えると連続処理したときに場所が不確定になってしまうため）
         val newResultRowHeader = HeaderItem(query)
-        val newResultRowContents = ArrayObjectAdapter(CardPresenter())
+        val newResultRowContents = ArrayObjectAdapter(CardPresenterSelector())
         val newResultRow = ListRow(newResultRowHeader, newResultRowContents)
         mRowsAdapter.addToTop(newResultRow)
 

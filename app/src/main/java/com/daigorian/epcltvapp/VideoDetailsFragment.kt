@@ -11,7 +11,6 @@ import android.util.Log
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.toBitmap
 import androidx.leanback.app.DetailsSupportFragment
 import androidx.leanback.app.DetailsSupportFragmentBackgroundController
 import androidx.leanback.widget.*
@@ -26,6 +25,7 @@ import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Records
+import com.daigorian.epcltvapp.presenter.CardPresenterSelector
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -325,7 +325,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
         mSelectedRecordedProgram?.ruleId?.let{
             // EPGStation Version 1.x.x
-            val listRowAdapter = ArrayObjectAdapter(CardPresenter())
+            val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
             EpgStation.api?.getRecorded(rule = mSelectedRecordedProgram?.ruleId)?.enqueue(object : Callback<GetRecordedResponse> {
                 override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                     response.body()?.recorded?.forEach {
@@ -344,7 +344,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         }
         mSelectedRecordedItem?.ruleId?.let{
             // EPGStation Version 2.x.x
-            val listRowAdapter = ArrayObjectAdapter(CardPresenter())
+            val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
             EpgStationV2.api?.getRecorded(ruleId = mSelectedRecordedItem?.ruleId)?.enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
                     response.body()?.records?.forEach {
