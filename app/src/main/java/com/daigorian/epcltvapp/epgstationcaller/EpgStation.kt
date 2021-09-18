@@ -48,7 +48,7 @@ object EpgStation {
     const val default_limit:String = "24"
 
     private var okHttpClientBuilder = OkHttpClient.Builder()
-        .connectTimeout(1, TimeUnit.SECONDS)
+        .connectTimeout(3, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.SECONDS)
         .writeTimeout(5, TimeUnit.SECONDS)
 
