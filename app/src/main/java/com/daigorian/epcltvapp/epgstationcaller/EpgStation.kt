@@ -11,7 +11,9 @@ import okhttp3.Response
 import retrofit2.Call
 import retrofit2.Retrofit.Builder
 import retrofit2.converter.gson.GsonConverterFactory
+import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 import java.io.IOException
 import java.net.URL
@@ -32,6 +34,11 @@ object EpgStation {
             @Query("hasTs") hasTs: Boolean? = null,
             @Query("recording") recording: Boolean? = null
         ): Call<GetRecordedResponse>
+
+        @DELETE("recorded/{id}")
+        fun deleteRecorded(
+            @Path("id") recordedId : Long
+        ): Call<ApiError>
 
         @GET("rules/list")
         fun getRulesList(): Call<List<RuleList>>

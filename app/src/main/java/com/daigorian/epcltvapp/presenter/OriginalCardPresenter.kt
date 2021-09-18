@@ -1,21 +1,22 @@
 package com.daigorian.epcltvapp.presenter
 
+import android.content.DialogInterface
 import android.graphics.drawable.Drawable
-import androidx.leanback.widget.ImageCardView
-import androidx.leanback.widget.Presenter
-import androidx.core.content.ContextCompat
 import android.util.Log
 import android.view.ViewGroup
-
+import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
+import androidx.leanback.widget.ImageCardView
+import androidx.leanback.widget.Presenter
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.daigorian.epcltvapp.R
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
-import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
-import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
-import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationcaller.*
+import com.daigorian.epcltvapp.epgstationv2caller.*
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 import kotlin.properties.Delegates
 
 /**
@@ -54,6 +55,82 @@ class OriginalCardPresenter : Presenter() {
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
         val cardView = viewHolder.view as ImageCardView
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
+
+        viewHolder.view.setOnLongClickListener{
+
+            AlertDialog.Builder(it.context, R.style.Theme_AppCompat_Light_Dialog_MinWidth)
+                .setTitle(cardView.titleText.toString() + "を削除しますか")
+                .setPositiveButton("削除") { dialog, which ->
+                    when (item) {
+                        is RecordedProgram -> {
+                            // EPGStation Version 1.x.x のアイテム
+                            EpgStation.api?.deleteRecorded(
+                                item.id
+                            )?.enqueue(object : Callback<ApiError> {
+                                override fun onResponse(
+                                    call: Call<ApiError>,
+                                    response: Response<ApiError>
+                                ) {
+                                    if (response.body() != null &&
+                                        response.body()!!.code != null &&
+                                        response.body()!!.code == 200L
+                                    ) {
+                                        Toast.makeText(it.context, "削除しました", Toast.LENGTH_LONG)
+                                            .show()
+                                    } else {
+                                        Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                            .show()
+                                    }
+                                }
+
+                                override fun onFailure(
+                                    call: Call<ApiError>,
+                                    t: Throwable
+                                ) {
+                                    Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                        .show()
+                                }
+                            })
+                        }
+                        is RecordedItem -> {
+                            // EPGStation Version 2.x.x のアイテム
+                            EpgStationV2.api?.deleteRecorded(
+                                item.id
+                            )?.enqueue(object : Callback<ApiErrorV2> {
+                                override fun onResponse(
+                                    call: Call<ApiErrorV2>,
+                                    response: Response<ApiErrorV2>
+                                ) {
+                                    if (response.body() != null &&
+                                        response.body()!!.code != null &&
+                                        response.body()!!.code == 200L
+                                    ) {
+                                        Toast.makeText(it.context, "削除しました", Toast.LENGTH_LONG)
+                                            .show()
+                                    } else {
+                                        Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                            .show()
+                                    }
+                                }
+
+                                override fun onFailure(
+                                    call: Call<ApiErrorV2>,
+                                    t: Throwable
+                                ) {
+                                    Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                        .show()
+                                }
+                            })
+                        }
+                    }
+
+
+                }
+                .setNegativeButton("キャンセル") { dialogInterface, i ->
+                    // User chose NO
+                }.create().show()
+            true
+        }
 
         Log.d(TAG, "onBindViewHolder")
         when (item) {

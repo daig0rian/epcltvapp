@@ -18,7 +18,7 @@ object EpgStationV2 {
     interface ApiInterface {
         @GET("recorded")
         fun getRecorded(
-            @Query("isHalfWidth") isHalfWidth: Boolean = false,
+            @Query("isHalfWidth") isHalfWidth: Boolean = true,
             @Query("offset") offset: Long = 0,
             @Query("limit") limit: Long = default_limit.toLong(),
             @Query("isReverse") isReverse: Boolean = false,
@@ -29,11 +29,16 @@ object EpgStationV2 {
             @Query("hasOriginalFile") hasOriginalFile: Boolean? = null,
         ): Call<Records>
 
+        @DELETE("recorded/{recordedId}")
+        fun deleteRecorded(
+            @Path("recordedId") recordedId : Long
+        ): Call<ApiErrorV2>
+
         @GET("recording")
         fun getRecording(
             @Query("offset") offset: Int = 0,
             @Query("limit") limit: Int = default_limit.toInt(),
-            @Query("isHalfWidth") isHalfWidth: Boolean = false,
+            @Query("isHalfWidth") isHalfWidth: Boolean = true,
         ): Call<Records>
 
         @GET("rules")
