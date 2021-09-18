@@ -59,8 +59,8 @@ class OriginalCardPresenter : Presenter() {
         viewHolder.view.setOnLongClickListener{
 
             AlertDialog.Builder(it.context, R.style.Theme_AppCompat_Light_Dialog_MinWidth)
-                .setTitle(cardView.titleText.toString() + "を削除しますか")
-                .setPositiveButton("削除") { dialog, which ->
+                .setTitle(it.context.getString(R.string.do_you_want_to_delete,cardView.titleText.toString()))
+                .setPositiveButton(it.context.getString(R.string.delete)) { dialog, which ->
                     when (item) {
                         is RecordedProgram -> {
                             // EPGStation Version 1.x.x のアイテム
@@ -75,10 +75,10 @@ class OriginalCardPresenter : Presenter() {
                                         response.body()!!.code != null &&
                                         response.body()!!.code == 200L
                                     ) {
-                                        Toast.makeText(it.context, "削除しました", Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
                                             .show()
                                     } else {
-                                        Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
                                     }
                                 }
@@ -87,7 +87,7 @@ class OriginalCardPresenter : Presenter() {
                                     call: Call<ApiError>,
                                     t: Throwable
                                 ) {
-                                    Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                    Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                         .show()
                                 }
                             })
@@ -105,10 +105,10 @@ class OriginalCardPresenter : Presenter() {
                                         response.body()!!.code != null &&
                                         response.body()!!.code == 200L
                                     ) {
-                                        Toast.makeText(it.context, "削除しました", Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
                                             .show()
                                     } else {
-                                        Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
                                     }
                                 }
@@ -117,7 +117,7 @@ class OriginalCardPresenter : Presenter() {
                                     call: Call<ApiErrorV2>,
                                     t: Throwable
                                 ) {
-                                    Toast.makeText(it.context, "削除に失敗しました", Toast.LENGTH_LONG)
+                                    Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                         .show()
                                 }
                             })
@@ -126,7 +126,7 @@ class OriginalCardPresenter : Presenter() {
 
 
                 }
-                .setNegativeButton("キャンセル") { dialogInterface, i ->
+                .setNegativeButton(it.context.getString(R.string.cancel)) { dialogInterface, i ->
                     // User chose NO
                 }.create().show()
             true

@@ -102,6 +102,11 @@
     <string name="pref_key_custom_base_url"   translatable="false">KEY_RULES_CUSTOM_BASE_URL</string>
     <string name="customize_base_url">Customized Base URL</string>
     <string name="pref_val_custom_base_url_default"        translatable="false">http://192.168.0.0:8888/api/</string>
+    <string name="do_you_want_to_delete">Do you want to delete %1$s</string>
+    <string name="successfully_deleted">Successfully deleted. Please reload items.</string>
+    <string name="delete_failed">Delete failed</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
 
 
 </resources>
