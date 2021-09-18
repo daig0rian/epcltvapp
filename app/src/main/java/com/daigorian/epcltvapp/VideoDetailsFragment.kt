@@ -321,46 +321,115 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
 
     private fun setupRelatedMovieListRow() {
+        // 関連動画一覧の生成
+        //  - 現在表示中の動画の名前にregexDelimiterがあれば、その前までの文字列をシリーズ名とみなして一覧を表示
+        //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
 
-        //現在表示中の動画と同じルールIDを持った動画を検索してならべる。
-        mSelectedRecordedProgram?.ruleId?.let{
-            // EPGStation Version 1.x.x
-            val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
-            EpgStation.api?.getRecorded(rule = mSelectedRecordedProgram?.ruleId)?.enqueue(object : Callback<GetRecordedResponse> {
-                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                    response.body()?.recorded?.forEach {
-                        listRowAdapter.add(it)
+        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第])[0-9０１２３４５６７８９〇一二三四五六七八九十])|「)""".toRegex()
+        val regexDeleteStr = """\[新]|\[終]|\[字]|\[デ]|\[解]|\[再]|\[無]""".toRegex()
+
+        // EPGStation Version 1.x.x
+        mSelectedRecordedProgram?.let{ recorded_program ->
+
+            // 名前にregexDelimiterがあった場合はそこで区切る
+            val programName = recorded_program.name.split(regexDelimiter)
+            if (programName.size > 1 ) {
+
+                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                val searchKeyword = programName[0].replace(regexDeleteStr,"")
+                EpgStation.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<GetRecordedResponse> {
+                    override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                        response.body()?.recorded?.forEach {
+                            listRowAdapter.add(it)
+                        }
                     }
-                }
-                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                    Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
-                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
-                }
-            })
-
-            val header = HeaderItem(0, getString(R.string.videos_in_same_rule))
-            mAdapter.add(ListRow(header, listRowAdapter))
-            mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
-        }
-        mSelectedRecordedItem?.ruleId?.let{
-            // EPGStation Version 2.x.x
-            val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
-            EpgStationV2.api?.getRecorded(ruleId = mSelectedRecordedItem?.ruleId)?.enqueue(object : Callback<Records> {
-                override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                    response.body()?.records?.forEach {
-                        listRowAdapter.add(it)
+                    override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                        Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
+                        Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
                     }
-                }
-                override fun onFailure(call: Call<Records>, t: Throwable) {
-                    Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
-                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
-                }
-            })
+                })
 
-            val header = HeaderItem(0, getString(R.string.videos_in_same_rule))
-            mAdapter.add(ListRow(header, listRowAdapter))
-            mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+                val header = HeaderItem(searchKeyword)
+                mAdapter.add(ListRow(header, listRowAdapter))
+                mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+            }
+
+            // ルールIDがある場合は、同じルールIDの動画のリストを作成する
+            recorded_program.ruleId?.let{ rule_id ->
+
+                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                EpgStation.api?.getRecorded(rule = rule_id)?.enqueue(object : Callback<GetRecordedResponse> {
+                    override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                        response.body()?.recorded?.forEach {
+                            listRowAdapter.add(it)
+                        }
+                    }
+                    override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                        Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
+                        Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+                    }
+                })
+
+                val header = HeaderItem(getString(R.string.videos_in_same_rule))
+                mAdapter.add(ListRow(header, listRowAdapter))
+                mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+            }
+
         }
+        // EPGStation Version 2.x.x
+        mSelectedRecordedItem?.let{ recorded_item ->
+
+            // 名前にregexDelimiterがあった場合はそこで区切る
+            val programName = recorded_item.name.split(regexDelimiter)
+            if (programName.size > 1 ) {
+
+                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+
+                val searchKeyword = programName[0].replace(regexDeleteStr,"")
+                EpgStationV2.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<Records> {
+                    override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                        response.body()?.records?.forEach {
+                            listRowAdapter.add(it)
+                        }
+                    }
+                    override fun onFailure(call: Call<Records>, t: Throwable) {
+                        Log.d(TAG,"setupRelatedMovieListRow() getRecorded API Failure")
+                        Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_SHORT).show()
+                    }
+                })
+
+                val header = HeaderItem(searchKeyword)
+                mAdapter.add(ListRow(header, listRowAdapter))
+                mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+            }
+
+            // ルールIDがある場合は、同じルールIDの動画のリストを作成する
+            recorded_item.ruleId?.let { rule_id ->
+                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                EpgStationV2.api?.getRecorded(ruleId = rule_id)
+                    ?.enqueue(object : Callback<Records> {
+                        override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                            response.body()?.records?.forEach {
+                                listRowAdapter.add(it)
+                            }
+                        }
+
+                        override fun onFailure(call: Call<Records>, t: Throwable) {
+                            Log.d(TAG, "setupRelatedMovieListRow() getRecorded API Failure")
+                            Toast.makeText(
+                                context!!,
+                                getString(R.string.connect_epgstation_failed),
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    })
+
+                val header = HeaderItem(getString(R.string.videos_in_same_rule))
+                mAdapter.add(ListRow(header, listRowAdapter))
+                mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
+            }
+        }
+
     }
 
     private fun convertDpToPixel(context: Context, dp: Int): Int {
