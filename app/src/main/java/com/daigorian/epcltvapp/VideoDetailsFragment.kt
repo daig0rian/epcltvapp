@@ -325,18 +325,19 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //  - 現在表示中の動画の名前にregexDelimiterがあれば、その前までの文字列をシリーズ名とみなして一覧を表示
         //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
 
-        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第])[0-9０１２３４５６７８９〇一二三四五六七八九十])|「)""".toRegex()
-        val regexDeleteStr = """\[新]|\[終]|\[字]|\[デ]|\[解]|\[再]|\[無]""".toRegex()
+        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第][0-9]{1,3}|[0-9]{1,3}[話回]|\([0-9]{1,3}\)|[「【『<]))|([\s　][^0-9\s　]+[\s　]?[0-9]{2,3}))""".toRegex()
+        val regexDeleteStr = """\[[新終字デ解再無映]\]""".toRegex()
 
         // EPGStation Version 1.x.x
         mSelectedRecordedProgram?.let{ recorded_program ->
 
             // 名前にregexDelimiterがあった場合はそこで区切る
-            val programName = recorded_program.name.split(regexDelimiter)
+            val programNameStriped = recorded_program.name.replace(regexDeleteStr,"")
+            val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
                 val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
-                val searchKeyword = programName[0].replace(regexDeleteStr,"")
+                val searchKeyword = programName[0]
                 EpgStation.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<GetRecordedResponse> {
                     override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                         response.body()?.recorded?.forEach {
@@ -380,12 +381,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mSelectedRecordedItem?.let{ recorded_item ->
 
             // 名前にregexDelimiterがあった場合はそこで区切る
-            val programName = recorded_item.name.split(regexDelimiter)
+            val programNameStriped =recorded_item.name.replace(regexDeleteStr,"")
+            val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
                 val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
 
-                val searchKeyword = programName[0].replace(regexDeleteStr,"")
+                val searchKeyword = programName[0]
                 EpgStationV2.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<Records> {
                     override fun onResponse(call: Call<Records>, response: Response<Records>) {
                         response.body()?.records?.forEach {
