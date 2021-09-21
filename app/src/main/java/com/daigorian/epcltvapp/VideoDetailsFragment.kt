@@ -325,14 +325,15 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //  - 現在表示中の動画の名前にregexDelimiterがあれば、その前までの文字列をシリーズ名とみなして一覧を表示
         //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
 
-        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第][0-9]{1,3}|[0-9]{1,3}[話回]|\([0-9]{1,3}\)|[「【『<]))|([\s　][^0-9\s　]+[\s　]?[0-9]{2,3}))""".toRegex()
-        val regexDeleteStr = """\[[新終字デ解再無映]\]""".toRegex()
+        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第][0-9]{1,3}|[0-9]{1,3}[話回]|\([0-9]{1,3}\)|[「【『<])|\[[新字デ解再無映終多]\]|\(吹\))|([\s　][^0-9\s　]+[\s　]?[0-9]{2,3}))""".toRegex()
+        val regexDeleteStr = """^(\[[新字デ解再無映終多]\])|\(吹\)""".toRegex()
 
         // EPGStation Version 1.x.x
         mSelectedRecordedProgram?.let{ recorded_program ->
 
-            // 名前にregexDelimiterがあった場合はそこで区切る
+            // 行頭に[新]などがあった場合は消しておく
             val programNameStriped = recorded_program.name.replace(regexDeleteStr,"")
+            // 名前にregexDelimiterがあった場合はそこで区切る
             val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
@@ -380,8 +381,9 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         // EPGStation Version 2.x.x
         mSelectedRecordedItem?.let{ recorded_item ->
 
-            // 名前にregexDelimiterがあった場合はそこで区切る
+            // 行頭に[新]などがあった場合は消しておく
             val programNameStriped =recorded_item.name.replace(regexDeleteStr,"")
+            // 名前にregexDelimiterがあった場合はそこで区切る
             val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
