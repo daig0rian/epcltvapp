@@ -85,23 +85,16 @@ class MainFragment : BrowseSupportFragment() {
         Log.i(TAG, "onResume")
         super.onResume()
         if(mNeedsReloadAllOnResume && SettingsFragment.isPreferenceAllExists(requireContext())) {
-            //設定画面から戻ってきたので設定を再読み込みする
+            //設定画面から戻ってきたのでEPGStationの接続からやり直す
             initEPGStationApi()
             mNeedsReloadAllOnResume = false
-        }
-        if(mNeedsReloadHistoryOnResume){
+        }else if(mNeedsReloadHistoryOnResume) {
             //履歴行の読み直し
             mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-            SearchFragment.getHistory(requireContext()).asReversed().forEach{
-                val historyRow = contentsListRowBuilder(
-                    GetRecordedParam(keyword = it),
-                    GetRecordedParamV2(keyword = it),
-                    it
-                )
-                mMainMenuAdapter.addToCategory(Category.SEARCH_HISTORY,historyRow)
-            }
-            mNeedsReloadHistoryOnResume = false
-
+            updateRows()
+        }else{
+            //コンテンツをアップデートする。
+            updateRows()
         }
 
     }
@@ -210,25 +203,61 @@ class MainFragment : BrowseSupportFragment() {
         searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.search_opaque)
     }
 
-    private fun loadRows() {
-
-        //内容クリア
-        mMainMenuAdapter.clear()
-
+    private fun updateRows() {
 
         EpgStationV2.api?.let{ api ->
-            // EPGStation V2.x.x　の場合だけ録画中列を作る
-            val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
-            val header = HeaderItem( getString(R.string.now_on_recording))
-            mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
+            // EPGStation V2.x.x　の場合だけ「録画中」列を作る
 
-            api.getRecording().enqueue(object : Callback<Records> {
+            //行のID
+            val headerId = Category.ON_RECORDING.ordinal.toLong()*10000
+
+            //同じIDを持つ既存の行があるか検索
+            val listRow = mMainMenuAdapter.getListRowByHeaderId(headerId)
+
+            // 既存の行があれば、それを取得する。なければ新たに作る。
+            val listRowAdapter = if(listRow==null)
+                ArrayObjectAdapter(mCardPresenter)
+            else
+                listRow.adapter as ArrayObjectAdapter
+
+
+            // 既存の行がなければ、新たに作った行を追加する。
+            if(listRow==null){
+                val header = HeaderItem( headerId , getString(R.string.now_on_recording))
+                mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
+            }
+
+            // APIでロードするアイテムの数。既存のアイテムがある場合はその数だけロードする
+            val apiLimit = if (listRow==null)
+                EpgStationV2.default_limit.toInt()
+            else
+                listRowAdapter.size()
+
+
+            api.getRecording(limit = apiLimit).enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
                     response.body()?.let { getRecordingResponse ->
                         if (getRecordingResponse.records.isNotEmpty()) {
-                            //"録画中"の列を追加。
-                            getRecordingResponse.records.forEach {
-                                listRowAdapter.add(it)
+
+                            //既存のリストにあって、レスポンスにないアイテムの削除
+                            var horizontalIndex = 0
+                            while(horizontalIndex < listRowAdapter.size()) {
+                                var found = false
+                                getRecordingResponse.records.forEach {
+                                  if(listRowAdapter.get(horizontalIndex).equals(it) ) found = true
+                                }
+                                if (!found) {
+                                    listRowAdapter.removeItems(horizontalIndex,1)
+                                }else {
+                                    horizontalIndex += 1
+                                }
+                            }
+
+                            //レスポンスにあって、既存のリストにないアイテムの追加
+                            getRecordingResponse.records.forEachIndexed { index, it ->
+                            if(listRowAdapter.indexOf(it) == -1){
+                                    listRowAdapter.add(index,it)
+                                }
                             }
                         }
                     }
@@ -241,22 +270,24 @@ class MainFragment : BrowseSupportFragment() {
         }
 
         //最近の録画の列
-        val recentlyRecorded = contentsListRowBuilder(
+        mMainMenuAdapter.updateContentsListRowWithCategory(
             GetRecordedParam(),
             GetRecordedParamV2(),
-            getString(R.string.recent_videos)
+            getString(R.string.recent_videos),
+            Category.RECENTLY_RECORDED,
+            0L
         )
-        mMainMenuAdapter.addToCategory(Category.RECENTLY_RECORDED,recentlyRecorded)
 
 
         //履歴行の追加
-        SearchFragment.getHistory(requireContext()).asReversed().forEach{
-            val historyRow = contentsListRowBuilder(
+        SearchFragment.getHistory(requireContext()).asReversed().forEachIndexed{ index, it ->
+            mMainMenuAdapter.updateContentsListRowWithCategory(
                 GetRecordedParam(keyword = it),
                 GetRecordedParamV2(keyword = it),
-                it
+                it,
+                Category.SEARCH_HISTORY,
+                index.toLong()
             )
-            mMainMenuAdapter.addToCategory(Category.SEARCH_HISTORY,historyRow)
         }
 
         //ルールの並び順を表すフラグ。デフォルトfalse。
@@ -275,12 +306,13 @@ class MainFragment : BrowseSupportFragment() {
                         }else{
                             rule.keyword
                         }
-                        val recordedByRule = contentsListRowBuilder(
+                        mMainMenuAdapter.updateContentsListRowWithCategory(
                             GetRecordedParam(rule= rule.id),
                             GetRecordedParamV2(ruleId= rule.id),
-                            keyword
+                            keyword,
+                            Category.RECORDED_BY_RULES,
+                            rule.id
                         )
-                        mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
                     }
                 }
             }
@@ -301,12 +333,13 @@ class MainFragment : BrowseSupportFragment() {
                         }else{
                             rule.searchOption?.keyword!!
                         }
-                        val recordedByRule = contentsListRowBuilder(
+                        mMainMenuAdapter.updateContentsListRowWithCategory(
                             GetRecordedParam(rule= rule.id),
                             GetRecordedParamV2(ruleId= rule.id),
-                            keyword
+                            keyword,
+                            Category.RECORDED_BY_RULES,
+                            rule.id
                         )
-                        mMainMenuAdapter.addToCategory(Category.RECORDED_BY_RULES,recordedByRule)
                     }
                 }
             }
@@ -316,12 +349,25 @@ class MainFragment : BrowseSupportFragment() {
             }
         })
 
+    }
+
+    private fun loadRows() {
+
+        //内容クリア
+        mMainMenuAdapter.clear()
+
+        //コンテンツをロード。
+        updateRows()
+
         //"設定"　のボタンが乗る行
         val gridHeader = HeaderItem(getString(R.string.settings))
         val gridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
         gridRowAdapter.add(resources.getString(R.string.reload))
+
+        //ルールの並び順を表すフラグ。デフォルトfalse。
+        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
         if (isNewestFirst){
             gridRowAdapter.add(resources.getString(R.string.set_oldest_rule_first))
         }else{
@@ -334,6 +380,7 @@ class MainFragment : BrowseSupportFragment() {
 
 
     }
+
 
     private fun setupEventListeners() {
         setOnSearchClickedListener {
@@ -419,91 +466,6 @@ class MainFragment : BrowseSupportFragment() {
         }
     }
 
-    private fun contentsListRowBuilder(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String):ListRow{
-        // 空っぽの、タイトルだけ設定されたListRowを作る
-        val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
-        val header = HeaderItem(title)
-        val result = ListRow(header, listRowAdapter)
-
-        // APIのコールバックでListRowの中身をセットするように仕掛ける
-        // EPGStation V1.x.x
-        EpgStation.api?.getRecorded(
-            limit = v1Pram.limit,
-            offset = v1Pram.offset,
-            reverse = v1Pram.reverse,
-            rule = v1Pram.rule,
-            genre1 = v1Pram.genre1,
-            channel = v1Pram.channel,
-            keyword = v1Pram.keyword,
-            hasTs = v1Pram.hasTs,
-            recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
-
-            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                response.body()?.let { getRecordedResponse ->
-                    //APIのレスポンスをひとつづつアイテムとして加える。
-                    getRecordedResponse.recorded.forEach {  recordedProgram ->
-                        listRowAdapter.add(recordedProgram)
-                    }
-                    //続きがあるなら"次を読み込む"を置く。
-                    val numOfItem = getRecordedResponse.recorded.count().toLong()
-                    if (numOfItem < getRecordedResponse.total) {
-                        listRowAdapter.add(GetRecordedParam(limit = v1Pram.limit,
-                            offset = numOfItem,
-                            reverse = v1Pram.reverse,
-                            rule = v1Pram.rule,
-                            genre1 = v1Pram.genre1,
-                            channel = v1Pram.channel,
-                            keyword = v1Pram.keyword,
-                            hasTs = v1Pram.hasTs,
-                            recording = v1Pram.recording))
-                    }
-
-                }
-            }
-            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
-        EpgStationV2.api?.getRecorded(
-            isHalfWidth = v2Param.isHalfWidth,
-            offset = v2Param.offset,
-            limit = v2Param.limit,
-            isReverse = v2Param.isReverse,
-            ruleId = v2Param.ruleId,
-            channelId = v2Param.channelId,
-            genre = v2Param.genre,
-            keyword = v2Param.keyword,
-            hasOriginalFile = v2Param.hasOriginalFile )?.enqueue(object : Callback<Records> {
-            override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                response.body()?.let { getRecordedResponse ->
-                    //APIのレスポンスをひとつづつアイテムとして加える。
-                    getRecordedResponse.records.forEach {
-                        listRowAdapter.add(it)
-                    }
-                    //続きがあるなら"次を読み込む"を置く。
-                    val numOfItem = getRecordedResponse.records.count().toLong()
-                    if (numOfItem < getRecordedResponse.total) {
-                        listRowAdapter.add(GetRecordedParamV2(
-                            isHalfWidth = v2Param.isHalfWidth,
-                            offset = numOfItem,
-                            limit = v2Param.limit,
-                            isReverse = v2Param.isReverse,
-                            ruleId = v2Param.ruleId,
-                            channelId = v2Param.channelId,
-                            genre = v2Param.genre,
-                            keyword = v2Param.keyword,
-                            hasOriginalFile = v2Param.hasOriginalFile))
-                    }
-                }
-            }
-            override fun onFailure(call: Call<Records>, t: Throwable) {
-                Log.d(TAG,"loadRows() getRecorded API Failure")
-                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
-        return result
-    }
 
 
     private inner class ItemViewSelectedListener : OnItemViewSelectedListener {
@@ -746,6 +708,148 @@ class MainFragment : BrowseSupportFragment() {
                 numOfRowInCategory[cat.ordinal] = 0
             }//synchronized
         }
+
+        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long){
+
+            val headerId = category.ordinal.toLong()*10000 + idInCategory
+
+            // 同じIDを持つ行が存在するかどうか確認する
+            val listRow = getListRowByHeaderId(headerId)
+
+            // 既存の行があれば、それを取得する。なければ新たに作る。
+            val listRowAdapter = if(listRow==null)
+                ArrayObjectAdapter(mCardPresenter)
+            else
+                listRow.adapter as ArrayObjectAdapter
+
+            // 既存の行がなければ、新たに作った行を追加する。
+            if(listRow==null){
+                val header = HeaderItem( headerId ,title)
+                addToCategory(category,ListRow(header, listRowAdapter))
+            }
+
+            // すでにロードされている数。
+            val numOfLoaded = if (listRow==null)
+                0L
+            else
+                listRowAdapter.size().toLong()
+
+            // APIのコールバックでListRowの中身をセットするように仕掛ける
+            // EPGStation V1.x.x
+            EpgStation.api?.getRecorded(
+                limit = if(numOfLoaded>v1Pram.limit) numOfLoaded else v1Pram.limit,
+                offset = v1Pram.offset,
+                reverse = v1Pram.reverse,
+                rule = v1Pram.rule,
+                genre1 = v1Pram.genre1,
+                channel = v1Pram.channel,
+                keyword = v1Pram.keyword,
+                hasTs = v1Pram.hasTs,
+                recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
+
+                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                    response.body()?.let { getRecordedResponse ->
+
+                        //既存のリストにあって、レスポンスにないアイテムの削除
+                        var horizontalIndex = 0
+                        while(horizontalIndex < listRowAdapter.size()) {
+                            var found = false
+                            getRecordedResponse.recorded.forEach {
+                                if(listRowAdapter.get(horizontalIndex).equals(it) ) found = true
+                            }
+                            if (!found) {
+                                listRowAdapter.removeItems(horizontalIndex,1)
+                            }else {
+                                horizontalIndex += 1
+                            }
+                        }
+
+                        //レスポンスにあって、既存のリストにないアイテムの追加
+                        getRecordedResponse.recorded.forEachIndexed { index, it ->
+                            if(listRowAdapter.indexOf(it) == -1){
+                                listRowAdapter.add(index,it)
+                            }
+                        }
+
+                        //続きがあるなら"次を読み込む"を置く。
+                        val numOfItem = getRecordedResponse.recorded.count().toLong()
+                        if (numOfItem < getRecordedResponse.total) {
+                            listRowAdapter.add(GetRecordedParam(limit = v1Pram.limit,
+                                offset = numOfItem,
+                                reverse = v1Pram.reverse,
+                                rule = v1Pram.rule,
+                                genre1 = v1Pram.genre1,
+                                channel = v1Pram.channel,
+                                keyword = v1Pram.keyword,
+                                hasTs = v1Pram.hasTs,
+                                recording = v1Pram.recording))
+                        }
+
+                    }
+                }
+                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Log.d(TAG,"loadRows() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                }
+            })
+            EpgStationV2.api?.getRecorded(
+                isHalfWidth = v2Param.isHalfWidth,
+                offset = v2Param.offset,
+                limit = if(numOfLoaded>v2Param.limit) numOfLoaded else v2Param.limit ,
+                isReverse = v2Param.isReverse,
+                ruleId = v2Param.ruleId,
+                channelId = v2Param.channelId,
+                genre = v2Param.genre,
+                keyword = v2Param.keyword,
+                hasOriginalFile = v2Param.hasOriginalFile )?.enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    response.body()?.let { getRecordedResponse ->
+
+                        //既存のリストにあって、レスポンスにないアイテムの削除
+                        var horizontalIndex = 0
+                        while(horizontalIndex < listRowAdapter.size()) {
+                            var found = false
+                            getRecordedResponse.records.forEach {
+                                if(listRowAdapter.get(horizontalIndex).equals(it) ) found = true
+                            }
+                            if (!found) {
+                                listRowAdapter.removeItems(horizontalIndex,1)
+                            }else {
+                                horizontalIndex += 1
+                            }
+                        }
+
+                        //レスポンスにあって、既存のリストにないアイテムの追加
+                        getRecordedResponse.records.forEachIndexed { index, it ->
+                            if(listRowAdapter.indexOf(it) == -1){
+                                listRowAdapter.add(index,it)
+                            }
+                        }
+                        //続きがあるなら"次を読み込む"を置く。
+                        val numOfItem = getRecordedResponse.records.count().toLong()
+                        if (numOfItem < getRecordedResponse.total) {
+                            listRowAdapter.add(GetRecordedParamV2(
+                                isHalfWidth = v2Param.isHalfWidth,
+                                offset = numOfItem,
+                                limit = v2Param.limit,
+                                isReverse = v2Param.isReverse,
+                                ruleId = v2Param.ruleId,
+                                channelId = v2Param.channelId,
+                                genre = v2Param.genre,
+                                keyword = v2Param.keyword,
+                                hasOriginalFile = v2Param.hasOriginalFile))
+                        }
+                    }
+                }
+                override fun onFailure(call: Call<Records>, t: Throwable) {
+                    Log.d(TAG,"loadRows() getRecorded API Failure")
+                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                }
+            })
+
+        }
+
+
 
 
         fun sortRulesByRecordedDate(){
