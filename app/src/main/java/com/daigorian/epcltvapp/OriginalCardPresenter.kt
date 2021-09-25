@@ -1,6 +1,5 @@
-package com.daigorian.epcltvapp.presenter
+package com.daigorian.epcltvapp
 
-import android.content.DialogInterface
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.ViewGroup
@@ -11,7 +10,6 @@ import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
-import com.daigorian.epcltvapp.R
 import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 import retrofit2.Call
@@ -23,12 +21,14 @@ import kotlin.properties.Delegates
  * A OriginalCardPresenter is used to generate Views and bind Objects to them on demand.
  * It contains an ImageCardView.
  */
-class OriginalCardPresenter : Presenter() {
+class OriginalCardPresenter() : Presenter() {
     private var mDefaultCardImage: Drawable? = null
     private var mOnRecordingCardImage: Drawable? = null
 
     private var sSelectedBackgroundColor: Int by Delegates.notNull()
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
+
+    var objAdapter :DeleteEnabledArrayObjectAdapter? =null
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         Log.d(TAG, "onCreateViewHolder")
@@ -77,6 +77,7 @@ class OriginalCardPresenter : Presenter() {
                                     ) {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
                                             .show()
+                                        objAdapter?.removeItemFromAllListRows(item)
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
@@ -107,6 +108,7 @@ class OriginalCardPresenter : Presenter() {
                                     ) {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
                                             .show()
+                                        objAdapter?.removeItemFromAllListRows(item)
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()

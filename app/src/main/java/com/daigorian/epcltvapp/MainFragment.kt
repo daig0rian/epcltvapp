@@ -25,7 +25,6 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
-import com.daigorian.epcltvapp.presenter.CardPresenterSelector
 import java.util.*
 
 //Retrofit 2
@@ -47,7 +46,7 @@ class MainFragment : BrowseSupportFragment() {
     private var mNeedsReloadAllOnResume = false
     private var mNeedsReloadHistoryOnResume = false
 
-    private val mCardPresenter = CardPresenterSelector()
+    private val mCardPresenter = OriginalCardPresenter()
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
@@ -56,6 +55,7 @@ class MainFragment : BrowseSupportFragment() {
         super.onCreate(savedInstanceState)
 
         adapter = mMainMenuAdapter
+        mCardPresenter.objAdapter = mMainMenuAdapter
 
         if(!SettingsFragment.isPreferenceAllExists(requireContext())){
             Log.i(TAG, "not all Preference exists")
@@ -688,7 +688,7 @@ class MainFragment : BrowseSupportFragment() {
         SETTINGS
     }
 
-    private inner class MainMenuAdapter(presenter: Presenter?) : ArrayObjectAdapter(presenter) {
+    private inner class MainMenuAdapter(presenter: Presenter?) : DeleteEnabledArrayObjectAdapter(presenter) {
 
         private val numOfRowInCategory = IntArray(Category.values().size)
 
@@ -747,6 +747,7 @@ class MainFragment : BrowseSupportFragment() {
             }//synchronized
         }
 
+
         fun sortRulesByRecordedDate(){
             synchronized(this){
                 //bubble sort で新しいのを下からあげていく
@@ -764,6 +765,7 @@ class MainFragment : BrowseSupportFragment() {
 
                             if (itemJMinus1 != null && itemJMinus1.size() >0) {
                                 //上のアイテムに録画済の要素がある
+                                //TODO :  EPGStation V2(RecordedItem) への対応
                                 val startTimeOfJ = (itemJ.get(0) as? RecordedProgram)?.startAt
                                 val startTimeOfJMinus1 = (itemJMinus1.get(0) as? RecordedProgram)?.startAt
                                 //下のアイテムが上のアイテムより録画時間が新しい

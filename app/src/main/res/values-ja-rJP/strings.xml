@@ -40,7 +40,7 @@
     <string name="use_custom_base_url">API Base URLを編集する</string>
     <string name="customize_base_url">API Base URL</string>
     <string name="do_you_want_to_delete">%1$s を削除しますか</string>
-    <string name="successfully_deleted">削除しました。リストを再読み込みしてください。</string>
+    <string name="successfully_deleted">削除しました。</string>
     <string name="delete_failed">削除に失敗しました</string>
     <string name="delete">削除</string>
     <string name="cancel">キャンセル</string>

@@ -25,7 +25,6 @@ import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Records
-import com.daigorian.epcltvapp.presenter.CardPresenterSelector
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -42,7 +41,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     private lateinit var mDetailsBackground: DetailsSupportFragmentBackgroundController
     private lateinit var mPresenterSelector: ClassPresenterSelector
-    private lateinit var mAdapter: ArrayObjectAdapter
+    private lateinit var mAdapter: DeleteEnabledArrayObjectAdapter
+    private val mCardPresenter = OriginalCardPresenter()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d(TAG, "onCreate DetailsFragment")
@@ -60,7 +60,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             mSelectedRecordedProgram != null -> {
                 // EPGStation Version 1.x.x
                 mPresenterSelector = ClassPresenterSelector()
-                mAdapter = ArrayObjectAdapter(mPresenterSelector)
+                mAdapter = DeleteEnabledArrayObjectAdapter(mPresenterSelector)
+                mCardPresenter.objAdapter = mAdapter
                 setupDetailsOverviewRow()
                 setupDetailsOverviewRowPresenter()
                 setupRelatedMovieListRow()
@@ -71,7 +72,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             mSelectedRecordedItem != null -> {
                 // EPGStation Version 2.x.x
                 mPresenterSelector = ClassPresenterSelector()
-                mAdapter = ArrayObjectAdapter(mPresenterSelector)
+                mAdapter = DeleteEnabledArrayObjectAdapter(mPresenterSelector)
+                mCardPresenter.objAdapter = mAdapter
                 setupDetailsOverviewRow()
                 setupDetailsOverviewRowPresenter()
                 setupRelatedMovieListRow()
@@ -337,7 +339,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
-                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
                 val searchKeyword = programName[0]
                 EpgStation.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<GetRecordedResponse> {
                     override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
@@ -359,7 +361,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             // ルールIDがある場合は、同じルールIDの動画のリストを作成する
             recorded_program.ruleId?.let{ rule_id ->
 
-                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
                 EpgStation.api?.getRecorded(rule = rule_id)?.enqueue(object : Callback<GetRecordedResponse> {
                     override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                         response.body()?.recorded?.forEach {
@@ -387,7 +389,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             val programName = programNameStriped.split(regexDelimiter)
             if (programName.size > 1 ) {
 
-                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
 
                 val searchKeyword = programName[0]
                 EpgStationV2.api?.getRecorded(keyword = searchKeyword)?.enqueue(object : Callback<Records> {
@@ -409,7 +411,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
             // ルールIDがある場合は、同じルールIDの動画のリストを作成する
             recorded_item.ruleId?.let { rule_id ->
-                val listRowAdapter = ArrayObjectAdapter(CardPresenterSelector())
+                val listRowAdapter = ArrayObjectAdapter(mCardPresenter)
                 EpgStationV2.api?.getRecorded(ruleId = rule_id)
                     ?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
