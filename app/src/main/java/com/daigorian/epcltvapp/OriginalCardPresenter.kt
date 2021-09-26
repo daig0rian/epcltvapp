@@ -75,7 +75,7 @@ class OriginalCardPresenter() : Presenter() {
                                         response.body()!!.code != null &&
                                         response.body()!!.code == 200L
                                     ) {
-                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
                                     } else {
@@ -106,7 +106,7 @@ class OriginalCardPresenter() : Presenter() {
                                         response.body()!!.code != null &&
                                         response.body()!!.code == 200L
                                     ) {
-                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_LONG)
+                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
                                     } else {
