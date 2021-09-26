@@ -92,6 +92,7 @@ class MainFragment : BrowseSupportFragment() {
             //履歴行の読み直し
             mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
             updateRows()
+            mNeedsReloadHistoryOnResume = false
         }else{
             //コンテンツをアップデートする。
             updateRows()
