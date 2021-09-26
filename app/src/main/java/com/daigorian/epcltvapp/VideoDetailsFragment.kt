@@ -372,7 +372,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mAdapter.updateContentsListRow(
             GetRecordedParam(rule = ruleId),
             GetRecordedParamV2(ruleId = ruleId),
-            "",
+            getString(R.string.videos_in_same_rule),
             1,
             mCardPresenter,
             requireContext()
