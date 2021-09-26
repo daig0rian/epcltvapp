@@ -7,8 +7,10 @@ import androidx.leanback.widget.*
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
+import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Records
 import retrofit2.Call
 import retrofit2.Callback
@@ -28,11 +30,31 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
                 horizontalArrayObjectAdapter?.let{
                     var horizontalIndex = 0
                     while(horizontalIndex < it.size()) {
-                        if(it.get(horizontalIndex).equals(item) ){
-                            it.removeItems(horizontalIndex,1)
-                        }
-                    horizontalIndex += 1
-                    }
+
+                        when(it.get(horizontalIndex)){
+                            is RecordedProgram ->{
+                                if(item is RecordedProgram &&
+                                    (it.get(horizontalIndex) as RecordedProgram).id == item.id){
+                                    it.removeItems(horizontalIndex,1)
+                                    horizontalIndex -= 1
+                                }
+                            }
+                            is RecordedItem ->{
+                                if(item is RecordedItem &&
+                                    (it.get(horizontalIndex) as RecordedItem).id == item.id){
+                                    it.removeItems(horizontalIndex,1)
+                                    horizontalIndex -= 1
+                                }
+                            }
+                            else ->{
+                                if(it.get(horizontalIndex).equals(item)){
+                                    it.removeItems(horizontalIndex,1)
+                                    horizontalIndex -= 1
+                                }
+                            }
+                        }// when
+                        horizontalIndex += 1
+                    }// while(horizontalIndex < it.size())
                 }
 
             }
