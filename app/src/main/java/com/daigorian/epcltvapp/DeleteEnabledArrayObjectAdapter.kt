@@ -29,14 +29,17 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
                 val horizontalArrayObjectAdapter = row.adapter as? ArrayObjectAdapter
                 horizontalArrayObjectAdapter?.let{
                     var horizontalIndex = 0
+                    var horizontalDeletedCount = 0
                     while(horizontalIndex < it.size()) {
 
                         when(it.get(horizontalIndex)){
+                            //アイテムが見つかったら削除する
                             is RecordedProgram ->{
                                 if(item is RecordedProgram &&
                                     (it.get(horizontalIndex) as RecordedProgram).id == item.id){
                                     it.removeItems(horizontalIndex,1)
                                     horizontalIndex -= 1
+                                    horizontalDeletedCount += 1
                                 }
                             }
                             is RecordedItem ->{
@@ -44,12 +47,46 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
                                     (it.get(horizontalIndex) as RecordedItem).id == item.id){
                                     it.removeItems(horizontalIndex,1)
                                     horizontalIndex -= 1
+                                    horizontalDeletedCount += 1
                                 }
                             }
+                            //最後尾にある「続きを読み込む」アイテムがきたら、削除した分だけオフセットを下げる
+                            is GetRecordedParam -> {
+                                val currentItem = it.get(horizontalIndex) as GetRecordedParam
+                                val newItem = GetRecordedParam(
+                                    limit = currentItem.limit,
+                                    offset = currentItem.offset - horizontalDeletedCount,
+                                    reverse = currentItem.reverse,
+                                    rule = currentItem.rule,
+                                    genre1 = currentItem.genre1,
+                                    channel = currentItem.channel,
+                                    keyword = currentItem.keyword,
+                                    hasTs = currentItem.hasTs,
+                                    recording = currentItem.recording
+                                )
+                                it.replace(horizontalIndex,newItem)
+                            }
+                            is GetRecordedParamV2 -> {
+                                val currentItem = it.get(horizontalIndex) as GetRecordedParamV2
+                                val newItem = GetRecordedParamV2(
+                                    isHalfWidth = currentItem.isHalfWidth,
+                                    offset = currentItem.offset - horizontalDeletedCount,
+                                    limit = currentItem.limit,
+                                    isReverse = currentItem.isReverse,
+                                    ruleId = currentItem.ruleId,
+                                    channelId = currentItem.channelId,
+                                    genre = currentItem.genre,
+                                    keyword = currentItem.keyword,
+                                    hasOriginalFile = currentItem.hasOriginalFile,
+                                )
+                                it.replace(horizontalIndex,newItem)
+                            }
+                            //現状上記以外のものは入らないはずだが、来たらitemが同じ時に限ってけしてやる。
                             else ->{
                                 if(it.get(horizontalIndex).equals(item)){
                                     it.removeItems(horizontalIndex,1)
                                     horizontalIndex -= 1
+                                    horizontalDeletedCount += 1
                                 }
                             }
                         }// when
