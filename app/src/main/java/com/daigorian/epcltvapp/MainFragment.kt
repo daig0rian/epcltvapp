@@ -6,6 +6,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.*
 import android.content.Intent
 import android.graphics.Color
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -185,10 +186,14 @@ class MainFragment : BrowseSupportFragment() {
         mBackgroundManager.attach(requireActivity().window)
         mDefaultBackground = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         mMetrics = DisplayMetrics()
-        //from API LEVEL 30
-        //requireActivity().display?.getRealMetrics(mMetrics)
-        //for lower API LEVEL
-        requireActivity().windowManager.defaultDisplay.getMetrics(mMetrics)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            //from API LEVEL 30
+            requireActivity().display?.getRealMetrics(mMetrics)
+        }else{
+            //for lower API LEVEL
+            requireActivity().windowManager.defaultDisplay.getMetrics(mMetrics)
+        }
 
     }
 
@@ -676,6 +681,14 @@ class MainFragment : BrowseSupportFragment() {
                 //もし先ほど加えた行がそのカテゴリの最初の行だった場合
                 if(numOfRowInCategory[cat.ordinal] == 1){
                     when(cat){
+                        Category.ON_RECORDING -> {
+                            //一行しかないのでセクション行は入れない。
+                            //録画中と最近の録画は一番上のグループなので区切り線は入れない。
+                        }
+                        Category.RECENTLY_RECORDED ->{
+                            //一行しかないのでセクション行は入れない。
+                            //録画中と最近の録画は一番上のグループなので区切り線は入れない。
+                        }
                         Category.SEARCH_HISTORY ->{
                             //検索履歴というセクション行を、さらに上に加える
                             super.add(index,SectionRow(getString(R.string.search_history)))
