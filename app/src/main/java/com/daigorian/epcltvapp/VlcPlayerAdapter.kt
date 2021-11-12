@@ -47,6 +47,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     var mDuration = -1L
+    var mEstimatedDuration = -1L
     var mTime = -1L
     var mIsSeekable = false
 
@@ -132,7 +133,12 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     override fun getDuration(): Long {
-        return mDuration
+        if(mDuration > 0){
+            return mDuration
+        }else{
+            return mEstimatedDuration
+        }
+
     }
 
     override fun getCurrentPosition(): Long {
@@ -202,6 +208,8 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 }
                 Event.Opening -> {
                     Log.d(TAG, "libvlc Event.Opening")
+                    mBufferingStart = true
+                    notifyBufferingStartEnd()
 
                     if (mSurfaceHolderGlueHost == null || mHasDisplay) {
                         callback.onPreparedStateChanged(this@VlcPlayerAdapter)
@@ -211,17 +219,14 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     Log.d(TAG, "libvlc Event.Buffering" + event.buffering)
                     mBufferedProgress = (duration * event.buffering / 100).roundToLong()
                     callback.onBufferedPositionChanged(this@VlcPlayerAdapter)
-                    if (mTime < mBufferedProgress) {
-                        mBufferingStart = false
-                        notifyBufferingStartEnd()
-                    } else {
-                        mBufferingStart = true
-                        notifyBufferingStartEnd()
-                    }
                 }
                 Event.Playing -> {
                     Log.d(TAG, "libvlc Event.Playing")
                     callback.onPlayStateChanged(this@VlcPlayerAdapter)
+                    if(mBufferingStart){
+                        mBufferingStart= false
+                        notifyBufferingStartEnd()
+                    }
                 }
                 Event.Paused -> {
                     Log.d(TAG, "libvlc Event.Paused")
@@ -252,6 +257,12 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 }
                 Event.PositionChanged -> {
                     //Log.d(TAG, "libvlc Event.PositionChanged:"+ event.positionChanged )
+                    //VLCはTS動画の長さをを0と報告する。再生時間と再生位置から概算の長さを計算する
+                    mEstimatedDuration =  (mTime / event.positionChanged).roundToLong()
+                    //もし動画の長さが0以下であったら、概算の長さを取りに来るようにonDurationChangedを投げる。
+                    if (mDuration <= 0){
+                        callback.onDurationChanged(this@VlcPlayerAdapter)
+                    }
                 }
                 Event.SeekableChanged -> {
                     Log.d(TAG, "libvlc Event.SeekableChanged:" + event.seekable)
