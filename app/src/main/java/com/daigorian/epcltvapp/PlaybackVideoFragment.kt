@@ -15,7 +15,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 /** Handles video playback with media controls. */
 class PlaybackVideoFragment : VideoSupportFragment() {
 
-    private lateinit var mTransportControlGlue: PlaybackTransportControlGlue<MediaPlayerAdapter>
+    private lateinit var mTransportControlGlue: PlaybackTransportControlGlue<VlcPlayerAdapter>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,7 +29,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID) as Long
 
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
-        val playerAdapter = MediaPlayerAdapter(context)
+        val playerAdapter = VlcPlayerAdapter(requireContext())
         playerAdapter.setRepeatAction(PlaybackControlsRow.RepeatAction.INDEX_NONE)
 
         mTransportControlGlue = PlaybackTransportControlGlue(activity, playerAdapter)
