@@ -28,7 +28,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      */
 
     // For LibVLC
-    private val args: ArrayList<String?> = arrayListOf("")
+    private val args: ArrayList<String?> = arrayListOf("--verbose=0")
     private val mLibVLC: LibVLC = LibVLC(mContext, args)
     private val vlcPlayer = MediaPlayer(mLibVLC)
 
@@ -46,6 +46,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     var mIsSeekable = false
 
     override fun onAttachedToHost(host: PlaybackGlueHost) {
+        Log.d(TAG, "onAttachedToHost()")
         if (host is SurfaceHolderGlueHost) {
             mSurfaceHolderGlueHost = host
             mSurfaceHolderGlueHost!!.setSurfaceHolderCallback(this.VideoPlayerSurfaceHolderCallback())
@@ -58,6 +59,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      * before playing a second one.
      */
     fun reset() {
+        Log.d(TAG, "reset()")
         changeToUninitialized()
         vlcPlayer.stop()
         if(vlcPlayer.hasMedia()){
@@ -67,6 +69,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     fun changeToUninitialized() {
+        Log.d(TAG, "changeToUninitialized()")
         if(vlcPlayer.hasMedia()){
             vlcPlayer.media?.release()
             vlcPlayer.media = null
@@ -83,6 +86,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      * Release internal VlcPlayer. Should not use the object after call release().
      */
     fun release() {
+        Log.d(TAG, "release()")
         changeToUninitialized()
         mHasDisplay = false
         vlcPlayer.release()
@@ -90,6 +94,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     override fun onDetachedFromHost() {
+        Log.d(TAG, "onDetachedFromHost()")
         if (mSurfaceHolderGlueHost != null) {
             mSurfaceHolderGlueHost!!.setSurfaceHolderCallback(null)
             mSurfaceHolderGlueHost = null
@@ -100,6 +105,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
 
 
     fun setDisplay(surfaceHolder: SurfaceHolder?) {
+        Log.d(TAG, "setDisplay()")
         val hadDisplay = mHasDisplay
         mHasDisplay = surfaceHolder != null
         if (hadDisplay == mHasDisplay) {
@@ -122,10 +128,12 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
 
 
     override fun isPlaying(): Boolean {
+        Log.d(TAG, "isPlaying()")
         return vlcPlayer.isPlaying
     }
 
     override fun getDuration(): Long {
+        // Log.d(TAG, "getDuration()")
         if(mDuration > 0){
             return mDuration
         }else{
@@ -135,10 +143,12 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     override fun getCurrentPosition(): Long {
+        //Log.d(TAG, "getCurrentPosition()")
         return mTime
     }
 
     override fun play() {
+        Log.d(TAG, "play()")
         if ( vlcPlayer.isPlaying) {
             return
         }
@@ -146,12 +156,14 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     override fun pause() {
+        Log.d(TAG, "pause()")
         if (isPlaying) {
             vlcPlayer.pause()
         }
     }
 
     override fun seekTo(newPosition: Long) {
+        Log.d(TAG, "seekTo( "+newPosition+" )")
         if (!mInitialized) {
             return
         }
@@ -159,10 +171,12 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     override fun getBufferedPosition(): Long {
+        Log.d(TAG, "getBufferedPosition()")
         return mBufferedProgress
     }
 
     override fun getSupportedActions(): Long {
+        Log.d(TAG, "getSupportedActions()")
 
         return (PlaybackBaseControlGlue.ACTION_PLAY_PAUSE
                 + PlaybackBaseControlGlue.ACTION_REWIND
@@ -176,6 +190,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      * otherwise.
      */
     fun setDataSource(uri: Uri?): Boolean {
+        Log.d(TAG, "setDataSource()")
         if (if (mMediaSourceUri != null) mMediaSourceUri == uri else uri == null) {
             return false
         }
@@ -185,6 +200,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     private fun prepareMediaForPlaying() {
+        Log.d(TAG, "  prepareMediaForPlaying()")
         reset()
 
         try {
@@ -261,7 +277,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     Log.d(TAG, "libvlc Event.PausableChanged")
                 }
                 Event.LengthChanged -> {
-                    Log.d(TAG, "libvlc Event.LengthChanged:" + event.lengthChanged)
+                    Log.d(TAG, "libvlc Event.LengthChanged to : " + event.lengthChanged)
                     mDuration = event.lengthChanged
                     callback.onDurationChanged(this@VlcPlayerAdapter)
                 }
@@ -272,18 +288,18 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 }
                 Event.ESAdded -> {
                     // A track was added
-                    Log.d(TAG, "libvlc Event.ESAdded")
+                    Log.d(TAG, "libvlc Event.ESAdded. ID: " + event.esChangedID + ", Type: " + event.esChangedType)
                 }
                 Event.ESDeleted -> {
                     // A track was removed
-                    Log.d(TAG, "libvlc Event.ESDeleted")
+                    Log.d(TAG, "libvlc Event.ESDeleted. ID: " + event.esChangedID + ", Type: " + event.esChangedType)
                 }
                 Event.ESSelected -> {
                     // Tracks were selected or unselected
-                    Log.d(TAG, "libvlc Event.ESSelected")
+                    Log.d(TAG, "libvlc Event.ESSelected. ID: " + event.esChangedID + ", Type: " + event.esChangedType)
                 }
                 Event.RecordChanged -> {
-                    Log.d(TAG, "libvlc Event.RecordChanged")
+                    Log.d(TAG, "libvlc Event.RecordChanged to : " + event.recording+ " " +event.recordPath)
                 }
                 else -> {
                     Log.d(TAG, "libvlc Event.Unknown")
@@ -300,6 +316,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      * [PlaybackGlueHost] provides SurfaceHolder.
      */
     override fun isPrepared(): Boolean {
+        // Log.d(TAG, "isPrepared() : "+ (mInitialized && (mSurfaceHolderGlueHost == null || mHasDisplay)) )
         return mInitialized && (mSurfaceHolderGlueHost == null || mHasDisplay)
     }
 
@@ -309,11 +326,15 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      */
     internal inner class VideoPlayerSurfaceHolderCallback : SurfaceHolder.Callback {
         override fun surfaceCreated(surfaceHolder: SurfaceHolder) {
+            Log.d(TAG, "VideoPlayerSurfaceHolderCallback.surfaceCreated()")
             setDisplay(surfaceHolder)
         }
 
-        override fun surfaceChanged(surfaceHolder: SurfaceHolder, i: Int, i1: Int, i2: Int) {}
+        override fun surfaceChanged(surfaceHolder: SurfaceHolder, i: Int, i1: Int, i2: Int) {
+            Log.d(TAG, "VideoPlayerSurfaceHolderCallback.surfaceChanged()")
+        }
         override fun surfaceDestroyed(surfaceHolder: SurfaceHolder) {
+            Log.d(TAG, "VideoPlayerSurfaceHolderCallback.surfaceDestroyed()")
             setDisplay(null)
         }
     }
