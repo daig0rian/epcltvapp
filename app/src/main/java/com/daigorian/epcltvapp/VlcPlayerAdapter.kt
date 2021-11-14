@@ -167,7 +167,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
         if (!mInitialized) {
             return
         }
-        vlcPlayer.time = newPosition
+        vlcPlayer.setTime(newPosition,true)
     }
 
     override fun getBufferedPosition(): Long {
@@ -269,8 +269,8 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     }
                 }
                 Event.SeekableChanged -> {
-                    Log.d(TAG, "libvlc Event.SeekableChanged:" + event.seekable)
-                    mIsSeekable = event.seekable
+                    Log.d(TAG, "libvlc Event.SeekableChanged to : " + event.seekable)
+                    mSeekable = event.seekable
                     callback.onMetadataChanged(this@VlcPlayerAdapter)
                 }
                 Event.PausableChanged -> {

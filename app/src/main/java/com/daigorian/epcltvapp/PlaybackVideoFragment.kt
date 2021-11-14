@@ -36,6 +36,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
+        mTransportControlGlue.isSeekEnabled = true   // TODO: VlcPlayerAdapter has property for seek capability
         mTransportControlGlue.playWhenPrepared()
 
         val movieUrl = if(recordedProgram != null){
