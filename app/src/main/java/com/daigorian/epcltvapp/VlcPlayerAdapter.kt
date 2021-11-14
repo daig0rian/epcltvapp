@@ -43,7 +43,8 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     var mDuration = -1L
     var mEstimatedDuration = -1L
     var mTime = -1L
-    var mIsSeekable = false
+    var mSeekable = false
+    var mPauseable = false
 
     override fun onAttachedToHost(host: PlaybackGlueHost) {
         Log.d(TAG, "onAttachedToHost()")
@@ -239,6 +240,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 Event.Stopped -> {
                     // Playback of a media list player has stopped
                     Log.d(TAG, "libvlc Event.Stopped")
+                    callback.onPlayStateChanged(this@VlcPlayerAdapter)
                 }
                 Event.EndReached -> {
                     // A media list has reached the end.
@@ -274,7 +276,8 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     callback.onMetadataChanged(this@VlcPlayerAdapter)
                 }
                 Event.PausableChanged -> {
-                    Log.d(TAG, "libvlc Event.PausableChanged")
+                    Log.d(TAG, "libvlc Event.PausableChanged to : "+ event.pausable)
+                    mPauseable = event.pausable
                 }
                 Event.LengthChanged -> {
                     Log.d(TAG, "libvlc Event.LengthChanged to : " + event.lengthChanged)
