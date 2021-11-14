@@ -38,13 +38,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     var mMediaSourceUri: Uri? = null
     var mHasDisplay = false
     var mBufferedProgress: Long = 0
-    var mBufferingStart = false
-    fun notifyBufferingStartEnd() {
-        callback.onBufferingStateChanged(
-            this@VlcPlayerAdapter,
-            mBufferingStart || !mInitialized
-        )
-    }
+
 
     var mDuration = -1L
     var mEstimatedDuration = -1L
@@ -79,7 +73,6 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
         }
         if (mInitialized) {
             mInitialized = false
-            notifyBufferingStartEnd()
             if (mHasDisplay) {
                 callback.onPreparedStateChanged(this@VlcPlayerAdapter)
             }
@@ -208,8 +201,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 }
                 Event.Opening -> {
                     Log.d(TAG, "libvlc Event.Opening")
-                    mBufferingStart = true
-                    notifyBufferingStartEnd()
+                    callback.onBufferingStateChanged(this@VlcPlayerAdapter, true)
 
                     if (mSurfaceHolderGlueHost == null || mHasDisplay) {
                         callback.onPreparedStateChanged(this@VlcPlayerAdapter)
@@ -223,10 +215,6 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 Event.Playing -> {
                     Log.d(TAG, "libvlc Event.Playing")
                     callback.onPlayStateChanged(this@VlcPlayerAdapter)
-                    if(mBufferingStart){
-                        mBufferingStart= false
-                        notifyBufferingStartEnd()
-                    }
                 }
                 Event.Paused -> {
                     Log.d(TAG, "libvlc Event.Paused")
@@ -278,7 +266,9 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     callback.onDurationChanged(this@VlcPlayerAdapter)
                 }
                 Event.Vout -> {
-                    Log.d(TAG, "libvlc Event.Vout")
+                    Log.d(TAG, "libvlc Event.Vout. Vout count: " + event.voutCount)
+                    callback.onBufferingStateChanged(this@VlcPlayerAdapter, false)
+
                 }
                 Event.ESAdded -> {
                     // A track was added
@@ -303,8 +293,6 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
             }
 
         }
-        notifyBufferingStartEnd()
-        //callback.onPlayStateChanged(this@VlcPlayerAdapter)
     }
 
     /**
