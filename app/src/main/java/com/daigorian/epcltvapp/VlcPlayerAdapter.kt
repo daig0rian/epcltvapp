@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import android.util.Log
 import android.view.SurfaceHolder
+import android.widget.Toast
 import androidx.leanback.media.PlaybackBaseControlGlue
 import androidx.leanback.media.PlaybackGlueHost
 import androidx.leanback.media.PlayerAdapter
@@ -161,6 +162,36 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
         if (isPlaying) {
             vlcPlayer.pause()
         }
+    }
+
+    fun toggleClosedCaptioning(){
+        Log.d(TAG, "toggleClosedCaptioning()")
+        val currentSubtitleTrackId = vlcPlayer.spuTrack
+        Log.d(TAG, "  currentSubtitleTrack : $currentSubtitleTrackId")
+        Log.d(TAG, "  spuTracksCount : "+ vlcPlayer.spuTracksCount)
+        for ( spuTrack in vlcPlayer.spuTracks){
+            Log.d(TAG, "  id : " + spuTrack.id +"  name : " + spuTrack.name)
+        }
+
+        var currentSubtitleTrackIndex = -1
+        for ( i in vlcPlayer.spuTracks.indices){
+            if (vlcPlayer.spuTracks[i].id == currentSubtitleTrackId){
+                currentSubtitleTrackIndex = i
+            }
+        }
+        Log.d(TAG, "  currentSubtitleTrackIndex : $currentSubtitleTrackIndex")
+
+        var nextSubtitleTrackIndex = currentSubtitleTrackIndex + 1
+        if (vlcPlayer.spuTracksCount == nextSubtitleTrackIndex){
+            nextSubtitleTrackIndex = 0
+        }
+        Log.d(TAG, "  nextSubtitleTrackIndex : $nextSubtitleTrackIndex")
+        Log.d(TAG, "  nextSubtitleTrackId : " + vlcPlayer.spuTracks[nextSubtitleTrackIndex].id)
+        Log.d(TAG, "  nextSubtitleTrackName : "+ vlcPlayer.spuTracks[nextSubtitleTrackIndex].name)
+
+        vlcPlayer.spuTrack = vlcPlayer.spuTracks[nextSubtitleTrackIndex].id
+        Toast.makeText( mContext,vlcPlayer.spuTracks[nextSubtitleTrackIndex].name,Toast.LENGTH_SHORT).show()
+
     }
 
     override fun seekTo(newPosition: Long) {

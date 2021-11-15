@@ -1,10 +1,14 @@
 package com.daigorian.epcltvapp
 
+import android.content.Context
 import android.net.Uri
 import android.os.Bundle
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
 import androidx.leanback.media.PlaybackTransportControlGlue
+import androidx.leanback.media.PlayerAdapter
+import androidx.leanback.widget.Action
+import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.PlaybackControlsRow
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
@@ -14,7 +18,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 /** Handles video playback with media controls. */
 class PlaybackVideoFragment : VideoSupportFragment() {
 
-    private lateinit var mTransportControlGlue: PlaybackTransportControlGlue<VlcPlayerAdapter>
+    private lateinit var mTransportControlGlue: MyPlaybackTransportControlGlue<VlcPlayerAdapter>
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,7 +35,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val playerAdapter = VlcPlayerAdapter(requireContext())
         playerAdapter.setRepeatAction(PlaybackControlsRow.RepeatAction.INDEX_NONE)
 
-        mTransportControlGlue = PlaybackTransportControlGlue(activity, playerAdapter)
+        mTransportControlGlue = MyPlaybackTransportControlGlue(activity, playerAdapter)
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
@@ -56,5 +60,35 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     override fun onPause() {
         super.onPause()
         mTransportControlGlue.pause()
+    }
+
+    class MyPlaybackTransportControlGlue<T: PlayerAdapter>(context:Context? , impl:T )
+        : PlaybackTransportControlGlue<T>(context , impl)
+    {
+        private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext())
+
+        override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
+            super.onCreatePrimaryActions(primaryActionsAdapter)
+            primaryActionsAdapter.apply {
+                add(ccAction)
+            }
+        }
+
+        override fun onActionClicked(action: Action?) {
+            when(action) {
+                ccAction -> {
+                    // Handle ClosedCaptioningAction
+                    val pa = playerAdapter
+                    if (pa is VlcPlayerAdapter){
+                        pa.toggleClosedCaptioning()
+                    }
+                }
+                else ->
+                    // The superclass handles play/pause and delegates next/previous actions to abstract methods,
+                    // so those two methods should be overridden rather than handling the actions here.
+                    super.onActionClicked(action)
+            }
+        }
+
     }
 }
