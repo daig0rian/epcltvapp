@@ -166,19 +166,32 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
 
     fun toggleClosedCaptioning(){
         Log.d(TAG, "toggleClosedCaptioning()")
-        val currentSubtitleTrackId = vlcPlayer.spuTrack
 
-        var currentSubtitleTrackIndex = -1
-        for ( i in vlcPlayer.spuTracks.indices){
-            if (vlcPlayer.spuTracks[i].id == currentSubtitleTrackId){
-                currentSubtitleTrackIndex = i
+        if(vlcPlayer.spuTracks.isNullOrEmpty()) {
+            Toast.makeText(
+                mContext,
+                mContext.getString(R.string.no_subtitle),
+                Toast.LENGTH_SHORT
+            ).show()
+        }else{
+            val currentSubtitleTrackId = vlcPlayer.spuTrack
+
+            var currentSubtitleTrackIndex = -1
+            for (i in vlcPlayer.spuTracks.indices) {
+                if (vlcPlayer.spuTracks[i].id == currentSubtitleTrackId) {
+                    currentSubtitleTrackIndex = i
+                }
             }
+
+            val nextSubtitleTrackIndex = (currentSubtitleTrackIndex + 1) % vlcPlayer.spuTracksCount
+
+            vlcPlayer.spuTrack = vlcPlayer.spuTracks[nextSubtitleTrackIndex].id
+            Toast.makeText(
+                mContext,
+                vlcPlayer.spuTracks[nextSubtitleTrackIndex].name,
+                Toast.LENGTH_SHORT
+            ).show()
         }
-
-        val nextSubtitleTrackIndex = (currentSubtitleTrackIndex + 1) % vlcPlayer.spuTracksCount
-
-        vlcPlayer.spuTrack = vlcPlayer.spuTracks[nextSubtitleTrackIndex].id
-        Toast.makeText( mContext,vlcPlayer.spuTracks[nextSubtitleTrackIndex].name,Toast.LENGTH_SHORT).show()
 
     }
 

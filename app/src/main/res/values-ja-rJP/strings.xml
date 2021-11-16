@@ -44,5 +44,6 @@
     <string name="delete_failed">削除に失敗しました</string>
     <string name="delete">削除</string>
     <string name="cancel">キャンセル</string>
+    <string name="no_subtitle">字幕なし</string>
 
 </resources>

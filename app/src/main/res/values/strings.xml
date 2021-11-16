@@ -107,6 +107,7 @@
     <string name="delete_failed">Delete failed</string>
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
+    <string name="no_subtitle">No subtitle</string>
 
 
 </resources>
