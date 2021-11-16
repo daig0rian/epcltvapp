@@ -13,6 +13,7 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.MediaPlayer.*
+import org.videolan.libvlc.util.VLCVideoLayout
 import java.io.IOException
 import java.util.*
 import kotlin.math.roundToLong
@@ -29,7 +30,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      */
 
     // For LibVLC
-    private val args: ArrayList<String?> = arrayListOf("--verbose=0")
+    private val args: ArrayList<String?> = arrayListOf("--verbose=3")
     private val mLibVLC: LibVLC = LibVLC(mContext, args)
     private val vlcPlayer = MediaPlayer(mLibVLC)
 
@@ -123,6 +124,23 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
             vlcPlayer.vlcVout.detachViews()
         }
 
+        callback.onPreparedStateChanged(this@VlcPlayerAdapter)
+    }
+
+    fun setVLCVideoLayout(vlcVideoLayout: VLCVideoLayout?){
+        Log.d(TAG, "setVLCVideoLayout()")
+        val hadDisplay = mHasDisplay
+        mHasDisplay = vlcVideoLayout != null
+        if (hadDisplay == mHasDisplay) {
+            return
+        }
+        if(vlcVideoLayout != null){
+            vlcPlayer.attachViews(vlcVideoLayout,null, true, false)
+            mInitialized = true
+        }else{
+            mInitialized = false
+            vlcPlayer.detachViews()
+        }
         callback.onPreparedStateChanged(this@VlcPlayerAdapter)
     }
 

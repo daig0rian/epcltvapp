@@ -3,6 +3,12 @@ package com.daigorian.epcltvapp
 import android.content.Context
 import android.net.Uri
 import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.SurfaceView
+import android.view.View
+import android.view.ViewGroup
+import androidx.leanback.app.PlaybackSupportFragment
+import androidx.leanback.app.PlaybackSupportFragmentGlueHost
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
 import androidx.leanback.media.PlaybackTransportControlGlue
@@ -14,9 +20,12 @@ import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import org.videolan.libvlc.util.VLCVideoLayout
 
 /** Handles video playback with media controls. */
-class PlaybackVideoFragment : VideoSupportFragment() {
+class PlaybackVideoFragment : PlaybackSupportFragment() {
+
+    var mVLCVideoLayout: VLCVideoLayout? = null
 
     private lateinit var mTransportControlGlue: MyPlaybackTransportControlGlue<VlcPlayerAdapter>
 
@@ -31,7 +40,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val actionId =
             activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID) as Long
 
-        val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
+        val glueHost = PlaybackSupportFragmentGlueHost(this@PlaybackVideoFragment)
         val playerAdapter = VlcPlayerAdapter(requireContext())
         playerAdapter.setRepeatAction(PlaybackControlsRow.RepeatAction.INDEX_NONE)
 
@@ -55,6 +64,31 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         playerAdapter.setDataSource(Uri.parse(movieUrl))
+    }
+
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        val root = super.onCreateView(inflater, container, savedInstanceState) as ViewGroup?
+        mVLCVideoLayout = LayoutInflater.from(context).inflate(
+            R.layout.video_layout, root, false
+        ) as VLCVideoLayout
+        root?.addView(mVLCVideoLayout, 0)
+        if (mTransportControlGlue.playerAdapter is VlcPlayerAdapter){
+            mTransportControlGlue.playerAdapter.setVLCVideoLayout(mVLCVideoLayout)
+        }
+
+        return root
+    }
+
+    override fun onDestroyView() {
+        super.onDestroyView()
+        mVLCVideoLayout = null
+        if (mTransportControlGlue.playerAdapter is VlcPlayerAdapter){
+            mTransportControlGlue.playerAdapter.setVLCVideoLayout(mVLCVideoLayout)
+        }
     }
 
     override fun onPause() {
