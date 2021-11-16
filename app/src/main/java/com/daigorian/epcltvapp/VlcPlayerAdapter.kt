@@ -187,7 +187,15 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
         if (!mInitialized) {
             return
         }
-        vlcPlayer.setTime(newPosition,true)
+        if(mDuration>0) {
+            vlcPlayer.setTime(newPosition, false)
+        }else{
+            // TSなどlibvlcがsetTimeで秒数ジャンプできないコンテンツの場合は、setPositionで位置ジャンプする。
+            if(mEstimatedDuration>0) {
+                vlcPlayer.setPosition( newPosition/mEstimatedDuration.toFloat(),false)
+            }
+        }
+
     }
 
     override fun getBufferedPosition(): Long {
