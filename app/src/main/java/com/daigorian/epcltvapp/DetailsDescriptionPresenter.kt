@@ -3,6 +3,7 @@ package com.daigorian.epcltvapp
 import android.graphics.Paint
 import android.text.TextUtils
 import android.util.Log
+import android.text.format.DateFormat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,6 +14,7 @@ import androidx.leanback.widget.Presenter
 import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 import kotlin.math.floor
+import java.util.*
 
 class DetailsDescriptionPresenter : Presenter() {
     /**
@@ -189,14 +191,18 @@ class DetailsDescriptionPresenter : Presenter() {
     ) {
         if ( item is RecordedProgram) {
 
+            val startAt = DateFormat.format("MM/dd HH:mm",Date(item.startAt))
+            val endAt = DateFormat.format("HH:mm", Date(item.endAt))
             viewHolder.title.text = item.name
-            viewHolder.subtitle.text = item.description
-            viewHolder.body.text = item.extended
+            viewHolder.subtitle.text = item.description.orEmpty()
+            viewHolder.body.text = "$startAt〜$endAt\n\n${item.extended.orEmpty()}"
         }else if ( item is RecordedItem) {
 
+            val startAt = DateFormat.format("MM/dd HH:mm",Date(item.startAt))
+            val endAt = DateFormat.format("HH:mm", Date(item.endAt))
             viewHolder.title.text = item.name
-            viewHolder.subtitle.text = item.description
-            viewHolder.body.text = item.extended
+            viewHolder.subtitle.text = item.description.orEmpty()
+            viewHolder.body.text = "$startAt〜$endAt\n\n${item.extended.orEmpty()}"
         }
     }
 
