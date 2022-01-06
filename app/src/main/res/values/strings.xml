@@ -108,6 +108,8 @@
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
     <string name="no_subtitle">No subtitle</string>
+    <string name="start_end_duration">%1$s - %2$s (%3$d min.)</string>
+
 
 
 </resources>

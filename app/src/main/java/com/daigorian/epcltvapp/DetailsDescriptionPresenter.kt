@@ -2,18 +2,15 @@ package com.daigorian.epcltvapp
 
 import android.graphics.Paint
 import android.text.TextUtils
-import android.util.Log
-import android.text.format.DateFormat
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
-import androidx.leanback.widget.AbstractDetailsDescriptionPresenter
 import androidx.leanback.widget.Presenter
 import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
-import kotlin.math.floor
+import java.text.DateFormat
 import java.util.*
 
 class DetailsDescriptionPresenter : Presenter() {
@@ -189,20 +186,38 @@ class DetailsDescriptionPresenter : Presenter() {
         viewHolder: ViewHolder,
         item: Any
     ) {
+        val context = viewHolder.view.context
+
+        val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT)
+        val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT)
+
         if ( item is RecordedProgram) {
 
-            val startAt = DateFormat.format("MM/dd HH:mm",Date(item.startAt))
-            val endAt = DateFormat.format("HH:mm", Date(item.endAt))
+            val startAt = dfDateAndTime.format(Date(item.startAt))
+            val endAt = dfTime.format(Date(item.endAt))
+            val duration =  (item.endAt - item.startAt) / 60 / 1000
+            val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
+            // 日本語 locale   : 2022年1月4日 14:00 ～ 14:30 (60分)
+            // English locale : January 6, 2022 2:00 PM - 2:30 PM (60 min.)
+
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
-            viewHolder.body.text = "$startAt〜$endAt\n\n${item.extended.orEmpty()}"
+            viewHolder.body.text = recTimeInfo + "\n" +
+                    item.extended.orEmpty()
+
         }else if ( item is RecordedItem) {
 
-            val startAt = DateFormat.format("MM/dd HH:mm",Date(item.startAt))
-            val endAt = DateFormat.format("HH:mm", Date(item.endAt))
+            val startAt = dfDateAndTime.format(Date(item.startAt))
+            val endAt = dfTime.format(Date(item.endAt))
+            val duration =  (item.endAt - item.startAt) / 60 / 1000
+            val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
+            // 日本語 locale   : 2022年1月4日 14:00 ～ 14:30 (60分)
+            // English locale : January 6, 2022 2:00 PM - 2:30 PM (60 min.)
+
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
-            viewHolder.body.text = "$startAt〜$endAt\n\n${item.extended.orEmpty()}"
+            viewHolder.body.text = recTimeInfo + "\n" +
+                    item.extended.orEmpty()
         }
     }
 
