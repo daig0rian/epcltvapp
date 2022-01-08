@@ -197,8 +197,8 @@ class DetailsDescriptionPresenter : Presenter() {
             val endAt = dfTime.format(Date(item.endAt))
             val duration =  (item.endAt - item.startAt) / 60 / 1000
             val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
-            // 日本語 locale   : 2022年1月4日 14:00 ～ 14:30 (60分)
-            // English locale : January 6, 2022 2:00 PM - 2:30 PM (60 min.)
+            // 日本語 locale   : recTimeInfo == "2022年1月4日 14:00 ～ 14:30 (30分)"
+            // English locale : recTimeInfo == "January 4, 2022 2:00 PM - 2:30 PM (30 min.)"
 
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
@@ -211,8 +211,8 @@ class DetailsDescriptionPresenter : Presenter() {
             val endAt = dfTime.format(Date(item.endAt))
             val duration =  (item.endAt - item.startAt) / 60 / 1000
             val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
-            // 日本語 locale   : 2022年1月4日 14:00 ～ 14:30 (60分)
-            // English locale : January 6, 2022 2:00 PM - 2:30 PM (60 min.)
+            // 日本語 locale   : recTimeInfo == "2022年1月4日 14:00 ～ 14:30 (30分)"
+            // English locale : recTimeInfo == "January 4, 2022 2:00 PM - 2:30 PM (30 min.)"
 
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
