@@ -39,21 +39,25 @@
     <string name="pref_val_num_of_history_default" translatable="false">@string/pref_options_num_of_history_val_3</string>
 
     <string name="pref_options_movie_player_label_MX">MX Player (Default)</string>
+    <string name="pref_options_movie_player_label_MX_PRO">MX Player Pro</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
     <string name="pref_options_movie_player_label_INTERNAL">Internal (Not Recommended)</string>
 
     <string-array name="pref_options_movie_player_label" >
         <item>@string/pref_options_movie_player_label_MX</item>
+        <item>@string/pref_options_movie_player_label_MX_PRO</item>
         <item>@string/pref_options_movie_player_label_VLC</item>
         <item>@string/pref_options_movie_player_label_INTERNAL</item>
     </string-array>
 
     <string name="pref_options_movie_player_val_MX"       translatable="false">com.mxtech.videoplayer.ad</string>
+    <string name="pref_options_movie_player_val_MX_PRO"       translatable="false">com.mxtech.videoplayer.pro</string>
     <string name="pref_options_movie_player_val_VLC"      translatable="false">org.videolan.vlc</string>
     <string name="pref_options_movie_player_val_INTERNAL" translatable="false">com.daigorian.internal</string>
 
     <string-array name="pref_options_movie_player_val" >
         <item>@string/pref_options_movie_player_val_MX</item>
+        <item>@string/pref_options_movie_player_val_MX_PRO</item>
         <item>@string/pref_options_movie_player_val_VLC</item>
         <item>@string/pref_options_movie_player_val_INTERNAL</item>
     </string-array>
@@ -65,6 +69,8 @@
     <string name="pref_options_num_of_history_label_3">3 (Default)</string>
     <string name="pref_options_num_of_history_label_5">5</string>
     <string name="pref_options_num_of_history_label_8">8</string>
+    <string name="pref_options_num_of_history_label_13">13</string>
+    <string name="pref_options_num_of_history_label_21">21</string>
 
     <string-array name="pref_options_num_of_history_label" >
         <item>@string/pref_options_num_of_history_label_0</item>
@@ -73,6 +79,8 @@
         <item>@string/pref_options_num_of_history_label_3</item>
         <item>@string/pref_options_num_of_history_label_5</item>
         <item>@string/pref_options_num_of_history_label_8</item>
+        <item>@string/pref_options_num_of_history_label_13</item>
+        <item>@string/pref_options_num_of_history_label_21</item>
     </string-array>
     <string name="pref_options_num_of_history_val_0"  translatable="false">0</string>
     <string name="pref_options_num_of_history_val_1" translatable="false">1</string>
@@ -80,6 +88,8 @@
     <string name="pref_options_num_of_history_val_3" translatable="false">3</string>
     <string name="pref_options_num_of_history_val_5" translatable="false">5</string>
     <string name="pref_options_num_of_history_val_8" translatable="false">8</string>
+    <string name="pref_options_num_of_history_val_13" translatable="false">13</string>
+    <string name="pref_options_num_of_history_val_21" translatable="false">21</string>
 
     <string-array name="pref_options_num_of_history_val" >
         <item>@string/pref_options_num_of_history_val_0</item>
@@ -88,6 +98,8 @@
         <item>@string/pref_options_num_of_history_val_3</item>
         <item>@string/pref_options_num_of_history_val_5</item>
         <item>@string/pref_options_num_of_history_val_8</item>
+        <item>@string/pref_options_num_of_history_val_13</item>
+        <item>@string/pref_options_num_of_history_val_21</item>
     </string-array>
     <string name="by_rec_rules">By rules</string>
     <string name="search_history">Search history</string>

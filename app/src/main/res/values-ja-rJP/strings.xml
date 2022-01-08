@@ -16,6 +16,7 @@
     <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
     <string name="port_number_of_epgstation">EPGStation の PORT番号</string>
     <string name="pref_options_movie_player_label_MX">MX Player (デフォルト)</string>
+    <string name="pref_options_movie_player_label_MX_PRO">MX Player Pro</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
     <string name="pref_options_movie_player_label_INTERNAL">内蔵 (非推奨)</string>
     <string name="settings_title">設定</string>
@@ -32,6 +33,8 @@
     <string name="pref_options_num_of_history_label_3">3 (デフォルト)</string>
     <string name="pref_options_num_of_history_label_5">5</string>
     <string name="pref_options_num_of_history_label_8">8</string>
+    <string name="pref_options_num_of_history_label_13">13</string>
+    <string name="pref_options_num_of_history_label_21">21</string>
     <string name="by_rec_rules">録画ルール</string>
     <string name="search_history">検索履歴</string>
     <string name="program_name">番組名</string>
