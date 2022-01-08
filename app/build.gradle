@@ -12,7 +12,7 @@ android {
         minSdkVersion 22
         targetSdkVersion 30
         versionCode 26
-        versionName "1.26"
+        versionName "1.27"
 
     }
 
