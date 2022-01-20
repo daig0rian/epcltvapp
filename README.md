@@ -41,26 +41,10 @@ https://www.amazon.co.jp/dp/B0977CXK64/
  
 
 ## 今後やりたいこと
- - ~~動画リストの一番右に「さらに読み込む」ボタンの追加~~ DONE!
- - ~~検索履歴を残して再検索を楽にする~~ DONE !
- - ~~設定画面をLeanbackSettingsFragmentに変えてかっこよくする~~  DONE !
- - ~~検索画面をメイン画面とシームレスに接続する~~  DONE !
- - ~~割と入手性の良い端末であるAmazon FireTVシリーズへの対応~~  DONE !
- - ~~Amazonのストアでの公開~~  DONE !
- - ~~録画情報の表示画面が5行から伸びないのを直したい（直し方がわからない。）~~ DONE !
- - 見た目の改善
-   - カードビューをleanback showcase の Title + Descroption (Wide)にする。
-   - 設定ボタン等ををleanback showcase の ImageCardView with onFocusChange listener
- - ルールのソート機能改善
-   - 最新の録画がある順番に並べる
- - 内蔵プレイコメントとか表示してみたい。（何にも調べてない。）
+ https://github.com/daig0rian/epcltvapp/issues
 
-## たぶんできないこと
- - 録画予約関連UIの実装
-   -  ソファーにLeanback（ふんぞり返り）ながらリモコンでやる作業ではないのではないか説
-   -  ソファーでスマホからEPGStationの秀逸なUIを操作するのが現実的という説
-
-## 現在の公開状況
+## ストアへの公開状況
  - 2021/06/10 Google Play Storeでの公開審査完了 (3日間 審査1回目でパス)
  - 2021/06/11 Android TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
  - 2021/07/01 amazon appstore 公開審査完了 (26日間 審査7回目でパス)
+ - 以降、https://github.com/daig0rian/epcltvapp/releases　ごとに両ストアへリリースしています。
