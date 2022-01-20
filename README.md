@@ -47,4 +47,4 @@ https://www.amazon.co.jp/dp/B0977CXK64/
  - 2021/06/10 Google Play Storeでの公開審査完了 (3日間 審査1回目でパス)
  - 2021/06/11 Android TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
  - 2021/07/01 amazon appstore 公開審査完了 (26日間 審査7回目でパス)
- - 以降、https://github.com/daig0rian/epcltvapp/releases　ごとに両ストアへリリースしています。
+ - 以降、https://github.com/daig0rian/epcltvapp/releases ごとに両ストアへリリースしています。
