@@ -25,7 +25,8 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  
 
 ## 今後やりたいこと
- https://github.com/daig0rian/epcltvapp/issues
+ この試みに対して今後開発されることはない予定です。
+ 
 
 ## ストアへの公開状況
  - 2021/06/10 Google Play Storeでの公開審査完了 (3日間 審査1回目でパス)
