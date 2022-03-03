@@ -33,3 +33,4 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - 2021/07/01 amazon appstore 公開審査完了 (26日間 審査7回目でパス)
  - 以降、https://github.com/daig0rian/epcltvapp/releases ごとに両ストアへリリースしています。
  - 2022/03/04 Amazonアプリストアから削除されました
+ - 2022/03/04 Google Play Storeでの公開を停止しました
