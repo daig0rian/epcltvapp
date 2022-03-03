@@ -3,8 +3,6 @@
 
 リモコンの↑↓←→キー操作が基本となる Android TV / Fire TV から EPGStationの録画を見るために開発されました
 
-## デモ
-![](https://raw.githubusercontent.com/wiki/daig0rian/epcltvapp/images/demo.gif)
 
 ## Google Play URL
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
