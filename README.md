@@ -10,12 +10,6 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
  - PCのWebブラウザで上記URLにアクセスすると Android TV端末へ送信できます。
  - Android TV 端末上のPlay Storeでは epgst と検索すると見つかります。
 
-## amazon appstore URL
-https://www.amazon.co.jp/dp/B0977CXK64/
-
- - PCのWebブラウザで上記URLにアクセスすると Fire TV端末へ送信できます。
- - Fire TV ではリモコンに話しかけるインアプリ音声検索が使えません。(Fire TVの仕様)
-
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
  - Android TVのリモコンだけで操作が完結
@@ -46,3 +40,4 @@ https://www.amazon.co.jp/dp/B0977CXK64/
  - 2021/06/11 Android TV 端末への配信オプトイン審査完了 (操作から1日未満で完了)
  - 2021/07/01 amazon appstore 公開審査完了 (26日間 審査7回目でパス)
  - 以降、https://github.com/daig0rian/epcltvapp/releases ごとに両ストアへリリースしています。
+ - 2022/03/04 amazon appstore 公開終了 
