@@ -8,7 +8,6 @@
 https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 
  - PCのWebブラウザで上記URLにアクセスすると Android TV端末へ送信できます。
- - Android TV 端末上のPlay Storeでは epgst と検索すると見つかります。
 
 ## 特徴
  - Android TV むけ標準UIのLeanbackテーマを使用
@@ -19,15 +18,10 @@ https://play.google.com/store/apps/details?id=com.daigorian.epcltvapp
 ## 必要な環境
  - EPGStation Version 1.x.x or 2.x.x　
  - Android 5.1 以上の Android TV
-   - または
- - すべての Amazon Fire TV 
-   - Fire TV ではインアプリ音声検索が使えません。(Fire TVの仕様)
 
 ## テスト環境
  - SONY ブラビア KJ-43X8000H (4K液晶androidテレビ)
  - Google Chromecast with Google TV snow　GA01919-JP (HDMIドングル型 Android TV端末) 
- - Fire TV Stick - 第2世代（Fire OS 5)
- - Fire TV Stick 4K - 第1世代（Fire OS 6)
  - EPGStation Version 1.7.6
  - EPGStation Version 2.3.8
  
