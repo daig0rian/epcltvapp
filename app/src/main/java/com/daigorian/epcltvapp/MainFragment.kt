@@ -58,7 +58,7 @@ class MainFragment : BrowseSupportFragment() {
         adapter = mMainMenuAdapter
         mCardPresenter.objAdapter = mMainMenuAdapter
 
-        if(!SettingsFragment.isPreferenceAllExists(requireContext())){
+        if(!SettingsPrefs.isPreferenceAllExists(requireContext())){
             Log.i(TAG, "not all Preference exists")
             //設定されていないPreference項目があった場合は設定画面を開く
             val intent = Intent(requireContext(), SettingsActivity::class.java)
@@ -85,7 +85,7 @@ class MainFragment : BrowseSupportFragment() {
     override fun onResume() {
         Log.i(TAG, "onResume")
         super.onResume()
-        if(mNeedsReloadAllOnResume && SettingsFragment.isPreferenceAllExists(requireContext())) {
+        if(mNeedsReloadAllOnResume && SettingsPrefs.isPreferenceAllExists(requireContext())) {
             //設定画面から戻ってきたのでEPGStationの接続からやり直す
             initEPGStationApi()
             mNeedsReloadAllOnResume = false
