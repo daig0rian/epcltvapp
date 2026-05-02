@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.StateFlow
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 import kotlin.math.roundToLong
 
@@ -35,6 +36,9 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     // TS コンテンツは libVLC が尺を 0 と報告するため再生位置から概算する
     private var estimatedDuration = -1L
+
+    // 字幕トラックのインデックス (-1 = OFF)
+    private var subtitleTrackIndex = -1
 
     fun effectiveDuration(): Long = if (_duration.value > 0) _duration.value else estimatedDuration
 
@@ -134,15 +138,23 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
 
     fun toggleSubtitles() {
         val context = getApplication<Application>()
-        val spuTracks = vlcPlayer.spuTracks
-        if (spuTracks.isNullOrEmpty()) {
+        val tracks = vlcPlayer.getTracks(IMedia.Track.Type.Text)
+        if (tracks.isNullOrEmpty()) {
             Toast.makeText(context, context.getString(R.string.no_subtitle), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (subtitleTrackIndex < 0) {
+            subtitleTrackIndex = 0
+            vlcPlayer.selectTrack(tracks[0].id)
+            Toast.makeText(context, tracks[0].name, Toast.LENGTH_SHORT).show()
+        } else if (subtitleTrackIndex >= tracks.size - 1) {
+            subtitleTrackIndex = -1
+            vlcPlayer.unselectTrackType(IMedia.Track.Type.Text)
+            Toast.makeText(context, context.getString(R.string.subtitle_off), Toast.LENGTH_SHORT).show()
         } else {
-            val currentId  = vlcPlayer.spuTrack
-            val currentIdx = spuTracks.indexOfFirst { it.id == currentId }.takeIf { it >= 0 } ?: -1
-            val nextIdx    = (currentIdx + 1) % vlcPlayer.spuTracksCount
-            vlcPlayer.spuTrack = spuTracks[nextIdx].id
-            Toast.makeText(context, spuTracks[nextIdx].name, Toast.LENGTH_SHORT).show()
+            subtitleTrackIndex++
+            vlcPlayer.selectTrack(tracks[subtitleTrackIndex].id)
+            Toast.makeText(context, tracks[subtitleTrackIndex].name, Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -158,6 +170,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         _currentPosition.value = 0L
         _isCompleted.value    = false
         estimatedDuration     = -1L
+        subtitleTrackIndex    = -1
     }
 
     override fun onCleared() {
