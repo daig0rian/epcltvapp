@@ -14,7 +14,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 ## 技術スタック
 
 - **言語:** Kotlin 2.0.21
-- **UI:** Leanback (Android TV) ※将来的に Compose for TV への移行を計画
+- **UI:** Leanback (Android TV) + Compose for TV (Settings 画面移行済み) ※段階的に移行中
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
@@ -44,20 +44,31 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | targetSdk | 30 | **34** | compileSdk に合わせて更新 |
 | minSdk | 22 | **22 (変更なし)** | Fire TV 全世代サポート維持 |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
+| Compose BOM | (新規) | **2024.12.01** | Settings 画面 Compose 移行 |
+| tv-material | (新規) | **1.0.0** | Settings 画面 Compose 移行 |
+| activity-compose | (新規) | **1.9.3** | Settings 画面 Compose 移行 |
 
 ## 既知の技術的負債
 
-| 項目 | 状況 | 理由 |
+現時点で既知の技術的負債はなし。
+
+## Compose for TV 移行状況
+
+| 画面 | 状況 | 備考 |
 |------|------|------|
-| `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在しない。Leanback 自体が deprecated のため今後は Compose for TV への移行で解消予定 |
+| Settings | ✅ 完了 (2026-05-03) | `PreferenceFragment` 問題を同時解消 |
+| Search | 未着手 | Leanback `SearchSupportFragment` 使用中 |
+| Browse (メイン) | 未着手 | Leanback `BrowseSupportFragment` 使用中 |
+| Details | 未着手 | Leanback `DetailsSupportFragment` 使用中 |
+| Playback | 未着手 | Leanback `PlaybackSupportFragment` 使用中 |
 
 ## 将来の方針
 
 - **Leanback は deprecated**（Google 公式、2026年3月）。新機能追加なし・メンテナンスのみ。
 - **Compose for TV (`androidx.tv:tv-material`)** が Google 推奨の新方向。
-- 移行戦略：既存 Leanback Fragment に `ComposeView` を埋め込む段階的移行を計画。
-  - 最初のターゲット：Settings 画面（`PreferenceFragment` 問題も同時解消）
-- minSdkVersion は Compose 移行まで 22 を維持。移行時も Compose の最低要件 (API 21) を満たしており変更不要。
+- 移行戦略：Settings 完了後、Search → Browse → Details/Playback の順で段階的に移行。
+- `TvLazyColumn` は `tv-foundation:1.0.0` で削除済み。標準 `LazyColumn` を使用すること。
+- minSdkVersion は 22 を維持。Compose の最低要件 (API 21) を満たしており変更不要。
 
 ## セットアップ進捗
 
@@ -69,6 +80,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - [x] エミュレーター (Android TV API 30) での動作確認
 - [x] deprecated API 対応 (nonTransitiveRClass / Display.getMetrics / getSerializableExtra)
 - [x] compileSdk / targetSdk 34 への引き上げ・API 31〜34 行動変更対応
+- [x] Settings 画面を Compose for TV に移行 (PreferenceFragment 問題解消)
 
 ## 詳細ドキュメント
 
