@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.SurfaceView
@@ -32,13 +33,24 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val recordedProgram =
+        val recordedProgram = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM, RecordedProgram::class.java)
+        } else {
+            @Suppress("DEPRECATION")
             activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
-        val recordedItem =
+        }
+        val recordedItem = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDITEM, RecordedItem::class.java)
+        } else {
+            @Suppress("DEPRECATION")
             activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDITEM) as RecordedItem?
-
-        val actionId =
-            activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID) as Long
+        }
+        val actionId = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID, java.lang.Long::class.java)?.toLong() ?: 0L
+        } else {
+            @Suppress("DEPRECATION")
+            activity?.intent?.getSerializableExtra(DetailsActivity.ACTIONID) as? Long ?: 0L
+        }
 
         val glueHost = PlaybackSupportFragmentGlueHost(this@PlaybackVideoFragment)
         val playerAdapter = VlcPlayerAdapter(requireContext())

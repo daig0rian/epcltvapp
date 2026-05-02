@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
+import androidx.leanback.R as LeanbackR
 import androidx.leanback.widget.Presenter
 import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
@@ -82,32 +83,32 @@ class DetailsDescriptionPresenter : Presenter() {
             }
 
             init {
-                title = view.findViewById<View>(R.id.lb_details_description_title) as TextView
-                subtitle = view.findViewById<View>(R.id.lb_details_description_subtitle) as TextView
-                body = view.findViewById<View>(R.id.lb_details_description_body) as TextView
+                title = view.findViewById<View>(LeanbackR.id.lb_details_description_title) as TextView
+                subtitle = view.findViewById<View>(LeanbackR.id.lb_details_description_subtitle) as TextView
+                body = view.findViewById<View>(LeanbackR.id.lb_details_description_body) as TextView
                 val titleFontMetricsInt = getFontMetricsInt(title)
                 val titleAscent = view.resources.getDimensionPixelSize(
-                    R.dimen.lb_details_description_title_baseline
+                    LeanbackR.dimen.lb_details_description_title_baseline
                 )
                 // Ascent is negative
                 mTitleMargin = titleAscent + titleFontMetricsInt.ascent
                 mUnderTitleBaselineMargin = view.resources.getDimensionPixelSize(
-                    R.dimen.lb_details_description_under_title_baseline_margin
+                    LeanbackR.dimen.lb_details_description_under_title_baseline_margin
                 )
                 mUnderSubtitleBaselineMargin = view.resources.getDimensionPixelSize(
-                    R.dimen.lb_details_description_under_subtitle_baseline_margin
+                    LeanbackR.dimen.lb_details_description_under_subtitle_baseline_margin
                 )
                 mTitleLineSpacing = view.resources.getDimensionPixelSize(
-                    R.dimen.lb_details_description_title_line_spacing
+                    LeanbackR.dimen.lb_details_description_title_line_spacing
                 )
                 mBodyLineSpacing = view.resources.getDimensionPixelSize(
-                    R.dimen.lb_details_description_body_line_spacing
+                    LeanbackR.dimen.lb_details_description_body_line_spacing
                 )
                 mBodyMaxLines = view.resources.getInteger(
-                    R.integer.lb_details_description_body_max_lines
+                    LeanbackR.integer.lb_details_description_body_max_lines
                 )
                 mBodyMinLines = view.resources.getInteger(
-                    R.integer.lb_details_description_body_min_lines
+                    LeanbackR.integer.lb_details_description_body_min_lines
                 )
                 mTitleMaxLines = title.maxLines
                 mTitleFontMetricsInt = getFontMetricsInt(title)
@@ -119,7 +120,7 @@ class DetailsDescriptionPresenter : Presenter() {
     }
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         val v = LayoutInflater.from(parent.context)
-            .inflate(R.layout.lb_details_description, parent, false)
+            .inflate(LeanbackR.layout.lb_details_description, parent, false)
         return ViewHolder(v)
     }
 

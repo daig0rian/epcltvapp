@@ -185,15 +185,7 @@ class MainFragment : BrowseSupportFragment() {
         mBackgroundManager = BackgroundManager.getInstance(activity)
         mBackgroundManager.attach(requireActivity().window)
         mDefaultBackground = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
-        mMetrics = DisplayMetrics()
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            //from API LEVEL 30
-            requireActivity().display?.getRealMetrics(mMetrics)
-        }else{
-            //for lower API LEVEL
-            requireActivity().windowManager.defaultDisplay.getMetrics(mMetrics)
-        }
+        mMetrics = resources.displayMetrics
 
     }
 

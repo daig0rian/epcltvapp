@@ -4,6 +4,7 @@ import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.appcompat.R as AppCompatR
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.ImageCardView
@@ -58,7 +59,7 @@ class OriginalCardPresenter() : Presenter() {
 
         viewHolder.view.setOnLongClickListener{
 
-            AlertDialog.Builder(it.context, R.style.Theme_AppCompat_Light_Dialog_MinWidth)
+            AlertDialog.Builder(it.context, AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth)
                 .setTitle(it.context.getString(R.string.do_you_want_to_delete,cardView.titleText.toString()))
                 .setPositiveButton(it.context.getString(R.string.delete)) { dialog, which ->
                     when (item) {

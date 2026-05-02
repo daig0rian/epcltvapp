@@ -4,16 +4,25 @@ plugins {
 }
 
 android {
-    compileSdkVersion 30
-    buildToolsVersion "30.0.3"
+    namespace "com.daigorian.epcltvapp"
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.daigorian.epcltvapp"
         minSdkVersion 22
-        targetSdkVersion 30
+        targetSdkVersion 34
         versionCode 27
         versionName "1.27"
 
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
     }
 
     buildTypes {

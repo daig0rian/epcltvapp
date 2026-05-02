@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
@@ -54,9 +55,19 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         // EPGStationのバージョンによってintentで渡されてくるオブジェクトタイプが違う。
         // EPGStation Version 1.x.x
-        mSelectedRecordedProgram = requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
+        mSelectedRecordedProgram = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM, RecordedProgram::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
+        }
         // EPGStation Version 2.x.x
-        mSelectedRecordedItem= requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM) as RecordedItem?
+        mSelectedRecordedItem = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM, RecordedItem::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM) as RecordedItem?
+        }
 
         when {
             mSelectedRecordedProgram != null -> {
