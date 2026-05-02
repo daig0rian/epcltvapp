@@ -9,12 +9,13 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 ## 現在の状態
 
 休眠していたプロジェクト (最終リリース v1.27 / 2022年1月) の開発再開済み (2026-05-02)。
-依存関係・SDK バージョンを現代的な構成に更新し、ビルド・エミュレーター動作確認済み。
+依存関係・SDK バージョンを現代的な構成に更新し、UI を Compose for TV に移行中。
+最新リリース: **v1.28 (2026-05-03)**
 
 ## 技術スタック
 
 - **言語:** Kotlin 2.0.21
-- **UI:** Leanback (Android TV) + Compose for TV (Settings 画面移行済み) ※段階的に移行中
+- **UI:** Leanback (Android TV) + Compose for TV (Settings・Playback 移行済み) ※段階的に移行中
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
@@ -47,6 +48,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | Compose BOM | (新規) | **2024.12.01** | Settings 画面 Compose 移行 |
 | tv-material | (新規) | **1.0.0** | Settings 画面 Compose 移行 |
 | activity-compose | (新規) | **1.9.3** | Settings 画面 Compose 移行 |
+| libVLC | 3.4.7 | **4.0.0-eap24** | ARIB STD-B24 字幕対応 |
 
 ## 既知の技術的負債
 
@@ -60,7 +62,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | Search | 未着手 | Leanback `SearchSupportFragment` 使用中 |
 | Browse (メイン) | 未着手 | Leanback `BrowseSupportFragment` 使用中 |
 | Details | 未着手 | Leanback `DetailsSupportFragment` 使用中 |
-| Playback | 未着手 | Leanback `PlaybackSupportFragment` 使用中 |
+| Playback | ✅ 完了 (2026-05-03) | libVLC 4.0 + ARIB 字幕対応を同時実施 |
 
 ## 将来の方針
 
@@ -81,6 +83,8 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - [x] deprecated API 対応 (nonTransitiveRClass / Display.getMetrics / getSerializableExtra)
 - [x] compileSdk / targetSdk 34 への引き上げ・API 31〜34 行動変更対応
 - [x] Settings 画面を Compose for TV に移行 (PreferenceFragment 問題解消)
+- [x] Playback 画面を Compose for TV に移行 (PlaybackViewModel + PlaybackScreen)
+- [x] libVLC 4.0.0-eap24 にアップデート (ARIB STD-B24 字幕対応)
 
 ## 詳細ドキュメント
 
