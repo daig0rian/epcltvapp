@@ -111,8 +111,7 @@ class PlaybackViewModel(application: Application) : AndroidViewModel(application
         vlcPlayer.detachViews()
     }
 
-    fun play()  { if (!vlcPlayer.isPlaying) vlcPlayer.play() }
-    fun pause() { if (vlcPlayer.isPlaying)  vlcPlayer.pause() }
+    fun pause() { if (vlcPlayer.isPlaying) vlcPlayer.pause() }
 
     fun togglePlayPause() {
         if (vlcPlayer.isPlaying) vlcPlayer.pause() else vlcPlayer.play()
