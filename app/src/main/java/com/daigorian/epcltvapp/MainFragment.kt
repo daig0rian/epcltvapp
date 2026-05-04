@@ -608,6 +608,12 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun startBackgroundTimer() {
+        val showThumbnailBg = PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getBoolean(getString(R.string.pref_key_show_thumbnail_background), false)
+        if (!showThumbnailBg) {
+            mBackgroundManager.drawable = mDefaultBackground
+            return
+        }
         mBackgroundTimer?.cancel()
         mBackgroundTimer = Timer()
         mBackgroundTimer?.schedule(UpdateBackgroundTask(), BACKGROUND_UPDATE_DELAY.toLong())

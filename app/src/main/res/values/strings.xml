@@ -109,6 +109,9 @@
     <string name="set_newest_rule_first">Newest rule first</string>
     <string name="set_oldest_rule_first">Oldest rule first</string>
 
+    <string name="pref_key_show_thumbnail_background" translatable="false">KEY_SHOW_THUMBNAIL_BACKGROUND</string>
+    <string name="show_thumbnail_background">番組選択画面でサムネイルを背景表示する</string>
+
     <string name="pref_key_use_custom_base_url"   translatable="false">KEY_RULES_USE_CUSTOM_BASE_URL</string>
     <string name="use_custom_base_url">Use a custom EPGStation API base URL</string>
     <string name="pref_key_custom_base_url"   translatable="false">KEY_RULES_CUSTOM_BASE_URL</string>
