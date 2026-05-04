@@ -184,6 +184,7 @@ class MainFragment : BrowseSupportFragment() {
 
         mBackgroundManager = BackgroundManager.getInstance(activity)
         mBackgroundManager.attach(requireActivity().window)
+        mBackgroundManager.color = ContextCompat.getColor(requireContext(), R.color.background_no_thumbnail)
         mDefaultBackground = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
         mMetrics = resources.displayMetrics
 
