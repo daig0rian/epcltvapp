@@ -62,5 +62,5 @@ dependencies {
     implementation "androidx.preference:preference-ktx:$preference_version"
 
     //libVLC
-    implementation 'org.videolan.android:libvlc-all:3.4.7'
+    implementation 'org.videolan.android:libvlc-all:4.0.0-eap24'
 }
