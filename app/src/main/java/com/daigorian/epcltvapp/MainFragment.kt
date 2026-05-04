@@ -13,7 +13,9 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
@@ -198,8 +200,20 @@ class MainFragment : BrowseSupportFragment() {
 
         // set fastLane (or headers) background color
         brandColor = ContextCompat.getColor(requireContext(), R.color.background_epgstation)
-        // set search icon color
-        searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.search_opaque)
+        // 検索オーブ: アイコン #363636、背景はサイドバー文字色に合わせてフォーカスで変化
+        searchAffordanceColors = SearchOrbView.Colors(
+            Color.argb(0x66, 0xFF, 0xFF, 0xFF),  // 非フォーカス: 40% 白
+            Color.WHITE,                           // フォーカス時: 100% 白
+            Color.parseColor("#363636")            // アイコン色
+        )
+
+        // カスタムヘッダープレゼンターでサイドバーアイコンを設定
+        setHeaderPresenterSelector(object : PresenterSelector() {
+            private val iconPresenter = IconRowHeaderPresenter()
+            private val dividerPresenter = DividerPresenter()
+            override fun getPresenter(item: Any?): Presenter =
+                if (item is DividerRow) dividerPresenter else iconPresenter
+        })
     }
 
     private fun updateRows() {
@@ -359,7 +373,7 @@ class MainFragment : BrowseSupportFragment() {
         updateRows()
 
         //"設定"　のボタンが乗る行
-        val gridHeader = HeaderItem(getString(R.string.settings))
+        val gridHeader = HeaderItem(-Category.SETTINGS.ordinal.toLong(), getString(R.string.settings))
         val gridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
@@ -690,15 +704,15 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         Category.SEARCH_HISTORY ->{
                             //検索履歴というセクション行を、さらに上に加える
-                            super.add(index,SectionRow(getString(R.string.search_history)))
+                            super.add(index, SectionRow(HeaderItem(-Category.SEARCH_HISTORY.ordinal.toLong(), getString(R.string.search_history))))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
                             numOfRowInCategory[cat.ordinal]++
                         }
                         Category.RECORDED_BY_RULES ->{
-                            //検索結果というセクション行を、さらに上に加える
-                            super.add(index,SectionRow(getString(R.string.by_rec_rules)))
+                            //録画ルールというセクション行を、さらに上に加える
+                            super.add(index, SectionRow(HeaderItem(-Category.RECORDED_BY_RULES.ordinal.toLong(), getString(R.string.by_rec_rules))))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
@@ -900,6 +914,62 @@ class MainFragment : BrowseSupportFragment() {
         }
 
 
+    }
+
+    // ヘッダーID → アイコンリソースのマップ（負値はSectionRow/Settings用の固定ID）
+    private val sidebarIconMap: Map<Long, Int> by lazy {
+        mapOf(
+            Category.ON_RECORDING.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_rec,
+            Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
+            -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,
+            -Category.RECORDED_BY_RULES.ordinal.toLong() to R.drawable.ic_sidebar_calendar,
+            -Category.SETTINGS.ordinal.toLong() to R.drawable.ic_sidebar_settings
+        )
+    }
+
+    private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
+        override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
+            super.onBindViewHolder(viewHolder, item)
+            val row = item as? Row ?: return
+            val headerId = row.headerItem?.id ?: return
+            val iconResId = sidebarIconMap[headerId]
+            val root = viewHolder.view
+
+            // lb_row_header.xml の構造を ID に依存せず子ビューの型で解決する。
+            // ケース A: LinearLayout > ImageView (アイコンスロット) + RowHeaderView
+            val iconView = (root as? ViewGroup)?.let { vg ->
+                (0 until vg.childCount).mapNotNull { vg.getChildAt(it) as? ImageView }.firstOrNull()
+            }
+            if (iconView != null) {
+                if (iconResId != null) {
+                    iconView.setImageDrawable(ContextCompat.getDrawable(root.context, iconResId))
+                    iconView.visibility = View.VISIBLE
+                } else {
+                    // INVISIBLE にすることでアイコン幅のスペースを保持し、テキスト開始位置を揃える
+                    iconView.visibility = View.INVISIBLE
+                }
+                return
+            }
+
+            // ケース B: ImageView がない場合は TextView の compound drawable に設定
+            val textView = (root as? ViewGroup)?.let { vg ->
+                (0 until vg.childCount).mapNotNull { vg.getChildAt(it) as? TextView }.firstOrNull()
+            } ?: root as? TextView ?: return
+            if (iconResId != null) {
+                val drawable = ContextCompat.getDrawable(root.context, iconResId)
+                val size = textView.textSize.toInt().coerceAtLeast(32)
+                drawable?.setBounds(0, 0, size, size)
+                textView.setCompoundDrawables(drawable, null, null, null)
+                textView.compoundDrawablePadding = size / 3
+            } else {
+                // 透明プレースホルダーでテキスト開始位置を揃える
+                val size = textView.textSize.toInt().coerceAtLeast(32)
+                val placeholder = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+                placeholder.setBounds(0, 0, size, size)
+                textView.setCompoundDrawables(placeholder, null, null, null)
+                textView.compoundDrawablePadding = size / 3
+            }
+        }
     }
 
 
