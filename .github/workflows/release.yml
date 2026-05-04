@@ -53,3 +53,4 @@ jobs:
         with:
           files: app/build/outputs/apk/release/app-release.apk
           fail_on_unmatched_files: true
+          body_path: release-notes/${{ github.ref_name }}.md

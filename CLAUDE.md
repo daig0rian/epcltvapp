@@ -97,6 +97,21 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
    - PR URL をユーザーに報告し、テスト項目の消化を促す。
 4. `master` へ直接コミット・プッシュしない（緊急 hotfix・ドキュメント修正等の場合はユーザーに確認を取る）。
 
+### リリースフロー
+
+タグ (`v*`) を push すると GitHub Actions が自動的にリリース APK をビルドし GitHub Release を作成する。
+リリースノートは `release-notes/<タグ名>.md`（例: `release-notes/v1.29.md`）に置くと自動的に Release の本文に反映される。
+
+**リリース手順:**
+
+1. リリース対象の変更がすべて `master` にマージされていることを確認する。
+2. `app/build.gradle` の `versionCode` / `versionName` を更新してコミット・プッシュする。
+3. `release-notes/v<バージョン>.md` にエンドユーザー向けリリースノートを作成してコミット・プッシュする。
+   - Claude Code はこのファイルを書く役割を担う。
+   - 記載内容: 追加機能・変更点・削除された機能・ユーザーに対応が必要な事項。
+4. タグを打つ: `git tag v<バージョン> && git push origin v<バージョン>`
+5. GitHub Actions が自動的にビルド・署名・リリース作成・APK アップロードを行う。
+
 ## 詳細ドキュメント
 
 → [DEVELOPMENT.md](DEVELOPMENT.md) を参照
