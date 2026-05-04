@@ -941,7 +941,8 @@ class MainFragment : BrowseSupportFragment() {
                     iconView.setImageDrawable(ContextCompat.getDrawable(root.context, iconResId))
                     iconView.visibility = View.VISIBLE
                 } else {
-                    iconView.visibility = View.GONE
+                    // INVISIBLE にすることでアイコン幅のスペースを保持し、テキスト開始位置を揃える
+                    iconView.visibility = View.INVISIBLE
                 }
                 return
             }
@@ -957,7 +958,12 @@ class MainFragment : BrowseSupportFragment() {
                 textView.setCompoundDrawables(drawable, null, null, null)
                 textView.compoundDrawablePadding = size / 3
             } else {
-                textView.setCompoundDrawables(null, null, null, null)
+                // 透明プレースホルダーでテキスト開始位置を揃える
+                val size = textView.textSize.toInt().coerceAtLeast(32)
+                val placeholder = android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT)
+                placeholder.setBounds(0, 0, size, size)
+                textView.setCompoundDrawables(placeholder, null, null, null)
+                textView.compoundDrawablePadding = size / 3
             }
         }
     }
