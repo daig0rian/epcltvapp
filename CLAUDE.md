@@ -99,7 +99,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
    - `git checkout master && git pull origin master` でローカルを最新化する。
    - `git branch -d <ブランチ名>` でローカルブランチを削除する。
    - `git push origin --delete <ブランチ名>` でリモートブランチを削除する。
-5. `master` へ直接コミット・プッシュしない（緊急 hotfix・ドキュメント修正等の場合はユーザーに確認を取る）。
+5. `master` へ直接コミット・プッシュしない（緊急 hotfix・ドキュメント修正等の場合はユーザーに確認を取る）。ただし**リリース準備（バージョン番号更新・リリースノート作成）は直接 master にコミット**して構わない。コードの変更ではなくメタデータの更新であり、ブランチ/PR のオーバーヘッドに見合わないため。
 
 ### リリースフロー
 
@@ -109,11 +109,13 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 **リリース手順:**
 
 1. リリース対象の変更がすべて `master` にマージされていることを確認する。
-2. `app/build.gradle` の `versionCode` / `versionName` を更新してコミット・プッシュする。
-3. `release-notes/v<バージョン>.md` にエンドユーザー向けリリースノートを作成してコミット・プッシュする。
+2. **ブランチを切らず master で直接作業する**（リリース準備はメタデータ更新のため）。
+3. `app/build.gradle` の `versionCode` / `versionName` を更新する。
+4. `release-notes/v<バージョン>.md` にエンドユーザー向けリリースノートを作成する。
    - Claude Code はこのファイルを書く役割を担う。
    - 記載内容: 追加機能・変更点・削除された機能・ユーザーに対応が必要な事項。
-4. タグを打つ: `git tag v<バージョン> && git push origin v<バージョン>`
+5. 上記2ファイルをまとめて master にコミット・プッシュする。
+6. タグを打つ: `git tag v<バージョン> && git push origin v<バージョン>`
 5. GitHub Actions が自動的にビルド・署名・リリース作成・APK アップロードを行う。
 
 ## 詳細ドキュメント
