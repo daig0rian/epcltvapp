@@ -200,6 +200,14 @@ class MainFragment : BrowseSupportFragment() {
         brandColor = ContextCompat.getColor(requireContext(), R.color.background_epgstation)
         // set search icon color
         searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.search_opaque)
+
+        // カスタムヘッダープレゼンターでサイドバーアイコンを設定
+        setHeaderPresenterSelector(object : PresenterSelector() {
+            private val iconPresenter = IconRowHeaderPresenter()
+            private val dividerPresenter = DividerPresenter()
+            override fun getPresenter(item: Any?): Presenter =
+                if (item is DividerRow) dividerPresenter else iconPresenter
+        })
     }
 
     private fun updateRows() {
@@ -223,7 +231,6 @@ class MainFragment : BrowseSupportFragment() {
             // 既存の行がなければ、新たに作った行を追加する。
             if(listRow==null){
                 val header = HeaderItem( headerId , getString(R.string.now_on_recording))
-                header.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_rec)
                 mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
             }
 
@@ -275,8 +282,7 @@ class MainFragment : BrowseSupportFragment() {
             GetRecordedParamV2(),
             getString(R.string.recent_videos),
             Category.RECENTLY_RECORDED,
-            0L,
-            R.drawable.ic_sidebar_clock
+            0L
         )
 
 
@@ -361,8 +367,7 @@ class MainFragment : BrowseSupportFragment() {
         updateRows()
 
         //"設定"　のボタンが乗る行
-        val gridHeader = HeaderItem(getString(R.string.settings))
-        gridHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_settings)
+        val gridHeader = HeaderItem(-Category.SETTINGS.ordinal.toLong(), getString(R.string.settings))
         val gridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
@@ -693,9 +698,7 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         Category.SEARCH_HISTORY ->{
                             //検索履歴というセクション行を、さらに上に加える
-                            val searchHeader = HeaderItem(getString(R.string.search_history))
-                            searchHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_search)
-                            super.add(index,SectionRow(searchHeader))
+                            super.add(index, SectionRow(HeaderItem(-Category.SEARCH_HISTORY.ordinal.toLong(), getString(R.string.search_history))))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
@@ -703,9 +706,7 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         Category.RECORDED_BY_RULES ->{
                             //録画ルールというセクション行を、さらに上に加える
-                            val rulesHeader = HeaderItem(getString(R.string.by_rec_rules))
-                            rulesHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_calendar)
-                            super.add(index,SectionRow(rulesHeader))
+                            super.add(index, SectionRow(HeaderItem(-Category.RECORDED_BY_RULES.ordinal.toLong(), getString(R.string.by_rec_rules))))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
@@ -729,7 +730,7 @@ class MainFragment : BrowseSupportFragment() {
             }//synchronized
         }
 
-        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long, iconResId:Int? = null){
+        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
@@ -745,9 +746,6 @@ class MainFragment : BrowseSupportFragment() {
             // 既存の行がなければ、新たに作った行を追加する。
             if(listRow==null){
                 val header = HeaderItem( headerId ,title)
-                if(iconResId != null) {
-                    header.iconDrawable = ContextCompat.getDrawable(requireContext(), iconResId)
-                }
                 addToCategory(category,ListRow(header, listRowAdapter))
             }
 
@@ -910,6 +908,33 @@ class MainFragment : BrowseSupportFragment() {
         }
 
 
+    }
+
+    // ヘッダーID → アイコンリソースのマップ（負値はSectionRow/Settings用の固定ID）
+    private val sidebarIconMap: Map<Long, Int> by lazy {
+        mapOf(
+            Category.ON_RECORDING.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_rec,
+            Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
+            -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,
+            -Category.RECORDED_BY_RULES.ordinal.toLong() to R.drawable.ic_sidebar_calendar,
+            -Category.SETTINGS.ordinal.toLong() to R.drawable.ic_sidebar_settings
+        )
+    }
+
+    private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
+        override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
+            super.onBindViewHolder(viewHolder, item)
+            val row = item as? Row ?: return
+            val headerId = row.headerItem?.id ?: return
+            val textView = viewHolder.view as? TextView ?: return
+            val iconResId = sidebarIconMap[headerId]
+            if (iconResId != null) {
+                textView.setCompoundDrawablesWithIntrinsicBounds(iconResId, 0, 0, 0)
+                textView.compoundDrawablePadding = 16
+            } else {
+                textView.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+            }
+        }
     }
 
 
