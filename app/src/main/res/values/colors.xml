@@ -1,4 +1,5 @@
 <resources>
+    <color name="background_no_thumbnail">#121212</color>
     <color name="background_gradient_start">#000000</color>
     <color name="background_gradient_end">#DDDDDD</color>
     <color name="search_opaque">#ffaa3f</color>

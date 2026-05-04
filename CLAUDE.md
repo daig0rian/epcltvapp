@@ -70,6 +70,30 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - [x] deprecated API 対応 (nonTransitiveRClass / Display.getMetrics / getSerializableExtra)
 - [x] compileSdk / targetSdk 34 への引き上げ・API 31〜34 行動変更対応
 
+## 開発フロー (GitHub Flow)
+
+このリポジトリは **GitHub Flow** で開発する。Claude Code は以下のルールを必ず守ること。
+
+### ブランチ運用
+
+- `master` が常にデプロイ可能な状態を保つ唯一のメインブランチ。
+- 作業を始める前に必ず `master` から **フィーチャーブランチ** を切る。
+  - 命名: `feature/<概要>` / `fix/<概要>` / `chore/<概要>` など (kebab-case・英語)
+  - 例: `feature/compose-settings-screen`, `fix/subtitle-crash`
+- ブランチは作業単位ごとに切る。複数の無関係な変更を 1 ブランチにまとめない。
+
+### コミット・PR
+
+- 実装が完了したら `gh pr create` で **Pull Request** を作成し、レビュー待ちにする。
+- PR タイトルは変更内容を簡潔に表す日本語または英語。
+- マージ後は速やかにフィーチャーブランチを削除する。
+
+### Claude Code が守るべき行動
+
+1. ユーザーから実装タスクを受けたら、まず適切な名前のブランチを作成してから作業を開始する。
+2. 実装が一段落したら PR を作成し、ユーザーに URL を報告する。
+3. `master` へ直接コミット・プッシュしない（緊急 hotfix の場合はユーザーに確認を取る）。
+
 ## 詳細ドキュメント
 
 → [DEVELOPMENT.md](DEVELOPMENT.md) を参照
