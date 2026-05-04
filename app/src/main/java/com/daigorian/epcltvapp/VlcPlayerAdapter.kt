@@ -13,6 +13,7 @@ import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.MediaPlayer.*
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 import java.io.IOException
 import java.util.*
@@ -42,6 +43,9 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     var mBufferedProgress: Long = 0
 
 
+    // 字幕トラックのインデックス (-1 = OFF)
+    private var subtitleTrackIndex = -1
+
     var mDuration = -1L
     var mEstimatedDuration = -1L
     var mTime = -1L
@@ -64,6 +68,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     fun reset() {
         Log.d(TAG, "reset()")
         changeToUninitialized()
+        subtitleTrackIndex = -1
         vlcPlayer.stop()
         if(vlcPlayer.hasMedia()){
             vlcPlayer.media?.release()
@@ -184,33 +189,24 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
 
     fun toggleClosedCaptioning(){
         Log.d(TAG, "toggleClosedCaptioning()")
-
-        if(vlcPlayer.spuTracks.isNullOrEmpty()) {
-            Toast.makeText(
-                mContext,
-                mContext.getString(R.string.no_subtitle),
-                Toast.LENGTH_SHORT
-            ).show()
-        }else{
-            val currentSubtitleTrackId = vlcPlayer.spuTrack
-
-            var currentSubtitleTrackIndex = -1
-            for (i in vlcPlayer.spuTracks.indices) {
-                if (vlcPlayer.spuTracks[i].id == currentSubtitleTrackId) {
-                    currentSubtitleTrackIndex = i
-                }
-            }
-
-            val nextSubtitleTrackIndex = (currentSubtitleTrackIndex + 1) % vlcPlayer.spuTracksCount
-
-            vlcPlayer.spuTrack = vlcPlayer.spuTracks[nextSubtitleTrackIndex].id
-            Toast.makeText(
-                mContext,
-                vlcPlayer.spuTracks[nextSubtitleTrackIndex].name,
-                Toast.LENGTH_SHORT
-            ).show()
+        val tracks = vlcPlayer.getTracks(IMedia.Track.Type.Text)
+        if (tracks.isNullOrEmpty()) {
+            Toast.makeText(mContext, mContext.getString(R.string.no_subtitle), Toast.LENGTH_SHORT).show()
+            return
         }
-
+        if (subtitleTrackIndex < 0) {
+            subtitleTrackIndex = 0
+            vlcPlayer.selectTrack(tracks[0].id)
+            Toast.makeText(mContext, tracks[0].name, Toast.LENGTH_SHORT).show()
+        } else if (subtitleTrackIndex >= tracks.size - 1) {
+            subtitleTrackIndex = -1
+            vlcPlayer.unselectTrackType(IMedia.Track.Type.Text)
+            Toast.makeText(mContext, mContext.getString(R.string.subtitle_off), Toast.LENGTH_SHORT).show()
+        } else {
+            subtitleTrackIndex++
+            vlcPlayer.selectTrack(tracks[subtitleTrackIndex].id)
+            Toast.makeText(mContext, tracks[subtitleTrackIndex].name, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun seekTo(newPosition: Long) {
