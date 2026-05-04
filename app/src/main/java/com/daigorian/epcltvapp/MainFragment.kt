@@ -611,7 +611,7 @@ class MainFragment : BrowseSupportFragment() {
         val showThumbnailBg = PreferenceManager.getDefaultSharedPreferences(requireContext())
             .getBoolean(getString(R.string.pref_key_show_thumbnail_background), false)
         if (!showThumbnailBg) {
-            mBackgroundManager.drawable = mDefaultBackground
+            mBackgroundManager.color = ContextCompat.getColor(requireContext(), R.color.background_no_thumbnail)
             return
         }
         mBackgroundTimer?.cancel()
