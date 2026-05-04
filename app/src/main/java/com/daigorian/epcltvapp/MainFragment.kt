@@ -924,15 +924,30 @@ class MainFragment : BrowseSupportFragment() {
     private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
         override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
             super.onBindViewHolder(viewHolder, item)
-            val row = item as? Row ?: return
-            val headerId = row.headerItem?.id ?: return
-            val textView = viewHolder.view as? TextView ?: return
-            val iconResId = sidebarIconMap[headerId]
+
+            val row = item as? Row
+            Log.d(TAG, "IconPresenter bind: item=${item?.javaClass?.simpleName} row=$row")
+            if (row == null) return
+
+            val headerId = row.headerItem?.id
+            Log.d(TAG, "IconPresenter headerId=$headerId  mapKeys=${sidebarIconMap.keys}")
+
+            val textView = viewHolder.view as? TextView
+            Log.d(TAG, "IconPresenter view=${viewHolder.view?.javaClass?.simpleName}  textView=$textView")
+            if (textView == null) return
+
+            val iconResId = if (headerId != null) sidebarIconMap[headerId] else null
+            Log.d(TAG, "IconPresenter iconResId=$iconResId")
+
             if (iconResId != null) {
-                textView.setCompoundDrawablesWithIntrinsicBounds(iconResId, 0, 0, 0)
-                textView.compoundDrawablePadding = 16
+                val drawable = ContextCompat.getDrawable(textView.context, iconResId)
+                Log.d(TAG, "IconPresenter drawable=$drawable  intrinsic=${drawable?.intrinsicWidth}x${drawable?.intrinsicHeight}")
+                val sizePx = textView.textSize.toInt().coerceAtLeast(32)
+                drawable?.setBounds(0, 0, sizePx, sizePx)
+                textView.setCompoundDrawables(drawable, null, null, null)
+                textView.compoundDrawablePadding = sizePx / 3
             } else {
-                textView.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0)
+                textView.setCompoundDrawables(null, null, null, null)
             }
         }
     }
