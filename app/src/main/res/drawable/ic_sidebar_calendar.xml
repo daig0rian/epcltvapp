@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Calendar outline -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M3,6 L3,20 L21,20 L21,6 Z"/>
+    <!-- Top bar -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M3,10 L21,10"/>
+    <!-- Left pin -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M8,4 L8,7"/>
+    <!-- Right pin -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:pathData="M16,4 L16,7"/>
+    <!-- Date dots row 1 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,13 A1,1 0 1,1 7,15 A1,1 0 1,1 7,13 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,13 A1,1 0 1,1 12,15 A1,1 0 1,1 12,13 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M17,13 A1,1 0 1,1 17,15 A1,1 0 1,1 17,13 Z"/>
+    <!-- Date dots row 2 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M7,16.5 A1,1 0 1,1 7,18.5 A1,1 0 1,1 7,16.5 Z"/>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,16.5 A1,1 0 1,1 12,18.5 A1,1 0 1,1 12,16.5 Z"/>
+</vector>

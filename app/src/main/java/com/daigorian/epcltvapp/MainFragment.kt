@@ -223,6 +223,7 @@ class MainFragment : BrowseSupportFragment() {
             // 既存の行がなければ、新たに作った行を追加する。
             if(listRow==null){
                 val header = HeaderItem( headerId , getString(R.string.now_on_recording))
+                header.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_rec)
                 mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
             }
 
@@ -274,7 +275,8 @@ class MainFragment : BrowseSupportFragment() {
             GetRecordedParamV2(),
             getString(R.string.recent_videos),
             Category.RECENTLY_RECORDED,
-            0L
+            0L,
+            R.drawable.ic_sidebar_clock
         )
 
 
@@ -360,6 +362,7 @@ class MainFragment : BrowseSupportFragment() {
 
         //"設定"　のボタンが乗る行
         val gridHeader = HeaderItem(getString(R.string.settings))
+        gridHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_settings)
         val gridPresenter = GridItemPresenter()
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         gridRowAdapter.add(resources.getString(R.string.settings))
@@ -690,15 +693,19 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         Category.SEARCH_HISTORY ->{
                             //検索履歴というセクション行を、さらに上に加える
-                            super.add(index,SectionRow(getString(R.string.search_history)))
+                            val searchHeader = HeaderItem(getString(R.string.search_history))
+                            searchHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_search)
+                            super.add(index,SectionRow(searchHeader))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
                             numOfRowInCategory[cat.ordinal]++
                         }
                         Category.RECORDED_BY_RULES ->{
-                            //検索結果というセクション行を、さらに上に加える
-                            super.add(index,SectionRow(getString(R.string.by_rec_rules)))
+                            //録画ルールというセクション行を、さらに上に加える
+                            val rulesHeader = HeaderItem(getString(R.string.by_rec_rules))
+                            rulesHeader.iconDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_calendar)
+                            super.add(index,SectionRow(rulesHeader))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
                             super.add(index,DividerRow())
@@ -722,7 +729,7 @@ class MainFragment : BrowseSupportFragment() {
             }//synchronized
         }
 
-        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long){
+        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long, iconResId:Int? = null){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
@@ -738,6 +745,9 @@ class MainFragment : BrowseSupportFragment() {
             // 既存の行がなければ、新たに作った行を追加する。
             if(listRow==null){
                 val header = HeaderItem( headerId ,title)
+                if(iconResId != null) {
+                    header.iconDrawable = ContextCompat.getDrawable(requireContext(), iconResId)
+                }
                 addToCategory(category,ListRow(header, listRowAdapter))
             }
 

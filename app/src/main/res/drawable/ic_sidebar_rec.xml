@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer ring -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2"
+        android:pathData="M12,2 A10,10 0 1,1 12,22 A10,10 0 1,1 12,2 Z"/>
+    <!-- Inner filled circle (REC dot) -->
+    <path
+        android:fillColor="#FF4444"
+        android:pathData="M12,7 A5,5 0 1,1 12,17 A5,5 0 1,1 12,7 Z"/>
+</vector>

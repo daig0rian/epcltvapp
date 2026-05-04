@@ -4,6 +4,7 @@
     <color name="background_gradient_end">#DDDDDD</color>
     <color name="search_opaque">#ffaa3f</color>
     <color name="selected_background">#293475</color>
-    <color name="default_background">#3d3d3d</color>
-    <color name="background_epgstation">#3f51b5</color>
+    <color name="default_background">#1E1E1E</color>
+    <color name="background_epgstation">#363636</color>
+    <color name="card_background">#1E1E1E</color>
 </resources>
