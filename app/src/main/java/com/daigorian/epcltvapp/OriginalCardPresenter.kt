@@ -8,6 +8,7 @@ import android.widget.Toast
 import androidx.appcompat.R as AppCompatR
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.leanback.R as LeanbackR
 import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import com.bumptech.glide.Glide
@@ -55,8 +56,8 @@ class OriginalCardPresenter() : Presenter() {
         cardView.isFocusable = true
         cardView.isFocusableInTouchMode = true
         updateCardBackgroundColor(cardView, false)
-        cardView.findViewById<TextView>(R.id.title_text).maxLines = 3
-        cardView.findViewById<TextView>(R.id.content_text).maxLines = 4
+        cardView.findViewById<TextView>(LeanbackR.id.title_text).maxLines = 3
+        cardView.findViewById<TextView>(LeanbackR.id.content_text).maxLines = 4
         return ViewHolder(cardView)
     }
 
