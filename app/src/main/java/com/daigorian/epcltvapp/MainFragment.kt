@@ -13,9 +13,12 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Gravity
+import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.leanback.R as LeanbackR
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import androidx.leanback.app.BackgroundManager
@@ -924,30 +927,17 @@ class MainFragment : BrowseSupportFragment() {
     private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
         override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
             super.onBindViewHolder(viewHolder, item)
-
-            val row = item as? Row
-            Log.d(TAG, "IconPresenter bind: item=${item?.javaClass?.simpleName} row=$row")
-            if (row == null) return
-
-            val headerId = row.headerItem?.id
-            Log.d(TAG, "IconPresenter headerId=$headerId  mapKeys=${sidebarIconMap.keys}")
-
-            val textView = viewHolder.view as? TextView
-            Log.d(TAG, "IconPresenter view=${viewHolder.view?.javaClass?.simpleName}  textView=$textView")
-            if (textView == null) return
-
-            val iconResId = if (headerId != null) sidebarIconMap[headerId] else null
-            Log.d(TAG, "IconPresenter iconResId=$iconResId")
-
+            val row = item as? Row ?: return
+            val headerId = row.headerItem?.id ?: return
+            // Leanback の lb_row_header.xml は LinearLayout > ImageView(row_header_icon) + RowHeaderView の構造
+            val iconView = viewHolder.view.findViewById<ImageView>(LeanbackR.id.row_header_icon)
+                ?: return
+            val iconResId = sidebarIconMap[headerId]
             if (iconResId != null) {
-                val drawable = ContextCompat.getDrawable(textView.context, iconResId)
-                Log.d(TAG, "IconPresenter drawable=$drawable  intrinsic=${drawable?.intrinsicWidth}x${drawable?.intrinsicHeight}")
-                val sizePx = textView.textSize.toInt().coerceAtLeast(32)
-                drawable?.setBounds(0, 0, sizePx, sizePx)
-                textView.setCompoundDrawables(drawable, null, null, null)
-                textView.compoundDrawablePadding = sizePx / 3
+                iconView.setImageDrawable(ContextCompat.getDrawable(iconView.context, iconResId))
+                iconView.visibility = View.VISIBLE
             } else {
-                textView.setCompoundDrawables(null, null, null, null)
+                iconView.visibility = View.GONE
             }
         }
     }
