@@ -200,8 +200,12 @@ class MainFragment : BrowseSupportFragment() {
 
         // set fastLane (or headers) background color
         brandColor = ContextCompat.getColor(requireContext(), R.color.background_epgstation)
-        // set search icon color
-        searchAffordanceColor = ContextCompat.getColor(requireContext(), R.color.search_opaque)
+        // 検索オーブ: アイコン #363636、背景はサイドバー文字色に合わせてフォーカスで変化
+        searchAffordanceColors = SearchOrbView.Colors(
+            Color.argb(0x66, 0xFF, 0xFF, 0xFF),  // 非フォーカス: 40% 白
+            Color.WHITE,                           // フォーカス時: 100% 白
+            Color.parseColor("#363636")            // アイコン色
+        )
 
         // カスタムヘッダープレゼンターでサイドバーアイコンを設定
         setHeaderPresenterSelector(object : PresenterSelector() {
