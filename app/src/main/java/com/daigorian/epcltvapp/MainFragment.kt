@@ -18,7 +18,6 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
-import androidx.leanback.R as LeanbackR
 import androidx.core.app.ActivityOptionsCompat
 import androidx.core.content.ContextCompat
 import androidx.leanback.app.BackgroundManager
@@ -929,15 +928,36 @@ class MainFragment : BrowseSupportFragment() {
             super.onBindViewHolder(viewHolder, item)
             val row = item as? Row ?: return
             val headerId = row.headerItem?.id ?: return
-            // Leanback の lb_row_header.xml は LinearLayout > ImageView(row_header_icon) + RowHeaderView の構造
-            val iconView = viewHolder.view.findViewById<ImageView>(LeanbackR.id.row_header_icon)
-                ?: return
             val iconResId = sidebarIconMap[headerId]
+            val root = viewHolder.view
+
+            // lb_row_header.xml の構造を ID に依存せず子ビューの型で解決する。
+            // ケース A: LinearLayout > ImageView (アイコンスロット) + RowHeaderView
+            val iconView = (root as? ViewGroup)?.let { vg ->
+                (0 until vg.childCount).mapNotNull { vg.getChildAt(it) as? ImageView }.firstOrNull()
+            }
+            if (iconView != null) {
+                if (iconResId != null) {
+                    iconView.setImageDrawable(ContextCompat.getDrawable(root.context, iconResId))
+                    iconView.visibility = View.VISIBLE
+                } else {
+                    iconView.visibility = View.GONE
+                }
+                return
+            }
+
+            // ケース B: ImageView がない場合は TextView の compound drawable に設定
+            val textView = (root as? ViewGroup)?.let { vg ->
+                (0 until vg.childCount).mapNotNull { vg.getChildAt(it) as? TextView }.firstOrNull()
+            } ?: root as? TextView ?: return
             if (iconResId != null) {
-                iconView.setImageDrawable(ContextCompat.getDrawable(iconView.context, iconResId))
-                iconView.visibility = View.VISIBLE
+                val drawable = ContextCompat.getDrawable(root.context, iconResId)
+                val size = textView.textSize.toInt().coerceAtLeast(32)
+                drawable?.setBounds(0, 0, size, size)
+                textView.setCompoundDrawables(drawable, null, null, null)
+                textView.compoundDrawablePadding = size / 3
             } else {
-                iconView.visibility = View.GONE
+                textView.setCompoundDrawables(null, null, null, null)
             }
         }
     }
