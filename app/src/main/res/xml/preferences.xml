@@ -41,6 +41,11 @@
         app:title="@string/show_thumbnail_background" />
 
     <SwitchPreference
+        app:key="@string/pref_key_show_empty_rules"
+        app:defaultValue="true"
+        app:title="@string/show_empty_rules" />
+
+    <SwitchPreference
         app:key="@string/pref_key_use_custom_base_url"
         app:defaultValue="false"
         app:title="@string/use_custom_base_url" />

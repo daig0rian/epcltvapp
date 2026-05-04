@@ -736,6 +736,30 @@ class MainFragment : BrowseSupportFragment() {
             }//synchronized
         }
 
+        fun removeRowFromCategory(cat: Category, headerId: Long) {
+            synchronized(this) {
+                var rowIndex = -1
+                for (i in 0 until size()) {
+                    val row = get(i)
+                    if (row is ListRow && row.headerItem.id == headerId) {
+                        rowIndex = i
+                        break
+                    }
+                }
+                if (rowIndex == -1) return
+
+                super.removeItems(rowIndex, 1)
+                numOfRowInCategory[cat.ordinal]--
+
+                // DividerRow + SectionRow しか残っていない場合はそれも除去する
+                if (numOfRowInCategory[cat.ordinal] == 2) {
+                    val start = numOfRowInCategory.copyOfRange(0, cat.ordinal).sum()
+                    super.removeItems(start, 2)
+                    numOfRowInCategory[cat.ordinal] = 0
+                }
+            }
+        }
+
         fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
@@ -812,6 +836,13 @@ class MainFragment : BrowseSupportFragment() {
                                 recording = v1Pram.recording))
                         }
 
+                        // 録画0件かつ設定がOFFの場合はルール行を非表示にする
+                        if (getRecordedResponse.total == 0L && category == Category.RECORDED_BY_RULES) {
+                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
+                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                            if (!showEmptyRules) removeRowFromCategory(category, headerId)
+                        }
+
                     }
                 }
                 override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
@@ -866,6 +897,14 @@ class MainFragment : BrowseSupportFragment() {
                                 keyword = v2Param.keyword,
                                 hasOriginalFile = v2Param.hasOriginalFile))
                         }
+
+                        // 録画0件かつ設定がOFFの場合はルール行を非表示にする
+                        if (getRecordedResponse.total == 0 && category == Category.RECORDED_BY_RULES) {
+                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
+                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                            if (!showEmptyRules) removeRowFromCategory(category, headerId)
+                        }
+
                     }
                 }
                 override fun onFailure(call: Call<Records>, t: Throwable) {

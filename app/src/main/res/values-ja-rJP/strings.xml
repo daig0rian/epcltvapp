@@ -40,6 +40,7 @@
     <string name="program_name">番組名</string>
     <string name="set_newest_rule_first">録画ルールを新しい順に並べ替え</string>
     <string name="set_oldest_rule_first">録画ルールを古い順に並べ替え</string>
+    <string name="show_empty_rules">録画済み0件の録画ルールを表示する</string>
     <string name="use_custom_base_url">API Base URLを編集する</string>
     <string name="customize_base_url">API Base URL</string>
     <string name="do_you_want_to_delete">%1$s を削除しますか</string>
