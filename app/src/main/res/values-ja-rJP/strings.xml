@@ -40,6 +40,21 @@
     <string name="program_name">番組名</string>
     <string name="set_newest_rule_first">録画ルールを新しい順に並べ替え</string>
     <string name="set_oldest_rule_first">録画ルールを古い順に並べ替え</string>
+
+    <!-- Settings card labels -->
+    <string name="settings_connection">接続設定</string>
+    <string name="settings_player">再生設定</string>
+    <string name="settings_card_sort_newest">ルール/履歴 新しい順</string>
+    <string name="settings_card_sort_oldest">ルール/履歴 古い順</string>
+    <string name="settings_card_bg_on">背景表示オン</string>
+    <string name="settings_card_bg_off">背景表示オフ</string>
+    <string name="settings_card_rules_show">0件ルール表示</string>
+    <string name="settings_card_rules_hide">0件ルール非表示</string>
+
+    <!-- Settings sub-screen titles -->
+    <string name="settings_connection_title">接続設定</string>
+    <string name="settings_player_title">再生設定</string>
+    <string name="show_thumbnail_background">番組選択画面でサムネイルを背景表示する</string>
     <string name="show_empty_rules">録画済み0件の録画ルールを表示する</string>
     <string name="use_custom_base_url">API Base URLを編集する</string>
     <string name="customize_base_url">API Base URL</string>
