@@ -539,7 +539,7 @@ class MainFragment : BrowseSupportFragment() {
                                 if (newIsNewestFirst) getString(R.string.settings_card_sort_oldest) else getString(R.string.settings_card_sort_newest),
                                 SettingsCardPresenter.Item.Action.RULES_ORDER
                             ))
-                            reloadContentRows()
+                            mMainMenuAdapter.reverseRulesOrder()
                         }
                         SettingsCardPresenter.Item.Action.BACKGROUND -> {
                             val showBg = prefs.getBoolean(getString(R.string.pref_key_show_thumbnail_background), false)
@@ -561,7 +561,11 @@ class MainFragment : BrowseSupportFragment() {
                                 if (newShowEmptyRules) getString(R.string.settings_card_rules_hide) else getString(R.string.settings_card_rules_show),
                                 SettingsCardPresenter.Item.Action.EMPTY_RULES
                             ))
-                            reloadContentRows()
+                            if (newShowEmptyRules) {
+                                updateRows() // 行を追加するだけなので構造変化なし、フォーカス維持
+                            } else {
+                                mMainMenuAdapter.removeEmptyRuleRows() // 0件行だけを個別削除
+                            }
                         }
                     }
                 }
@@ -988,6 +992,38 @@ class MainFragment : BrowseSupportFragment() {
 
 
 
+
+        /** ルール行の並び順を物理的に逆転する（行の削除/追加なし → フォーカス維持） */
+        fun reverseRulesOrder() {
+            synchronized(this) {
+                val catOrdinal = Category.RECORDED_BY_RULES.ordinal
+                val totalInCat = numOfRowInCategory[catOrdinal]
+                val headerRows = 2 // DividerRow + SectionRow
+                val count = totalInCat - headerRows
+                if (count <= 1) return
+                val start = numOfRowInCategory.copyOfRange(0, catOrdinal).sum() + headerRows
+                for (i in 0 until count - 1) {
+                    move(start + count - 1, start + i)
+                }
+            }
+        }
+
+        /** 録画0件のルール行だけをピンポイントで削除する（他の行を削除しない → フォーカス維持） */
+        fun removeEmptyRuleRows() {
+            val catOrdinal = Category.RECORDED_BY_RULES.ordinal
+            val totalInCat = numOfRowInCategory[catOrdinal]
+            if (totalInCat == 0) return
+            val headerRows = 2 // DividerRow + SectionRow
+            val catStart = numOfRowInCategory.copyOfRange(0, catOrdinal).sum()
+            val emptyIds = mutableListOf<Long>()
+            for (i in catStart + headerRows until catStart + totalInCat) {
+                val row = get(i) as? ListRow ?: continue
+                if ((row.adapter as? ArrayObjectAdapter)?.size() == 0) {
+                    emptyIds.add(row.headerItem.id)
+                }
+            }
+            emptyIds.forEach { removeRowFromCategory(Category.RECORDED_BY_RULES, it) }
+        }
 
         fun sortRulesByRecordedDate(){
             synchronized(this){
