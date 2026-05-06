@@ -254,32 +254,33 @@ class MainFragment : BrowseSupportFragment() {
             val headerId = Category.ON_RECORDING.ordinal.toLong()*10000
 
             //同じIDを持つ既存の行があるか検索
-            val listRow = mMainMenuAdapter.getListRowByHeaderId(headerId)
-
-            // 既存の行があれば、それを取得する。なければ新たに作る。
-            val listRowAdapter = if(listRow==null)
-                ArrayObjectAdapter(mCardPresenter)
-            else
-                listRow.adapter as ArrayObjectAdapter
-
-
-            // 既存の行がなければ、新たに作った行を追加する。
-            if(listRow==null){
-                val header = HeaderItem( headerId , getString(R.string.now_on_recording))
-                mMainMenuAdapter.addToCategory(Category.ON_RECORDING,ListRow(header, listRowAdapter))
-            }
+            val existingListRow = mMainMenuAdapter.getListRowByHeaderId(headerId)
 
             // APIでロードするアイテムの数。既存のアイテムがある場合はその数だけロードする
-            val apiLimit = if (listRow==null)
+            val apiLimit = if (existingListRow == null)
                 EpgStationV2.default_limit.toInt()
             else
-                listRowAdapter.size()
-
+                (existingListRow.adapter as ArrayObjectAdapter).size()
 
             api.getRecording(limit = apiLimit).enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
                     response.body()?.let { getRecordingResponse ->
-                        if (getRecordingResponse.records.isNotEmpty()) {
+                        if (getRecordingResponse.records.isEmpty()) {
+                            // 録画中アイテムがなければ行を削除する
+                            if (mMainMenuAdapter.getListRowByHeaderId(headerId) != null) {
+                                mMainMenuAdapter.deleteCategory(Category.ON_RECORDING)
+                            }
+                        } else {
+                            // 行がなければ新たに作成する
+                            val currentListRow = mMainMenuAdapter.getListRowByHeaderId(headerId)
+                            val listRowAdapter = if (currentListRow == null) {
+                                ArrayObjectAdapter(mCardPresenter).also { adapter ->
+                                    val header = HeaderItem(headerId, getString(R.string.now_on_recording))
+                                    mMainMenuAdapter.addToCategory(Category.ON_RECORDING, ListRow(header, adapter))
+                                }
+                            } else {
+                                currentListRow.adapter as ArrayObjectAdapter
+                            }
 
                             //既存のリストにあって、レスポンスにないアイテムの削除
                             var horizontalIndex = 0
@@ -297,7 +298,7 @@ class MainFragment : BrowseSupportFragment() {
 
                             //レスポンスにあって、既存のリストにないアイテムの追加
                             getRecordingResponse.records.forEachIndexed { index, it ->
-                            if(listRowAdapter.indexOf(it) == -1){
+                                if(listRowAdapter.indexOf(it) == -1){
                                     listRowAdapter.add(index,it)
                                 }
                             }
