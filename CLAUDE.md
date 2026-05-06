@@ -29,7 +29,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **VS Code:** インストール済み (Claude Code 拡張で主に使用)
 - **JDK:** OpenJDK 21.0.10 (Android Studio バンドル)
   - パス: `C:\Program Files\Android\Android Studio\jbr`
-- **Android SDK:** `C:\Users\daigo\AppData\Local\Android\Sdk`
+- **Android SDK:** `C:\Users\<ユーザー名>\AppData\Local\Android\Sdk`
   - API 30 + Build-Tools 30.0.3 インストール済み
   - API 36.1 + Build-Tools 36.1.0 / 37.0.0 インストール済み (Standard セットアップ)
 
@@ -61,7 +61,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 
 ## セットアップ進捗
 
-- [x] リポジトリのクローン (`c:/Users/daigo/epcltvapp`)
+- [x] リポジトリのクローン
 - [x] Android Studio Panda 4 インストール
 - [x] Android SDK API 30 + Build-Tools 30.0.3 インストール
 - [x] Gradle sync
