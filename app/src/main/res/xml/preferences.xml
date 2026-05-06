@@ -2,61 +2,63 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     app:title="@string/settings_title">
 
-    <EditTextPreference
-        app:title=       "@string/ip_addr_of_epgstation"
-        app:key=         "@string/pref_key_ip_addr"
-        app:defaultValue="@string/pref_val_ip_addr_default"
-        app:dialogLayout="@xml/preference_single_line_edittext"
-        app:useSimpleSummaryProvider="true"
-        />
-    <EditTextPreference
-        app:title=       "@string/port_number_of_epgstation"
-        app:key=         "@string/pref_key_port_num"
-        app:defaultValue="@string/pref_val_port_num_default"
-        app:dialogLayout="@xml/preference_single_line_edittext"
-        app:useSimpleSummaryProvider="true"
-        />
+    <PreferenceScreen
+        app:key="@string/pref_key_screen_connection"
+        app:title="@string/settings_connection">
 
-    <ListPreference
-        app:key=         "@string/pref_key_player"
-        app:defaultValue="@string/pref_val_player_default"
-        app:title=       "@string/movie_player"
-        app:entries=     "@array/pref_options_movie_player_label"
-        app:entryValues= "@array/pref_options_movie_player_val"
-        app:useSimpleSummaryProvider="true"
-        />
+        <EditTextPreference
+            app:title=       "@string/ip_addr_of_epgstation"
+            app:key=         "@string/pref_key_ip_addr"
+            app:defaultValue="@string/pref_val_ip_addr_default"
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
 
-    <ListPreference
-        app:key=         "@string/pref_key_num_of_history"
-        app:defaultValue="@string/pref_val_num_of_history_default"
-        app:title=       "@string/num_of_history"
-        app:entries=     "@array/pref_options_num_of_history_label"
-        app:entryValues= "@array/pref_options_num_of_history_val"
-        app:useSimpleSummaryProvider="true"
-        />
+        <EditTextPreference
+            app:title=       "@string/port_number_of_epgstation"
+            app:key=         "@string/pref_key_port_num"
+            app:defaultValue="@string/pref_val_port_num_default"
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
 
-    <SwitchPreference
-        app:key="@string/pref_key_show_thumbnail_background"
-        app:defaultValue="false"
-        app:title="@string/show_thumbnail_background" />
+        <SwitchPreference
+            app:key="@string/pref_key_use_custom_base_url"
+            app:defaultValue="false"
+            app:title="@string/use_custom_base_url" />
 
-    <SwitchPreference
-        app:key="@string/pref_key_show_empty_rules"
-        app:defaultValue="true"
-        app:title="@string/show_empty_rules" />
+        <EditTextPreference
+            app:title=       "@string/customize_base_url"
+            app:key=         "@string/pref_key_custom_base_url"
+            app:defaultValue="@string/pref_val_custom_base_url_default"
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
 
-    <SwitchPreference
-        app:key="@string/pref_key_use_custom_base_url"
-        app:defaultValue="false"
-        app:title="@string/use_custom_base_url" />
+    </PreferenceScreen>
 
-    <EditTextPreference
-        app:title=       "@string/customize_base_url"
-        app:key=         "@string/pref_key_custom_base_url"
-        app:defaultValue="@string/pref_val_custom_base_url_default"
-        app:dialogLayout="@xml/preference_single_line_edittext"
-        app:useSimpleSummaryProvider="true"
-        />
+    <PreferenceScreen
+        app:key="@string/pref_key_screen_player"
+        app:title="@string/settings_player">
 
+        <ListPreference
+            app:key=         "@string/pref_key_player"
+            app:defaultValue="@string/pref_val_player_default"
+            app:title=       "@string/movie_player"
+            app:entries=     "@array/pref_options_movie_player_label"
+            app:entryValues= "@array/pref_options_movie_player_val"
+            app:useSimpleSummaryProvider="true"
+            />
+
+        <ListPreference
+            app:key=         "@string/pref_key_num_of_history"
+            app:defaultValue="@string/pref_val_num_of_history_default"
+            app:title=       "@string/num_of_history"
+            app:entries=     "@array/pref_options_num_of_history_label"
+            app:entryValues= "@array/pref_options_num_of_history_val"
+            app:useSimpleSummaryProvider="true"
+            />
+
+    </PreferenceScreen>
 
 </PreferenceScreen>

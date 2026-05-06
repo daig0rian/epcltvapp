@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sort descending: newest first. Lines with a downward arrow indicator. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Sort lines (longest to shortest) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,18h6v-2H3v2zM3,6v2h18V6H3zM3,13h12v-2H3v2z"/>
+    <!-- Down arrow at bottom right -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16,13v4.17l-1.59,-1.59L13,17l4,4l4,-4l-1.41,-1.41L18,17.17V13h-2z"/>
+</vector>
