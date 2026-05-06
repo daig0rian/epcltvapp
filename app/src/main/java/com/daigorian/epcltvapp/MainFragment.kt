@@ -224,11 +224,24 @@ class MainFragment : BrowseSupportFragment() {
         )
 
         // カスタムヘッダープレゼンターでサイドバーアイコンを設定
+        // SectionRow は DividerRow と同様に専用インスタンスを使い view pool を分離する。
+        // onCreateViewHolder でフォーカス不可を設定することで再利用時も安全に非フォーカスを維持できる。
         setHeaderPresenterSelector(object : PresenterSelector() {
             private val iconPresenter = IconRowHeaderPresenter()
             private val dividerPresenter = DividerPresenter()
-            override fun getPresenter(item: Any?): Presenter =
-                if (item is DividerRow) dividerPresenter else iconPresenter
+            private val sectionPresenter = object : IconRowHeaderPresenter() {
+                override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
+                    return super.onCreateViewHolder(parent).also { vh ->
+                        vh.view.isFocusable = false
+                        vh.view.isFocusableInTouchMode = false
+                    }
+                }
+            }
+            override fun getPresenter(item: Any?): Presenter = when (item) {
+                is DividerRow -> dividerPresenter
+                is SectionRow -> sectionPresenter
+                else -> iconPresenter
+            }
         })
     }
 
@@ -1059,7 +1072,7 @@ class MainFragment : BrowseSupportFragment() {
         )
     }
 
-    private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
+    private open inner class IconRowHeaderPresenter : RowHeaderPresenter() {
         override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
             super.onBindViewHolder(viewHolder, item)
             val row = item as? Row ?: return
