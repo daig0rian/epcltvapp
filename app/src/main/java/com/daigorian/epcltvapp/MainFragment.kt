@@ -1067,6 +1067,12 @@ class MainFragment : BrowseSupportFragment() {
             val iconResId = sidebarIconMap[headerId]
             val root = viewHolder.view
 
+            // SectionRow はキャプションとして使用するためフォーカス不要
+            if (item is SectionRow) {
+                root.isFocusable = false
+                root.isFocusableInTouchMode = false
+            }
+
             // lb_row_header.xml の構造を ID に依存せず子ビューの型で解決する。
             // ケース A: LinearLayout > ImageView (アイコンスロット) + RowHeaderView
             val iconView = (root as? ViewGroup)?.let { vg ->
