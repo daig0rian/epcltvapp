@@ -1072,7 +1072,7 @@ class MainFragment : BrowseSupportFragment() {
         )
     }
 
-    private inner class IconRowHeaderPresenter : RowHeaderPresenter() {
+    private open inner class IconRowHeaderPresenter : RowHeaderPresenter() {
         override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
             super.onBindViewHolder(viewHolder, item)
             val row = item as? Row ?: return
