@@ -408,6 +408,7 @@ class MainFragment : BrowseSupportFragment() {
             override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
                 response.body()?.let{ it ->
                     val rules = if(isNewestFirst){it.reversed()}else{it}
+                    val orderedIds = rules.map { rule -> rule.id.toLong() }
                     rules.forEach { rule ->
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
@@ -421,7 +422,8 @@ class MainFragment : BrowseSupportFragment() {
                             GetRecordedParamV2(ruleId= rule.id),
                             keyword,
                             Category.RECORDED_BY_RULES,
-                            rule.id
+                            rule.id,
+                            orderedIds
                         )
                     }
                 }
@@ -435,6 +437,7 @@ class MainFragment : BrowseSupportFragment() {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 response.body()?.rules?.let{ it ->
                     val rules = if(isNewestFirst){it.reversed()}else{it}
+                    val orderedIds = rules.map { rule -> rule.id.toLong() }
                     rules.forEach { rule ->
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
@@ -448,7 +451,8 @@ class MainFragment : BrowseSupportFragment() {
                             GetRecordedParamV2(ruleId= rule.id),
                             keyword,
                             Category.RECORDED_BY_RULES,
-                            rule.id
+                            rule.id,
+                            orderedIds
                         )
                     }
                 }
@@ -863,7 +867,7 @@ class MainFragment : BrowseSupportFragment() {
             }
         }
 
-        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long){
+        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long,orderedIds:List<Long>?=null){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
@@ -954,7 +958,11 @@ class MainFragment : BrowseSupportFragment() {
                             if (getRecordedResponse.total == 0L && !showEmptyRules) {
                                 return@let  // 空ルールは非表示のままスキップ
                             }
-                            addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                            if (orderedIds != null) {
+                                addToCategoryOrdered(category, ListRow(HeaderItem(headerId, title), listRowAdapter), idInCategory, orderedIds)
+                            } else {
+                                addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                            }
                         }
 
                         // 録画0件かつ設定がOFFの場合は既存ルール行を非表示にする
@@ -1026,7 +1034,11 @@ class MainFragment : BrowseSupportFragment() {
                             if (getRecordedResponse.total == 0 && !showEmptyRules) {
                                 return@let  // 空ルールは非表示のままスキップ
                             }
-                            addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                            if (orderedIds != null) {
+                                addToCategoryOrdered(category, ListRow(HeaderItem(headerId, title), listRowAdapter), idInCategory, orderedIds)
+                            } else {
+                                addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                            }
                         }
 
                         // 録画0件かつ設定がOFFの場合は既存ルール行を非表示にする
@@ -1066,37 +1078,29 @@ class MainFragment : BrowseSupportFragment() {
             emptyIds.forEach { removeRowFromCategory(Category.RECORDED_BY_RULES, it) }
         }
 
-        fun sortRulesByRecordedDate(){
-            synchronized(this){
-                //bubble sort で新しいのを下からあげていく
-                val startIndex = numOfRowInCategory.copyOfRange (0,Category.RECORDED_BY_RULES.ordinal).sum() +3
-                val endIndex = numOfRowInCategory.copyOfRange(0,Category.RECORDED_BY_RULES.ordinal+1).sum() -1
-                for(i in startIndex until endIndex){
-                    for(j in endIndex downTo i){
-                        //下のアイテムJ
-                        val itemJ = (get(j) as? ListRow)?.adapter
-                        //上のアイテムJ-1
-                        val itemJMinus1 = (get(j-1) as? ListRow)?.adapter
-
-                        if (itemJ != null && itemJ.size() >0){
-                            //下のアイテムに録画済の要素がある
-
-                            if (itemJMinus1 != null && itemJMinus1.size() >0) {
-                                //上のアイテムに録画済の要素がある
-                                //TODO :  EPGStation V2(RecordedItem) への対応
-                                val startTimeOfJ = (itemJ.get(0) as? RecordedProgram)?.startAt
-                                val startTimeOfJMinus1 = (itemJMinus1.get(0) as? RecordedProgram)?.startAt
-                                //下のアイテムが上のアイテムより録画時間が新しい
-                                if (startTimeOfJ != null && startTimeOfJMinus1 != null && startTimeOfJ > startTimeOfJMinus1) {
-                                    move(j, j - 1)
-                                }
-                            }else{
-                                //上のアイテムに録画済の要素がない
-                                move(j, j - 1)
-                            }
-                        }
+        fun addToCategoryOrdered(cat: Category, item: Any, idInCategory: Long, orderedIds: List<Long>) {
+            synchronized(this) {
+                if (numOfRowInCategory[cat.ordinal] == 0) {
+                    addToCategory(cat, item)
+                    return
+                }
+                val myOrderIndex = orderedIds.indexOf(idInCategory)
+                val catStart = numOfRowInCategory.copyOfRange(0, cat.ordinal).sum()
+                val headerRows = 2 // DividerRow + SectionRow
+                val ruleStart = catStart + headerRows
+                val ruleEnd = catStart + numOfRowInCategory[cat.ordinal]
+                var insertPos = ruleEnd
+                for (i in ruleStart until ruleEnd) {
+                    val row = get(i) as? ListRow ?: continue
+                    val existingId = row.headerItem.id - cat.ordinal.toLong() * 10000
+                    val existingOrderIndex = orderedIds.indexOf(existingId)
+                    if (myOrderIndex != -1 && (existingOrderIndex == -1 || existingOrderIndex > myOrderIndex)) {
+                        insertPos = i
+                        break
                     }
                 }
+                super.add(insertPos, item)
+                numOfRowInCategory[cat.ordinal]++
             }
         }
 
