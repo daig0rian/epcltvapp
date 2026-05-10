@@ -61,7 +61,7 @@ class MainFragment : BrowseSupportFragment() {
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
                 Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
+                setSelectedPosition(mMainMenuAdapter.size() - 1, false)
                 Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                 mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
                 mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
@@ -74,18 +74,18 @@ class MainFragment : BrowseSupportFragment() {
             getString(R.string.pref_key_show_empty_rules) -> {
                 val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
                 Log.d(TAG, "prefChanged: show_empty_rules=$showEmptyRules adapterSize=${mMainMenuAdapter.size()}")
-                setSelectedPosition(0, false)
+                setSelectedPosition(mMainMenuAdapter.size() - 1, false)
                 if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
             }
             getString(R.string.pref_key_num_of_history) -> {
                 Log.d(TAG, "prefChanged: num_of_history → setSelectedPosition(0) + deleteCategory(SEARCH_HISTORY)")
-                setSelectedPosition(0, false)
+                setSelectedPosition(mMainMenuAdapter.size() - 1, false)
                 mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                 updateRows()
             }
             "pref_key_search_histories" -> {
                 Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
+                setSelectedPosition(mMainMenuAdapter.size() - 1, false)
                 Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                 mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                 Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
@@ -151,7 +151,7 @@ class MainFragment : BrowseSupportFragment() {
                 mNeedsReloadHistoryOnResume = false
                 view?.post {
                     Log.d(TAG, "onResume: reloadHistory deferred → setSelectedPosition(0) adapterSize=${mMainMenuAdapter.size()}")
-                    setSelectedPosition(0, false)
+                    setSelectedPosition(mMainMenuAdapter.size() - 1, false)
                     Log.d(TAG, "onResume: reloadHistory deferred → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                     Log.d(TAG, "onResume: reloadHistory deferred → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
