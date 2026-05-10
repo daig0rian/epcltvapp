@@ -17,7 +17,6 @@
     <string name="port_number_of_epgstation">Port Number of EPGStation</string>
     <string name="version_of_epgstation">Version of EPGStation</string>
     <string name="reload">Reload</string>
-    <string name="num_of_history">Number of search histories</string>
 
 
     <!-- Error messages -->
@@ -118,23 +117,25 @@
     <string name="settings_player_title">Playback Settings</string>
 
     <!-- Display settings preference categories -->
+    <string name="pref_category_general_display">General</string>
     <string name="pref_category_rules_display">Rule Display</string>
     <string name="pref_category_history_display">History Display</string>
 
     <string name="pref_key_rules_order_is_newest_first"   translatable="false">KEY_RULES_ORDER_IS_NEWEST_FIRST</string>
-    <string name="set_newest_rule_first">Newest rule first</string>
-    <string name="set_oldest_rule_first">Oldest rule first</string>
+    <string name="set_newest_rule_first">Newest-first rule display</string>
+    <string name="set_oldest_rule_first">Oldest-first rule display</string>
 
     <string name="pref_key_show_empty_rules" translatable="false">KEY_SHOW_EMPTY_RULES</string>
-    <string name="show_empty_rules">Show recording rules with no recordings</string>
+    <string name="show_empty_rules">Empty rule display</string>
 
     <string name="pref_key_show_thumbnail_background" translatable="false">KEY_SHOW_THUMBNAIL_BACKGROUND</string>
-    <string name="show_thumbnail_background">番組選択画面でサムネイルを背景表示する</string>
+    <string name="show_thumbnail_background">Thumbnail background</string>
 
     <!-- History display -->
     <string name="pref_key_clear_history" translatable="false">pref_key_clear_history_action</string>
-    <string name="clear_history">Clear search history</string>
+    <string name="clear_history">Search history clear</string>
     <string name="history_cleared">Search history cleared</string>
+    <string name="num_of_history">Search history count</string>
 
     <string name="pref_key_use_custom_base_url"   translatable="false">KEY_RULES_USE_CUSTOM_BASE_URL</string>
     <string name="use_custom_base_url">Use a custom EPGStation API base URL</string>
