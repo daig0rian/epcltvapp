@@ -57,34 +57,42 @@ class MainFragment : BrowseSupportFragment() {
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
-                // isResumed チェック: SettingsActivity は透過テーマのため MainFragment は onPause のまま残る。
-                // onPause 中に行削除を行うと Leanback の SetSelectionRunnable が保存済み位置で crash するため、
-                // その場合は onResume の else -> updateRows() に委ねる。
                 if (isResumed) {
+                    Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
+                    Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                     updateRows()
+                } else {
+                    Log.d(TAG, "prefChanged: rules_order skipped (not resumed)")
                 }
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
-                // 行数変化なし。onPause 中でも安全にリアルタイム反映できる。
                 startBackgroundTimer()
             }
             getString(R.string.pref_key_show_empty_rules) -> {
                 if (isResumed) {
                     val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                    Log.d(TAG, "prefChanged: show_empty_rules=$showEmptyRules adapterSize=${mMainMenuAdapter.size()}")
                     if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
+                } else {
+                    Log.d(TAG, "prefChanged: show_empty_rules skipped (not resumed)")
                 }
             }
             getString(R.string.pref_key_num_of_history) -> {
-                // 件数変更は onResume で deleteCategory → updateRows() に委ねる
+                Log.d(TAG, "prefChanged: num_of_history → mNeedsReloadHistoryOnResume=true")
                 mNeedsReloadHistoryOnResume = true
             }
             "pref_key_search_histories" -> {
                 if (isResumed) {
+                    Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                    Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                     updateRows()
+                } else {
+                    Log.d(TAG, "prefChanged: search_histories skipped (not resumed)")
                 }
             }
         }
@@ -125,43 +133,52 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     override fun onResume() {
-        Log.i(TAG, "onResume")
+        Log.i(TAG, "onResume adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition flags[reloadAll=$mNeedsReloadAllOnResume conn=$mNeedsCheckConnectionOnResume hist=$mNeedsReloadHistoryOnResume]")
         super.onResume()
+        Log.d(TAG, "onResume after super: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when {
             mNeedsReloadAllOnResume && SettingsFragment.isPreferenceAllExists(requireContext()) -> {
-                // 初回起動など、接続設定が揃った後のフル初期化
+                Log.d(TAG, "onResume: branch=reloadAll")
                 initEPGStationApi()
                 mNeedsReloadAllOnResume = false
             }
             mNeedsCheckConnectionOnResume -> {
-                // 接続設定から戻ってきた場合、設定値が変わっていれば再接続
+                val changed = connectionKey() != mConnectionKeyBeforeSettings
+                Log.d(TAG, "onResume: branch=checkConnection changed=$changed")
                 mNeedsCheckConnectionOnResume = false
-                if (connectionKey() != mConnectionKeyBeforeSettings) {
+                if (changed) {
                     initEPGStationApi()
                 }
-                // 変わっていなければ何もしない
             }
             mNeedsReloadHistoryOnResume -> {
-                // 履歴行の読み直し
+                Log.d(TAG, "onResume: branch=reloadHistory → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                 mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                Log.d(TAG, "onResume: after deleteCategory(SEARCH_HISTORY) adapterSize=${mMainMenuAdapter.size()}")
                 updateRows()
                 mNeedsReloadHistoryOnResume = false
             }
             else -> {
+                Log.d(TAG, "onResume: branch=else → updateRows")
                 updateRows()
             }
         }
+    }
 
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
     }
 
     override fun onStart() {
         super.onStart()
+        Log.d(TAG, "onStart: registering prefListener adapterSize=${mMainMenuAdapter.size()}")
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .registerOnSharedPreferenceChangeListener(mDisplayPrefChangeListener)
     }
 
     override fun onStop() {
         super.onStop()
+        Log.d(TAG, "onStop: unregistering prefListener adapterSize=${mMainMenuAdapter.size()}")
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .unregisterOnSharedPreferenceChangeListener(mDisplayPrefChangeListener)
     }
