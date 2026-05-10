@@ -59,19 +59,29 @@ class MainFragment : BrowseSupportFragment() {
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
-                mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
-                updateRows()
+                // isResumed チェック: SettingsActivity は透過テーマのため MainFragment は onPause のまま残る。
+                // onPause 中に行削除を行うと Leanback の SetSelectionRunnable が保存済み位置で crash するため、
+                // その場合は onResume の else -> updateRows() に委ねる。
+                if (isResumed) {
+                    mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
+                    updateRows()
+                }
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
+                // 行数変化なし。onPause 中でも安全にリアルタイム反映できる。
                 startBackgroundTimer()
             }
             getString(R.string.pref_key_show_empty_rules) -> {
-                val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-                if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
+                if (isResumed) {
+                    val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                    if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
+                }
             }
             "pref_key_search_histories" -> {
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                updateRows()
+                if (isResumed) {
+                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                    updateRows()
+                }
             }
         }
     }
