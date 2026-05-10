@@ -4,6 +4,7 @@ import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.os.Build
@@ -54,6 +55,26 @@ class MainFragment : BrowseSupportFragment() {
     private val mCardPresenter = OriginalCardPresenter()
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
+
+    private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+        when (key) {
+            getString(R.string.pref_key_rules_order_is_newest_first) -> {
+                mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
+                updateRows()
+            }
+            getString(R.string.pref_key_show_thumbnail_background) -> {
+                startBackgroundTimer()
+            }
+            getString(R.string.pref_key_show_empty_rules) -> {
+                val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
+            }
+            "pref_key_search_histories" -> {
+                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                updateRows()
+            }
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.i(TAG, "onCreate")
@@ -117,6 +138,18 @@ class MainFragment : BrowseSupportFragment() {
             }
         }
 
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .registerOnSharedPreferenceChangeListener(mDisplayPrefChangeListener)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .unregisterOnSharedPreferenceChangeListener(mDisplayPrefChangeListener)
     }
 
     override fun onDestroy() {
@@ -408,8 +441,6 @@ class MainFragment : BrowseSupportFragment() {
         val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
         mSettingsRowAdapter = gridRowAdapter
 
-        val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-
         gridRowAdapter.add(SettingsCardPresenter.Item(
             R.drawable.ic_settings_connection,
             getString(R.string.settings_connection),
@@ -421,31 +452,14 @@ class MainFragment : BrowseSupportFragment() {
             SettingsCardPresenter.Item.Action.PLAYER
         ))
         gridRowAdapter.add(SettingsCardPresenter.Item(
+            R.drawable.ic_settings_image,
+            getString(R.string.settings_display),
+            SettingsCardPresenter.Item.Action.DISPLAY
+        ))
+        gridRowAdapter.add(SettingsCardPresenter.Item(
             R.drawable.ic_settings_reload,
             getString(R.string.reload),
             SettingsCardPresenter.Item.Action.RELOAD
-        ))
-
-        // ラベル・アイコンはクリック後に得られる状態を表す
-        val isNewestFirst = prefs.getBoolean(getString(R.string.pref_key_rules_order_is_newest_first), false)
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            if (isNewestFirst) R.drawable.ic_settings_sort_asc else R.drawable.ic_settings_sort_desc,
-            if (isNewestFirst) getString(R.string.settings_card_sort_oldest) else getString(R.string.settings_card_sort_newest),
-            SettingsCardPresenter.Item.Action.RULES_ORDER
-        ))
-
-        val showBg = prefs.getBoolean(getString(R.string.pref_key_show_thumbnail_background), false)
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_image,
-            if (showBg) getString(R.string.settings_card_bg_off) else getString(R.string.settings_card_bg_on),
-            SettingsCardPresenter.Item.Action.BACKGROUND
-        ))
-
-        val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            if (showEmptyRules) R.drawable.ic_settings_unfold_less else R.drawable.ic_settings_unfold_more,
-            if (showEmptyRules) getString(R.string.settings_card_rules_hide) else getString(R.string.settings_card_rules_show),
-            SettingsCardPresenter.Item.Action.EMPTY_RULES
         ))
 
         mMainMenuAdapter.addToCategory(Category.SETTINGS, ListRow(gridHeader, gridRowAdapter))
@@ -526,7 +540,6 @@ class MainFragment : BrowseSupportFragment() {
                     startActivity(intent, bundle)
                 }
                 is SettingsCardPresenter.Item -> {
-                    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
                     when (item.action) {
                         SettingsCardPresenter.Item.Action.CONNECTION -> {
                             mConnectionKeyBeforeSettings = connectionKey()
@@ -536,51 +549,17 @@ class MainFragment : BrowseSupportFragment() {
                             startActivity(intent)
                         }
                         SettingsCardPresenter.Item.Action.PLAYER -> {
-                            // 再生設定はコンテンツリストに影響しないので戻り時に再読み込みしない
                             val intent = Intent(context!!, SettingsActivity::class.java)
                             intent.putExtra(SettingsActivity.EXTRA_START_SCREEN, getString(R.string.pref_key_screen_player))
                             startActivity(intent)
                         }
+                        SettingsCardPresenter.Item.Action.DISPLAY -> {
+                            val intent = Intent(context!!, SettingsActivity::class.java)
+                            intent.putExtra(SettingsActivity.EXTRA_START_SCREEN, getString(R.string.pref_key_screen_display))
+                            startActivity(intent)
+                        }
                         SettingsCardPresenter.Item.Action.RELOAD -> {
                             reloadContentRows()
-                        }
-                        SettingsCardPresenter.Item.Action.RULES_ORDER -> {
-                            val isNewestFirst = prefs.getBoolean(getString(R.string.pref_key_rules_order_is_newest_first), false)
-                            val newIsNewestFirst = !isNewestFirst
-                            prefs.edit().putBoolean(getString(R.string.pref_key_rules_order_is_newest_first), newIsNewestFirst).commit()
-                            mSettingsRowAdapter?.replace(SETTINGS_IDX_RULES_ORDER, SettingsCardPresenter.Item(
-                                if (newIsNewestFirst) R.drawable.ic_settings_sort_asc else R.drawable.ic_settings_sort_desc,
-                                if (newIsNewestFirst) getString(R.string.settings_card_sort_oldest) else getString(R.string.settings_card_sort_newest),
-                                SettingsCardPresenter.Item.Action.RULES_ORDER
-                            ))
-                            mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
-                            updateRows()
-                        }
-                        SettingsCardPresenter.Item.Action.BACKGROUND -> {
-                            val showBg = prefs.getBoolean(getString(R.string.pref_key_show_thumbnail_background), false)
-                            val newShowBg = !showBg
-                            prefs.edit().putBoolean(getString(R.string.pref_key_show_thumbnail_background), newShowBg).commit()
-                            startBackgroundTimer()
-                            mSettingsRowAdapter?.replace(SETTINGS_IDX_BACKGROUND, SettingsCardPresenter.Item(
-                                R.drawable.ic_settings_image,
-                                if (newShowBg) getString(R.string.settings_card_bg_off) else getString(R.string.settings_card_bg_on),
-                                SettingsCardPresenter.Item.Action.BACKGROUND
-                            ))
-                        }
-                        SettingsCardPresenter.Item.Action.EMPTY_RULES -> {
-                            val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-                            val newShowEmptyRules = !showEmptyRules
-                            prefs.edit().putBoolean(getString(R.string.pref_key_show_empty_rules), newShowEmptyRules).commit()
-                            mSettingsRowAdapter?.replace(SETTINGS_IDX_EMPTY_RULES, SettingsCardPresenter.Item(
-                                if (newShowEmptyRules) R.drawable.ic_settings_unfold_less else R.drawable.ic_settings_unfold_more,
-                                if (newShowEmptyRules) getString(R.string.settings_card_rules_hide) else getString(R.string.settings_card_rules_show),
-                                SettingsCardPresenter.Item.Action.EMPTY_RULES
-                            ))
-                            if (newShowEmptyRules) {
-                                updateRows() // 行を追加するだけなので構造変化なし、フォーカス維持
-                            } else {
-                                mMainMenuAdapter.removeEmptyRuleRows() // 0件行だけを個別削除
-                            }
                         }
                     }
                 }
@@ -1123,11 +1102,6 @@ class MainFragment : BrowseSupportFragment() {
         private const val TAG = "MainFragment"
 
         private const val BACKGROUND_UPDATE_DELAY = 300
-
-        // loadRows() で追加する設定カードの順序インデックス
-        private const val SETTINGS_IDX_RULES_ORDER = 3
-        private const val SETTINGS_IDX_BACKGROUND  = 4
-        private const val SETTINGS_IDX_EMPTY_RULES  = 5
     }
 
 

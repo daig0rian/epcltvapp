@@ -111,6 +111,16 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 enableCustomBaseUrlUI(newValue as Boolean)
                 true
             }
+
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_clear_history))
+                ?.setOnPreferenceClickListener {
+                    PreferenceManager.getDefaultSharedPreferences(requireContext())
+                        .edit()
+                        .putString("pref_key_search_histories", "")
+                        .apply()
+                    Toast.makeText(activity, getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
+                    true
+                }
         }
 
         private fun enableCustomBaseUrlUI(boolean: Boolean) {

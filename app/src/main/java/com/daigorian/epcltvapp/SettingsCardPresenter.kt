@@ -16,7 +16,7 @@ class SettingsCardPresenter : Presenter() {
         val action: Action
     ) {
         enum class Action {
-            CONNECTION, PLAYER, RELOAD, RULES_ORDER, BACKGROUND, EMPTY_RULES
+            CONNECTION, PLAYER, DISPLAY, RELOAD
         }
     }
 
