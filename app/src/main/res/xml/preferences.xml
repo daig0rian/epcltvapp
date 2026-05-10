@@ -50,14 +50,54 @@
             app:useSimpleSummaryProvider="true"
             />
 
-        <ListPreference
-            app:key=         "@string/pref_key_num_of_history"
-            app:defaultValue="@string/pref_val_num_of_history_default"
-            app:title=       "@string/num_of_history"
-            app:entries=     "@array/pref_options_num_of_history_label"
-            app:entryValues= "@array/pref_options_num_of_history_val"
-            app:useSimpleSummaryProvider="true"
-            />
+    </PreferenceScreen>
+
+    <PreferenceScreen
+        app:key="@string/pref_key_screen_display"
+        app:title="@string/settings_display">
+
+        <PreferenceCategory
+            app:title="@string/pref_category_general_display">
+
+            <SwitchPreference
+                app:key=         "@string/pref_key_show_thumbnail_background"
+                app:defaultValue="false"
+                app:title=       "@string/show_thumbnail_background" />
+
+            <SwitchPreference
+                app:key=         "@string/pref_key_rules_order_is_newest_first"
+                app:defaultValue="false"
+                app:title=       "@string/set_newest_rule_first" />
+
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/pref_category_rules_display">
+
+            <SwitchPreference
+                app:key=         "@string/pref_key_show_empty_rules"
+                app:defaultValue="true"
+                app:title=       "@string/show_empty_rules" />
+
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/pref_category_history_display">
+
+            <ListPreference
+                app:key=         "@string/pref_key_num_of_history"
+                app:defaultValue="@string/pref_val_num_of_history_default"
+                app:title=       "@string/num_of_history"
+                app:entries=     "@array/pref_options_num_of_history_label"
+                app:entryValues= "@array/pref_options_num_of_history_val"
+                app:useSimpleSummaryProvider="true"
+                />
+
+            <Preference
+                app:key=  "@string/pref_key_clear_history"
+                app:title="@string/clear_history" />
+
+        </PreferenceCategory>
 
     </PreferenceScreen>
 

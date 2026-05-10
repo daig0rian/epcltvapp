@@ -34,6 +34,8 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val historyOnCreate = getHistory(requireContext())
+        Log.i(TAG, "onCreate historyCount=${historyOnCreate.size} history=${historyOnCreate}")
         mCardPresenter.objAdapter = mRowsAdapter
         setSearchResultProvider(this)
         setOnItemViewClickedListener(ItemViewClickedListener())
@@ -53,10 +55,20 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
         }
         mRowsAdapter.clear()
-        getHistory(requireContext()).forEach { queryHistory ->
+        historyOnCreate.forEach { queryHistory ->
             addResultRow(query = queryHistory, recodeHistory=false,showErrorToast = false)
         }
 
+    }
+
+    override fun onResume() {
+        super.onResume()
+        Log.i(TAG, "onResume rowsAdapterSize=${mRowsAdapter.size()}")
+    }
+
+    override fun onPause() {
+        super.onPause()
+        Log.d(TAG, "onPause rowsAdapterSize=${mRowsAdapter.size()}")
     }
 
     override fun onQueryTextChange(newQuery: String?): Boolean {
@@ -64,8 +76,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
     }
 
     override fun onQueryTextSubmit(query: String): Boolean {
-
-
+        Log.i(TAG, "onQueryTextSubmit query='$query'")
         if (!TextUtils.isEmpty(query)) {
             addResultRow(query)
         }
@@ -347,6 +358,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
     }
 
     private fun addHistory(keyword:String){
+        Log.d(TAG, "addHistory keyword='$keyword'")
         val pref = PreferenceManager.getDefaultSharedPreferences(context)
         val edit = pref.edit()
         var histories = pref.getString("pref_key_search_histories", "")

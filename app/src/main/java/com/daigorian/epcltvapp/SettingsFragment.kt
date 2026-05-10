@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.leanback.preference.LeanbackPreferenceFragment
 import androidx.leanback.preference.LeanbackSettingsFragment
@@ -15,6 +16,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
         const val ARG_START_SCREEN = "start_screen"
         private const val PREFERENCE_RESOURCE_ID = "preferenceResource"
         private const val PREFERENCE_ROOT = "root"
+        private const val TAG = "SettingsFragment"
 
         private const val IP_REGEX_PATTERN = """^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"""
         private const val PORT_REGEX_PATTERN = """^([1-9]|[1-9][0-9]{1,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"""
@@ -40,6 +42,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
 
     override fun onPreferenceStartInitialScreen() {
         val startScreen = arguments?.getString(ARG_START_SCREEN)
+        Log.i(TAG, "onPreferenceStartInitialScreen startScreen=$startScreen")
         mPreferenceFragment = buildPreferenceFragment(R.xml.preferences, startScreen)
         startPreferenceFragment(mPreferenceFragment!!)
     }
@@ -77,6 +80,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             val root = arguments.getString(PREFERENCE_ROOT, null)
             val prefResId = arguments.getInt(PREFERENCE_RESOURCE_ID)
+            Log.i(TAG, "PrefFragment.onCreatePreferences root=$root")
             if (root == null) {
                 addPreferencesFromResource(prefResId)
             } else {
@@ -87,6 +91,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
             ipAddressPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
                 val regex = Regex(pattern = IP_REGEX_PATTERN)
                 if (value.toString().matches(regex)) {
+                    Log.i(TAG, "pref ip_addr changed to '$value'")
                     true
                 } else {
                     Toast.makeText(activity, getString(R.string.not_a_valid_ipv4_addr, value.toString()), Toast.LENGTH_LONG).show()
@@ -98,6 +103,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
             portNumPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
                 val regex = Regex(pattern = PORT_REGEX_PATTERN)
                 if (value.toString().matches(regex)) {
+                    Log.i(TAG, "pref port_num changed to '$value'")
                     true
                 } else {
                     Toast.makeText(activity, getString(R.string.not_a_valid_port_num, value.toString()), Toast.LENGTH_LONG).show()
@@ -108,9 +114,21 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
             val useCustomBaseUrlPref = preferenceScreen.findPreference(getText(R.string.pref_key_use_custom_base_url)) as SwitchPreference?
             useCustomBaseUrlPref?.let { enableCustomBaseUrlUI(it.isChecked) }
             useCustomBaseUrlPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, newValue ->
+                Log.i(TAG, "pref use_custom_base_url changed to $newValue")
                 enableCustomBaseUrlUI(newValue as Boolean)
                 true
             }
+
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_clear_history))
+                ?.setOnPreferenceClickListener {
+                    Log.i(TAG, "pref clear_history clicked")
+                    PreferenceManager.getDefaultSharedPreferences(activity!!)
+                        .edit()
+                        .putString("pref_key_search_histories", "")
+                        .apply()
+                    Toast.makeText(activity, getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
+                    true
+                }
         }
 
         private fun enableCustomBaseUrlUI(boolean: Boolean) {

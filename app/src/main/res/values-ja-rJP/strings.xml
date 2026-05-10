@@ -26,7 +26,7 @@
     <string name="now_on_recording">録画中</string>
     <string name="reload">録画の再読み込み</string>
     <string name="programs_not_found">%1$s を含む録画は見つかりませんでした</string>
-    <string name="num_of_history">検索履歴の数</string>
+    <string name="num_of_history">検索履歴の表示件数</string>
     <string name="pref_options_num_of_history_label_0">0</string>
     <string name="pref_options_num_of_history_label_1">1</string>
     <string name="pref_options_num_of_history_label_2">2</string>
@@ -38,24 +38,27 @@
     <string name="by_rec_rules">録画ルール</string>
     <string name="search_history">検索履歴</string>
     <string name="program_name">番組名</string>
-    <string name="set_newest_rule_first">録画ルールを新しい順に並べ替え</string>
-    <string name="set_oldest_rule_first">録画ルールを古い順に並べ替え</string>
+    <string name="set_newest_rule_first">ルール/履歴の新しい順表示</string>
+    <string name="set_oldest_rule_first">ルール/履歴の古い順表示</string>
 
     <!-- Settings card labels -->
     <string name="settings_connection">接続設定</string>
     <string name="settings_player">再生設定</string>
-    <string name="settings_card_sort_newest">ルール/履歴 新しい順</string>
-    <string name="settings_card_sort_oldest">ルール/履歴 古い順</string>
-    <string name="settings_card_bg_on">背景表示オン</string>
-    <string name="settings_card_bg_off">背景表示オフ</string>
-    <string name="settings_card_rules_show">0件ルール表示</string>
-    <string name="settings_card_rules_hide">0件ルール非表示</string>
+    <string name="settings_display">表示設定</string>
 
     <!-- Settings sub-screen titles -->
     <string name="settings_connection_title">接続設定</string>
     <string name="settings_player_title">再生設定</string>
-    <string name="show_thumbnail_background">番組選択画面でサムネイルを背景表示する</string>
-    <string name="show_empty_rules">録画済み0件の録画ルールを表示する</string>
+
+    <!-- Display settings -->
+    <string name="pref_category_general_display">全体設定</string>
+    <string name="pref_category_rules_display">ルール表示設定</string>
+    <string name="pref_category_history_display">履歴表示設定</string>
+    <string name="show_thumbnail_background">サムネイル背景表示</string>
+    <string name="show_empty_rules">0件ルールの表示</string>
+    <string name="clear_history">検索履歴のクリア</string>
+    <string name="history_cleared">検索履歴をクリアしました</string>
+
     <string name="use_custom_base_url">API Base URLを編集する</string>
     <string name="customize_base_url">API Base URL</string>
     <string name="do_you_want_to_delete">%1$s を削除しますか</string>
