@@ -114,7 +114,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
 
             preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_clear_history))
                 ?.setOnPreferenceClickListener {
-                    PreferenceManager.getDefaultSharedPreferences(requireContext())
+                    PreferenceManager.getDefaultSharedPreferences(activity!!)
                         .edit()
                         .putString("pref_key_search_histories", "")
                         .apply()
