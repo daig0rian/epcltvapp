@@ -189,8 +189,9 @@ class DetailsDescriptionPresenter : Presenter() {
     ) {
         val context = viewHolder.view.context
 
-        val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT)
-        val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT)
+        val jst = TimeZone.getTimeZone("Asia/Tokyo")
+        val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT).also { it.timeZone = jst }
+        val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT).also { it.timeZone = jst }
 
         if ( item is RecordedProgram) {
 
@@ -198,12 +199,12 @@ class DetailsDescriptionPresenter : Presenter() {
             val endAt = dfTime.format(Date(item.endAt))
             val duration =  (item.endAt - item.startAt) / 60 / 1000
             val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
-            // 日本語 locale   : recTimeInfo == "2022年1月4日 14:00 ～ 14:30 (30分)"
-            // English locale : recTimeInfo == "January 4, 2022 2:00 PM - 2:30 PM (30 min.)"
+            val channelName = EpgStation.channelMap[item.channelId] ?: ""
+            val channelAndTime = if (channelName.isNotEmpty()) "$channelName　$recTimeInfo" else recTimeInfo
 
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
-            viewHolder.body.text = recTimeInfo + "\n" +
+            viewHolder.body.text = channelAndTime + "\n" +
                     item.extended.orEmpty()
 
         }else if ( item is RecordedItem) {
@@ -212,12 +213,12 @@ class DetailsDescriptionPresenter : Presenter() {
             val endAt = dfTime.format(Date(item.endAt))
             val duration =  (item.endAt - item.startAt) / 60 / 1000
             val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
-            // 日本語 locale   : recTimeInfo == "2022年1月4日 14:00 ～ 14:30 (30分)"
-            // English locale : recTimeInfo == "January 4, 2022 2:00 PM - 2:30 PM (30 min.)"
+            val channelName = item.channelId?.let { EpgStationV2.channelMap[it] } ?: ""
+            val channelAndTime = if (channelName.isNotEmpty()) "$channelName　$recTimeInfo" else recTimeInfo
 
             viewHolder.title.text = item.name
             viewHolder.subtitle.text = item.description.orEmpty()
-            viewHolder.body.text = recTimeInfo + "\n" +
+            viewHolder.body.text = channelAndTime + "\n" +
                     item.extended.orEmpty()
         }
     }

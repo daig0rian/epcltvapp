@@ -9,6 +9,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import retrofit2.Call
+import retrofit2.Callback
 import retrofit2.Retrofit.Builder
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.DELETE
@@ -42,6 +43,9 @@ object EpgStation {
 
         @GET("rules/list")
         fun getRulesList(): Call<List<RuleList>>
+
+        @GET("channels")
+        fun getChannels(): Call<List<ChannelItemV1>>
     }
 
     private var baseUrl:String = "http://192.168.0.0:8888/api/"
@@ -54,8 +58,19 @@ object EpgStation {
 
 
     var api: ApiInterface? = null
-
     var authForGlide : LazyHeaders? = null
+    var channelMap: Map<Long, String> = emptyMap()
+
+    fun fetchChannels() {
+        api?.getChannels()?.enqueue(object : Callback<List<ChannelItemV1>> {
+            override fun onResponse(call: Call<List<ChannelItemV1>>, response: retrofit2.Response<List<ChannelItemV1>>) {
+                response.body()?.let { list ->
+                    channelMap = list.associate { item -> item.id to item.name }
+                }
+            }
+            override fun onFailure(call: Call<List<ChannelItemV1>>, t: Throwable) {}
+        })
+    }
 
     fun initAPI(_baseUrl:String){
         baseUrl = _baseUrl

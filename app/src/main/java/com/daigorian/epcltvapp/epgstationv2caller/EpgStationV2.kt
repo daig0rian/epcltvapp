@@ -7,6 +7,7 @@ import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
 import retrofit2.Call
+import retrofit2.Callback
 import retrofit2.Retrofit.Builder
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.*
@@ -52,6 +53,9 @@ object EpgStationV2 {
         @GET("version")
         fun getVersion(
         ): Call<Version>
+
+        @GET("channels")
+        fun getChannels(): Call<List<ChannelItem>>
     }
 
 
@@ -68,6 +72,18 @@ object EpgStationV2 {
 
     var api: ApiInterface? = null
     var authForGlide : LazyHeaders? = null
+    var channelMap: Map<Long, String> = emptyMap()
+
+    fun fetchChannels() {
+        api?.getChannels()?.enqueue(object : Callback<List<ChannelItem>> {
+            override fun onResponse(call: Call<List<ChannelItem>>, response: retrofit2.Response<List<ChannelItem>>) {
+                response.body()?.let { list ->
+                    channelMap = list.associate { item -> item.id to item.halfWidthName.ifEmpty { item.name } }
+                }
+            }
+            override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {}
+        })
+    }
 
     fun initAPI(_baseUrl:String){
         baseUrl = _baseUrl

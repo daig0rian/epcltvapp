@@ -150,6 +150,8 @@
     <string name="no_subtitle">No subtitle</string>
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="start_end_duration">%1$s - %2$s (%3$d min.)</string>
+    <string name="program_info">Program Info</string>
+    <string name="close">Close</string>
 
 
 
