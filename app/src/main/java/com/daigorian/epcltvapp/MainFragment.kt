@@ -77,6 +77,10 @@ class MainFragment : BrowseSupportFragment() {
                     if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
                 }
             }
+            getString(R.string.pref_key_num_of_history) -> {
+                // 件数変更は onResume で deleteCategory → updateRows() に委ねる
+                mNeedsReloadHistoryOnResume = true
+            }
             "pref_key_search_histories" -> {
                 if (isResumed) {
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
