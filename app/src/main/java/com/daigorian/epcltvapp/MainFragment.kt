@@ -98,7 +98,8 @@ class MainFragment : BrowseSupportFragment() {
                     Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                     updateRows()
                 } else {
-                    Log.d(TAG, "prefChanged: search_histories skipped (not resumed)")
+                    Log.d(TAG, "prefChanged: search_histories (not resumed) → mNeedsReloadHistoryOnResume=true")
+                    mNeedsReloadHistoryOnResume = true
                 }
             }
         }
