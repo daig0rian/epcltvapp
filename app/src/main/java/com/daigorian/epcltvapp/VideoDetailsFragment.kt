@@ -31,6 +31,9 @@ import com.daigorian.epcltvapp.epgstationv2caller.Records
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
+import java.text.DateFormat
+import java.util.Date
+import java.util.TimeZone
 import kotlin.math.roundToInt
 
 /**
@@ -263,6 +266,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
 
 
+        actionAdapter.add(Action(ACTION_SHOW_DESCRIPTION, getString(R.string.program_info)))
+
         row.actionsAdapter = actionAdapter
 
         mAdapter.add(row)
@@ -284,6 +289,52 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         detailsPresenter.isParticipatingEntranceTransition = true
 
         detailsPresenter.onActionClickedListener = OnActionClickedListener { action ->
+
+            if (action.id == ACTION_SHOW_DESCRIPTION) {
+                val jst = TimeZone.getTimeZone("Asia/Tokyo")
+                val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT).also { it.timeZone = jst }
+                val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT).also { it.timeZone = jst }
+                val (programName, bodyText) = when {
+                    mSelectedRecordedProgram != null -> {
+                        val it = mSelectedRecordedProgram!!
+                        val channelName = EpgStation.channelMap[it.channelId] ?: ""
+                        val genreText = AribGenre.getGenreText(it.genre1, null)
+                        val recTimeInfo = getString(R.string.start_end_duration,
+                            dfDateAndTime.format(Date(it.startAt)),
+                            dfTime.format(Date(it.endAt)),
+                            (it.endAt - it.startAt) / 60 / 1000)
+                        val body = buildString {
+                            if (channelName.isNotEmpty()) { append(channelName); append("\n") }
+                            if (genreText.isNotEmpty()) { append(genreText); append("\n") }
+                            append(recTimeInfo)
+                            if (!it.description.isNullOrEmpty()) { append("\n\n"); append(it.description) }
+                            if (!it.extended.isNullOrEmpty()) { append("\n"); append(it.extended) }
+                        }
+                        Pair(it.name, body)
+                    }
+                    mSelectedRecordedItem != null -> {
+                        val it = mSelectedRecordedItem!!
+                        val channelName = it.channelId?.let { id -> EpgStationV2.channelMap[id] } ?: ""
+                        val genreText = AribGenre.getGenreText(it.genre1, it.subGenre1)
+                        val recTimeInfo = getString(R.string.start_end_duration,
+                            dfDateAndTime.format(Date(it.startAt)),
+                            dfTime.format(Date(it.endAt)),
+                            (it.endAt - it.startAt) / 60 / 1000)
+                        val body = buildString {
+                            if (channelName.isNotEmpty()) { append(channelName); append("\n") }
+                            if (genreText.isNotEmpty()) { append(genreText); append("\n") }
+                            append(recTimeInfo)
+                            if (!it.description.isNullOrEmpty()) { append("\n\n"); append(it.description) }
+                            if (!it.extended.isNullOrEmpty()) { append("\n"); append(it.extended) }
+                        }
+                        Pair(it.name, body)
+                    }
+                    else -> return@OnActionClickedListener
+                }
+                ProgramInfoDialogFragment.newInstance(programName, bodyText)
+                    .show(childFragmentManager, ProgramInfoDialogFragment.TAG)
+                return@OnActionClickedListener
+            }
 
             val playerPkgName = PreferenceManager.getDefaultSharedPreferences(requireContext()).getString(getString(R.string.pref_key_player),"")
             if( playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)) {
@@ -537,6 +588,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         private const val TAG = "VideoDetailsFragment"
 
         internal const val ACTION_WATCH_ORIGINAL_TS = 0L
+        internal const val ACTION_SHOW_DESCRIPTION = -1L
 
         private const val DETAIL_THUMB_WIDTH = 274
         private const val DETAIL_THUMB_HEIGHT = 274

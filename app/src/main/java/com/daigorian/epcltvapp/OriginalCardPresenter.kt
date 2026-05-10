@@ -148,7 +148,12 @@ class OriginalCardPresenter() : Presenter() {
             is RecordedProgram -> {
                 // EPGStation Version 1.x.x
                 cardView.titleText = item.name
-                cardView.contentText = "${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})\n${item.description ?: ""}"
+                val channelNameV1 = EpgStation.channelMap[item.channelId] ?: ""
+                cardView.contentText = buildString {
+                    if (channelNameV1.isNotEmpty()) { append(channelNameV1); append("\n") }
+                    append("${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})")
+                    if (!item.description.isNullOrEmpty()) { append("\n"); append(item.description) }
+                }
                 val thumbnailURL = EpgStation.getThumbnailURL(item.id.toString())
 
                 //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
@@ -168,7 +173,12 @@ class OriginalCardPresenter() : Presenter() {
             is RecordedItem -> {
                 // EPGStation Version 2.x.x
                 cardView.titleText = item.name
-                cardView.contentText = "${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})\n${item.description ?: ""}"
+                val channelNameV2 = item.channelId?.let { EpgStationV2.channelMap[it] } ?: ""
+                cardView.contentText = buildString {
+                    if (channelNameV2.isNotEmpty()) { append(channelNameV2); append("\n") }
+                    append("${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})")
+                    if (!item.description.isNullOrEmpty()) { append("\n"); append(item.description) }
+                }
                 //サムネのURLから画像をロードする。失敗した場合、録画中なら録画中アイコンを出す。そうでなければNO IMAGEアイコン。
 
                 val thumbnailURL = if(!item.thumbnails.isNullOrEmpty()){

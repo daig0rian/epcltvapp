@@ -68,5 +68,7 @@
     <string name="cancel">キャンセル</string>
     <string name="no_subtitle">字幕なし</string>
     <string name="start_end_duration">%1$s ～ %2$s (%3$d分)</string>
+    <string name="program_info">番組情報</string>
+    <string name="close">閉じる</string>
 
 </resources>

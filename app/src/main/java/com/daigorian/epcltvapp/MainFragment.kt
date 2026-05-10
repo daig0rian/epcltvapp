@@ -229,12 +229,14 @@ class MainFragment : BrowseSupportFragment() {
                             //Version 2で初期化
                             Log.d(TAG, "initEPGStationApi() detect Version 2.x.x")
                             EpgStationV2.initAPI(baseUrl)
+                            EpgStationV2.fetchChannels()
                             loadRows()
                         } else {
                             //Version 1で初期化
                             Log.d(TAG, "initEPGStationApi() detect Version 1.x.x")
                             EpgStationV2.api = null
                             EpgStation.initAPI(baseUrl)
+                            EpgStation.fetchChannels()
                             loadRows()
                         }
                     }

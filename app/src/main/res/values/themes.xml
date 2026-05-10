@@ -12,6 +12,11 @@
     </style>
 
 
+    <style name="ProgramInfoDialogTheme" parent="@style/Theme.AppCompat.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
     <style name="CustomizedSearch" parent="@style/Theme.Epcltvapp">
         <item name="android:windowBackground">@color/background_epgstation</item>
     </style>
