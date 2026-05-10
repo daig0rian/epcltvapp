@@ -61,6 +61,8 @@ class MainFragment : BrowseSupportFragment() {
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
                 if (isResumed) {
+                    Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
+                    setSelectedPosition(0, false)
                     Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
@@ -89,6 +91,8 @@ class MainFragment : BrowseSupportFragment() {
             }
             "pref_key_search_histories" -> {
                 if (isResumed) {
+                    Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
+                    setSelectedPosition(0, false)
                     Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                     Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
@@ -156,6 +160,8 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "onResume: branch=reloadHistory → deferring to view.post")
                 mNeedsReloadHistoryOnResume = false
                 view?.post {
+                    Log.d(TAG, "onResume: reloadHistory deferred → setSelectedPosition(0) adapterSize=${mMainMenuAdapter.size()}")
+                    setSelectedPosition(0, false)
                     Log.d(TAG, "onResume: reloadHistory deferred → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                     Log.d(TAG, "onResume: reloadHistory deferred → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
