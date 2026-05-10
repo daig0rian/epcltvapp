@@ -20,7 +20,31 @@
 
 ## インストール方法
 
- [Releases](https://github.com/daig0rian/epcltvapp/releases) の最新の `app-release.apk` を「Send Files To TV」などのアプリでTVに送信しインストール。
+### Downloader by AFTVnews を使う（推奨）
+
+1. Fire TV / Android TV の App Store から **[Downloader by AFTVnews](https://www.aftvnews.com/downloader/)** をインストールする。
+2. [Releases](https://github.com/daig0rian/epcltvapp/releases) の最新リリースノートに記載された **ショートコード（数字6桁）** を確認する。
+3. Downloader を起動し、ショートコードを入力すると APK が自動的にダウンロードされる。
+4. ダウンロード完了後、画面の案内に従ってインストールする。
+
+### APK を直接転送する（代替手段）
+
+[Releases](https://github.com/daig0rian/epcltvapp/releases) の最新 `app-release.apk` を「Send Files To TV」などのアプリで TV に送信しインストール。
+
+---
+
+## How to Install
+
+### Using Downloader by AFTVnews (Recommended)
+
+1. Install **[Downloader by AFTVnews](https://www.aftvnews.com/downloader/)** from the App Store on your Fire TV / Android TV.
+2. Open the [latest release notes](https://github.com/daig0rian/epcltvapp/releases) and find the **shortcode (6-digit number)** listed there.
+3. Launch Downloader, enter the shortcode, and the APK will be downloaded automatically.
+4. Follow the on-screen instructions to install after the download completes.
+
+### Sideload via file transfer (alternative)
+
+Download the latest `app-release.apk` from [Releases](https://github.com/daig0rian/epcltvapp/releases) and transfer it to your TV using an app such as "Send Files To TV".
 
 
 ## ストアへの公開状況
