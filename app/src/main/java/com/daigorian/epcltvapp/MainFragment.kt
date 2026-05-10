@@ -61,12 +61,14 @@ class MainFragment : BrowseSupportFragment() {
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
                 if (isResumed) {
-                    Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES) before=${mMainMenuAdapter.size()}")
+                    Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
                     mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
+                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
                     Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                     updateRows()
                 } else {
-                    Log.d(TAG, "prefChanged: rules_order skipped (not resumed)")
+                    Log.d(TAG, "prefChanged: rules_order skipped (not resumed) → mNeedsReloadHistoryOnResume=true")
+                    mNeedsReloadHistoryOnResume = true
                 }
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
@@ -151,11 +153,14 @@ class MainFragment : BrowseSupportFragment() {
                 }
             }
             mNeedsReloadHistoryOnResume -> {
-                Log.d(TAG, "onResume: branch=reloadHistory → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                Log.d(TAG, "onResume: after deleteCategory(SEARCH_HISTORY) adapterSize=${mMainMenuAdapter.size()}")
-                updateRows()
+                Log.d(TAG, "onResume: branch=reloadHistory → deferring to view.post")
                 mNeedsReloadHistoryOnResume = false
+                view?.post {
+                    Log.d(TAG, "onResume: reloadHistory deferred → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
+                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                    Log.d(TAG, "onResume: reloadHistory deferred → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
+                    updateRows()
+                }
             }
             else -> {
                 Log.d(TAG, "onResume: branch=else → updateRows")
@@ -386,8 +391,13 @@ class MainFragment : BrowseSupportFragment() {
         )
 
 
+        //ルール・履歴の並び順を表すフラグ。デフォルトfalse。
+        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
+
         //履歴行の追加
-        SearchFragment.getHistory(requireContext()).asReversed().forEachIndexed{ index, it ->
+        val historyList = SearchFragment.getHistory(requireContext())
+        val orderedHistory = if (isNewestFirst) historyList.asReversed() else historyList
+        orderedHistory.forEachIndexed { index, it ->
             mMainMenuAdapter.updateContentsListRowWithCategory(
                 GetRecordedParam(keyword = it),
                 GetRecordedParamV2(keyword = it),
@@ -396,9 +406,6 @@ class MainFragment : BrowseSupportFragment() {
                 index.toLong()
             )
         }
-
-        //ルールの並び順を表すフラグ。デフォルトfalse。
-        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
         EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {

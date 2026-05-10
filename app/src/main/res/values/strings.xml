@@ -122,8 +122,8 @@
     <string name="pref_category_history_display">History Display</string>
 
     <string name="pref_key_rules_order_is_newest_first"   translatable="false">KEY_RULES_ORDER_IS_NEWEST_FIRST</string>
-    <string name="set_newest_rule_first">Newest-first rule display</string>
-    <string name="set_oldest_rule_first">Oldest-first rule display</string>
+    <string name="set_newest_rule_first">Newest-first rule &amp; history display</string>
+    <string name="set_oldest_rule_first">Oldest-first rule &amp; history display</string>
 
     <string name="pref_key_show_empty_rules" translatable="false">KEY_SHOW_EMPTY_RULES</string>
     <string name="show_empty_rules">Empty rule display</string>
