@@ -60,47 +60,36 @@ class MainFragment : BrowseSupportFragment() {
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
-                if (isResumed) {
-                    Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
-                    setSelectedPosition(0, false)
-                    Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                    mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
-                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                    Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                    updateRows()
-                } else {
-                    Log.d(TAG, "prefChanged: rules_order skipped (not resumed) → mNeedsReloadHistoryOnResume=true")
-                    mNeedsReloadHistoryOnResume = true
-                }
+                Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
+                setSelectedPosition(0, false)
+                Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
+                mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
+                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
+                updateRows()
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
                 startBackgroundTimer()
             }
             getString(R.string.pref_key_show_empty_rules) -> {
-                if (isResumed) {
-                    val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-                    Log.d(TAG, "prefChanged: show_empty_rules=$showEmptyRules adapterSize=${mMainMenuAdapter.size()}")
-                    if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
-                } else {
-                    Log.d(TAG, "prefChanged: show_empty_rules skipped (not resumed)")
-                }
+                val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                Log.d(TAG, "prefChanged: show_empty_rules=$showEmptyRules adapterSize=${mMainMenuAdapter.size()}")
+                setSelectedPosition(0, false)
+                if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
             }
             getString(R.string.pref_key_num_of_history) -> {
-                Log.d(TAG, "prefChanged: num_of_history → mNeedsReloadHistoryOnResume=true")
-                mNeedsReloadHistoryOnResume = true
+                Log.d(TAG, "prefChanged: num_of_history → setSelectedPosition(0) + deleteCategory(SEARCH_HISTORY)")
+                setSelectedPosition(0, false)
+                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                updateRows()
             }
             "pref_key_search_histories" -> {
-                if (isResumed) {
-                    Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
-                    setSelectedPosition(0, false)
-                    Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                    Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                    updateRows()
-                } else {
-                    Log.d(TAG, "prefChanged: search_histories (not resumed) → mNeedsReloadHistoryOnResume=true")
-                    mNeedsReloadHistoryOnResume = true
-                }
+                Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
+                setSelectedPosition(0, false)
+                Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
+                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+                Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
+                updateRows()
             }
         }
     }
