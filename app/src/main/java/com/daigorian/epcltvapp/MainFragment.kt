@@ -886,10 +886,18 @@ class MainFragment : BrowseSupportFragment() {
             else
                 listRow.adapter as ArrayObjectAdapter
 
-            // 既存の行がなければ、新たに作った行を追加する。
-            if(listRow==null){
-                val header = HeaderItem( headerId ,title)
-                addToCategory(category,ListRow(header, listRowAdapter))
+            // 既存の行がなければ追加する。ただし RECORDED_BY_RULES かつ showEmptyRules=false の場合は
+            // API レスポンス確認後に追加する（一時的な空行挿入による mSelectedPosition 増加を防ぐため）。
+            val showEmptyRulesPref = PreferenceManager.getDefaultSharedPreferences(context)
+                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+            val addedUpfront = if (listRow == null) {
+                val deferred = category == Category.RECORDED_BY_RULES && !showEmptyRulesPref
+                if (!deferred) {
+                    addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                }
+                !deferred
+            } else {
+                true
             }
 
             // すでにロードされている数。
@@ -949,7 +957,17 @@ class MainFragment : BrowseSupportFragment() {
                                 recording = v1Pram.recording))
                         }
 
-                        // 録画0件かつ設定がOFFの場合はルール行を非表示にする
+                        // 遅延追加: API 結果を見てから行を追加 or スキップ
+                        if (!addedUpfront && getListRowByHeaderId(headerId) == null) {
+                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
+                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                            if (getRecordedResponse.total == 0L && !showEmptyRules) {
+                                return@let  // 空ルールは非表示のままスキップ
+                            }
+                            addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                        }
+
+                        // 録画0件かつ設定がOFFの場合は既存ルール行を非表示にする
                         if (getRecordedResponse.total == 0L && category == Category.RECORDED_BY_RULES) {
                             val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
                                 .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
@@ -1011,7 +1029,17 @@ class MainFragment : BrowseSupportFragment() {
                                 hasOriginalFile = v2Param.hasOriginalFile))
                         }
 
-                        // 録画0件かつ設定がOFFの場合はルール行を非表示にする
+                        // 遅延追加: API 結果を見てから行を追加 or スキップ
+                        if (!addedUpfront && getListRowByHeaderId(headerId) == null) {
+                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
+                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
+                            if (getRecordedResponse.total == 0 && !showEmptyRules) {
+                                return@let  // 空ルールは非表示のままスキップ
+                            }
+                            addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                        }
+
+                        // 録画0件かつ設定がOFFの場合は既存ルール行を非表示にする
                         if (getRecordedResponse.total == 0 && category == Category.RECORDED_BY_RULES) {
                             val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
                                 .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
