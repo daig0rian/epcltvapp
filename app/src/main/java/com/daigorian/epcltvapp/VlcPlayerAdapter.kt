@@ -149,6 +149,7 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 if (w > 0 && h > 0) {
                     Log.d(TAG, "VLCVideoLayout layout changed: ${w}x${h}, calling setWindowSize")
                     vlcPlayer.vlcVout.setWindowSize(w, h)
+                    vlcPlayer.scale = 0.0f
                 }
             }
             mInitialized = true
