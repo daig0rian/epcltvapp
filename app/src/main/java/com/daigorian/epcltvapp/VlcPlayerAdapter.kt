@@ -341,7 +341,9 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                 Event.Vout -> {
                     Log.d(TAG, "libvlc Event.Vout. Vout count: " + event.voutCount)
                     callback.onBufferingStateChanged(this@VlcPlayerAdapter, false)
-
+                    if (event.voutCount > 0) {
+                        vlcPlayer.scale = 0.0f
+                    }
                 }
                 Event.ESAdded -> {
                     // A track was added
