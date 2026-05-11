@@ -141,6 +141,16 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
         }
         if(vlcVideoLayout != null){
             vlcPlayer.attachViews(vlcVideoLayout,null, true, false)
+            // attachViews 時点では VLCVideoLayout が未レイアウトで windowSize=0 の場合がある。
+            // レイアウト確定後に明示的に setWindowSize を呼ぶことで VLC のスケーリングを正しく機能させる。
+            vlcVideoLayout.addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->
+                val w = right - left
+                val h = bottom - top
+                if (w > 0 && h > 0) {
+                    Log.d(TAG, "VLCVideoLayout layout changed: ${w}x${h}, calling setWindowSize")
+                    vlcPlayer.vlcVout.setWindowSize(w, h)
+                }
+            }
             mInitialized = true
         }else{
             mInitialized = false
