@@ -4,10 +4,14 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.SurfaceView
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
 import androidx.leanback.app.PlaybackSupportFragment
 import androidx.leanback.app.PlaybackSupportFragmentGlueHost
 import androidx.leanback.app.VideoSupportFragment
@@ -19,9 +23,14 @@ import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.PlaybackControlsRow
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.HlsStream
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import org.videolan.libvlc.util.VLCVideoLayout
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
 
 /** Handles video playback with media controls. */
 class PlaybackVideoFragment : PlaybackSupportFragment() {
@@ -29,6 +38,24 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
     var mVLCVideoLayout: VLCVideoLayout? = null
 
     private lateinit var mTransportControlGlue: MyPlaybackTransportControlGlue<VlcPlayerAdapter>
+
+    private var hlsStreamId: Int? = null
+    private val keepAliveHandler = Handler(Looper.getMainLooper())
+    private val keepAliveRunnable = object : Runnable {
+        override fun run() {
+            hlsStreamId?.let { id ->
+                EpgStationV2.api?.keepStream(id)?.enqueue(object : Callback<ApiErrorV2> {
+                    override fun onResponse(call: Call<ApiErrorV2>, response: Response<ApiErrorV2>) {
+                        Log.d(TAG, "HLS keep-alive sent for streamId=$id")
+                    }
+                    override fun onFailure(call: Call<ApiErrorV2>, t: Throwable) {
+                        Log.w(TAG, "HLS keep-alive failed for streamId=$id")
+                    }
+                })
+            }
+            keepAliveHandler.postDelayed(this, KEEP_ALIVE_INTERVAL_MS)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,19 +90,48 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
         mTransportControlGlue.isSeekEnabled = true   // TODO: VlcPlayerAdapter has property for seek capability
         mTransportControlGlue.playWhenPrepared()
 
-        val movieUrl = if(recordedProgram != null){
-            // EPGStation V1.x.x　
-            if (actionId == VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS) {
-                EpgStation.getTsVideoURL(recordedProgram.id.toString())
-            } else {
-                EpgStation.getEncodedVideoURL(recordedProgram.id.toString(),actionId.toString())
-            }
-        }else{
-            // EPGStation V2.x.x　
-            EpgStationV2.getVideoURL(actionId.toString())
-        }
+        val isHls = activity?.intent?.getBooleanExtra(DetailsActivity.IS_HLS, false) ?: false
 
-        playerAdapter.setDataSource(Uri.parse(movieUrl))
+        if (isHls && recordedItem != null) {
+            // 追いかけ再生: HLS ストリームを開始してから M3U8 URL をセット
+            EpgStationV2.api?.startRecordedHlsStream(actionId)?.enqueue(object : Callback<HlsStream> {
+                override fun onResponse(call: Call<HlsStream>, response: Response<HlsStream>) {
+                    val streamId = response.body()?.streamId
+                    if (streamId == null) {
+                        activity?.runOnUiThread {
+                            Toast.makeText(requireContext(), getString(R.string.hls_stream_start_failed), Toast.LENGTH_LONG).show()
+                        }
+                        return
+                    }
+                    hlsStreamId = streamId
+                    Log.d(TAG, "HLS stream started: streamId=$streamId")
+                    val m3u8Url = EpgStationV2.getHlsStreamUrl(streamId)
+                    activity?.runOnUiThread {
+                        playerAdapter.setDataSource(Uri.parse(m3u8Url))
+                        keepAliveHandler.postDelayed(keepAliveRunnable, KEEP_ALIVE_INTERVAL_MS)
+                    }
+                }
+                override fun onFailure(call: Call<HlsStream>, t: Throwable) {
+                    Log.e(TAG, "HLS stream start failed", t)
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), getString(R.string.hls_stream_start_failed), Toast.LENGTH_LONG).show()
+                    }
+                }
+            })
+        } else {
+            val movieUrl = if (recordedProgram != null) {
+                // EPGStation V1.x.x
+                if (actionId == VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS) {
+                    EpgStation.getTsVideoURL(recordedProgram.id.toString())
+                } else {
+                    EpgStation.getEncodedVideoURL(recordedProgram.id.toString(), actionId.toString())
+                }
+            } else {
+                // EPGStation V2.x.x
+                EpgStationV2.getVideoURL(actionId.toString())
+            }
+            playerAdapter.setDataSource(Uri.parse(movieUrl))
+        }
     }
 
     override fun onCreateView(
@@ -97,6 +153,19 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        // HLS ストリームのクリーンアップ
+        keepAliveHandler.removeCallbacks(keepAliveRunnable)
+        hlsStreamId?.let { id ->
+            EpgStationV2.api?.stopStream(id)?.enqueue(object : Callback<ApiErrorV2> {
+                override fun onResponse(call: Call<ApiErrorV2>, response: Response<ApiErrorV2>) {
+                    Log.d(TAG, "HLS stream stopped: streamId=$id")
+                }
+                override fun onFailure(call: Call<ApiErrorV2>, t: Throwable) {
+                    Log.w(TAG, "HLS stream stop failed: streamId=$id")
+                }
+            })
+            hlsStreamId = null
+        }
         mVLCVideoLayout = null
         if (mTransportControlGlue.playerAdapter is VlcPlayerAdapter){
             mTransportControlGlue.playerAdapter.setVLCVideoLayout(mVLCVideoLayout)
@@ -106,6 +175,11 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
     override fun onPause() {
         super.onPause()
         mTransportControlGlue.pause()
+    }
+
+    companion object {
+        private const val TAG = "PlaybackVideoFragment"
+        private const val KEEP_ALIVE_INTERVAL_MS = 60_000L
     }
 
     class MyPlaybackTransportControlGlue<T: PlayerAdapter>(context:Context? , impl:T )
