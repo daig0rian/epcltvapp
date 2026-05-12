@@ -41,6 +41,15 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
 
     private var hlsStreamId: Int? = null
     private val keepAliveHandler = Handler(Looper.getMainLooper())
+    private val hlsRetryRunnable = Runnable {
+        val adapter = mTransportControlGlue.playerAdapter
+        if (!adapter.isPlaying()) {
+            Log.d(TAG, "HLS retry: VLC not playing, calling retryPlay()")
+            adapter.retryPlay()
+        } else {
+            Log.d(TAG, "HLS retry: VLC already playing, skip")
+        }
+    }
     private val keepAliveRunnable = object : Runnable {
         override fun run() {
             hlsStreamId?.let { id ->
@@ -107,8 +116,13 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
                     Log.d(TAG, "HLS stream started: streamId=$streamId")
                     val m3u8Url = EpgStationV2.getHlsStreamUrl(streamId)
                     activity?.runOnUiThread {
+                        Log.d(TAG, "Calling setDataSource: $m3u8Url")
                         playerAdapter.setDataSource(Uri.parse(m3u8Url))
-                        keepAliveHandler.postDelayed(keepAliveRunnable, KEEP_ALIVE_INTERVAL_MS)
+                        Log.d(TAG, "Calling playerAdapter.play() directly, isPrepared=${playerAdapter.isPrepared()}")
+                        mTransportControlGlue.playerAdapter.play()
+                        keepAliveHandler.post(keepAliveRunnable)
+                        // If M3U8 wasn't ready yet, retry after segments are generated
+                        keepAliveHandler.postDelayed(hlsRetryRunnable, HLS_RETRY_DELAY_MS)
                     }
                 }
                 override fun onFailure(call: Call<HlsStream>, t: Throwable) {
@@ -155,6 +169,7 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
         super.onDestroyView()
         // HLS ストリームのクリーンアップ
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
+        keepAliveHandler.removeCallbacks(hlsRetryRunnable)
         hlsStreamId?.let { id ->
             EpgStationV2.api?.stopStream(id)?.enqueue(object : Callback<ApiErrorV2> {
                 override fun onResponse(call: Call<ApiErrorV2>, response: Response<ApiErrorV2>) {
@@ -179,7 +194,8 @@ class PlaybackVideoFragment : PlaybackSupportFragment() {
 
     companion object {
         private const val TAG = "PlaybackVideoFragment"
-        private const val KEEP_ALIVE_INTERVAL_MS = 60_000L
+        private const val KEEP_ALIVE_INTERVAL_MS = 10_000L
+        private const val HLS_RETRY_DELAY_MS = 15_000L
     }
 
     class MyPlaybackTransportControlGlue<T: PlayerAdapter>(context:Context? , impl:T )

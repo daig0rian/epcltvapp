@@ -31,7 +31,11 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      */
 
     // For LibVLC
-    private val args: ArrayList<String?> = arrayListOf("--verbose=3")
+    private val args: ArrayList<String?> = arrayListOf(
+        "--verbose=3",
+        "--network-caching=10000",  // 10s buffer for live HLS stability
+        "--live-caching=10000",
+    )
     private val mLibVLC: LibVLC = LibVLC(mContext, args)
     private val vlcPlayer = MediaPlayer(mLibVLC)
 
@@ -250,6 +254,18 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
     }
 
     /**
+     * Recreate Media from the current URI and start playing.
+     * Used to retry after EncounteredError without needing a new URI.
+     */
+    fun retryPlay() {
+        Log.d(TAG, "retryPlay() mMediaSourceUri=$mMediaSourceUri")
+        val uri = mMediaSourceUri ?: return
+        mMediaSourceUri = null  // Reset so setDataSource accepts same URI
+        setDataSource(uri)
+        vlcPlayer.play()
+    }
+
+    /**
      * Sets the media source of the player with a given URI.
      *
      * @return Returns `true` if uri represents a new media; `false`
@@ -282,10 +298,17 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
                     Log.d(TAG, "libvlc Event.MediaChanged:")
                 }
                 Event.Opening -> {
-                    Log.d(TAG, "libvlc Event.Opening")
+                    Log.d(TAG, "libvlc Event.Opening mInitialized=$mInitialized mHasDisplay=$mHasDisplay")
                     callback.onBufferingStateChanged(this@VlcPlayerAdapter, true)
 
                     if (mSurfaceHolderGlueHost == null || mHasDisplay) {
+                        // Display is still attached (e.g. HLS flow where setDataSource is called
+                        // after setVLCVideoLayout). Restore initialized so isPrepared() = true.
+                        if (!mInitialized && mHasDisplay) {
+                            Log.d(TAG, "Event.Opening: restoring mInitialized=true because mHasDisplay=true")
+                            mInitialized = true
+                        }
+                        Log.d(TAG, "Event.Opening: calling onPreparedStateChanged, isPrepared=${isPrepared()}")
                         callback.onPreparedStateChanged(this@VlcPlayerAdapter)
                     }
                 }
@@ -386,8 +409,9 @@ class VlcPlayerAdapter(var mContext: Context) : PlayerAdapter() {
      * [PlaybackGlueHost] provides SurfaceHolder.
      */
     override fun isPrepared(): Boolean {
-        // Log.d(TAG, "isPrepared() : "+ (mInitialized && (mSurfaceHolderGlueHost == null || mHasDisplay)) )
-        return mInitialized && (mSurfaceHolderGlueHost == null || mHasDisplay)
+        val result = mInitialized && (mSurfaceHolderGlueHost == null || mHasDisplay)
+        Log.d(TAG, "isPrepared()=$result mInitialized=$mInitialized mHasDisplay=$mHasDisplay mSurfaceHolderGlueHost=${mSurfaceHolderGlueHost != null}")
+        return result
     }
 
     /**

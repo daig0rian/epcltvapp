@@ -262,8 +262,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     )
                 )
             }
-            // 録画中の TS ファイルがある場合、追いかけ再生ボタンを追加
-            if (recordedItem.isRecording && recordedItem.videoFiles?.any { it.type == "ts" } == true) {
+            // 録画中の TS ファイルがある場合、内蔵プレーヤー選択時のみ追いかけ再生ボタンを追加
+            val playerPkgName = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getString(getString(R.string.pref_key_player), "")
+            if (recordedItem.isRecording &&
+                recordedItem.videoFiles?.any { it.type == "ts" } == true &&
+                playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)
+            ) {
                 actionAdapter.add(
                     Action(ACTION_WATCH_RECORDING_HLS, getString(R.string.play_catchup_hls))
                 )
