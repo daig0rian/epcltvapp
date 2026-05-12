@@ -23,5 +23,6 @@ class DetailsActivity : FragmentActivity() {
         const val RECORDEDPROGRAM = "RecordedProgram"
         const val RECORDEDITEM = "RecordedItem"
         const val ACTIONID = "Action.id"
+        const val IS_HLS = "IsHls"
     }
 }

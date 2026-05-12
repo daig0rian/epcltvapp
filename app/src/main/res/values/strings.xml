@@ -147,6 +147,8 @@
     <string name="delete_failed">Delete failed</string>
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
+    <string name="play_catchup_hls">Catch-up Playback (HLS)</string>
+    <string name="hls_stream_start_failed">Failed to start HLS stream</string>
     <string name="no_subtitle">No subtitle</string>
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="start_end_duration">%1$s - %2$s (%3$d min.)</string>

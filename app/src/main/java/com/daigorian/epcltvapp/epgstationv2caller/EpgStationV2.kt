@@ -56,6 +56,19 @@ object EpgStationV2 {
 
         @GET("channels")
         fun getChannels(): Call<List<ChannelItem>>
+
+        @GET("streams/recorded/{videoFileId}/hls")
+        fun startRecordedHlsStream(
+            @Path("videoFileId") videoFileId: Long,
+            @Query("ss") ss: Int = 0,
+            @Query("mode") mode: Int = 0
+        ): Call<HlsStream>
+
+        @DELETE("streams/{streamId}")
+        fun stopStream(@Path("streamId") streamId: Int): Call<ApiErrorV2>
+
+        @PUT("streams/{streamId}/keep")
+        fun keepStream(@Path("streamId") streamId: Int): Call<ApiErrorV2>
     }
 
 
@@ -129,5 +142,11 @@ object EpgStationV2 {
 
     fun getVideoURL(id:String):String{
         return baseUrl + "videos/" + id
+    }
+
+    fun getHlsStreamUrl(streamId: Int): String {
+        val url = URL(baseUrl)
+        val base = "${url.protocol}://${url.host}${if (url.port != -1) ":${url.port}" else ""}"
+        return "$base/streamfiles/stream$streamId.m3u8"
     }
 }

@@ -262,6 +262,17 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     )
                 )
             }
+            // 録画中の TS ファイルがある場合、内蔵プレーヤー選択時のみ追いかけ再生ボタンを追加
+            val playerPkgName = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getString(getString(R.string.pref_key_player), "")
+            if (recordedItem.isRecording &&
+                recordedItem.videoFiles?.any { it.type == "ts" } == true &&
+                playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)
+            ) {
+                actionAdapter.add(
+                    Action(ACTION_WATCH_RECORDING_HLS, getString(R.string.play_catchup_hls))
+                )
+            }
         }
 
 
@@ -333,6 +344,17 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 }
                 ProgramInfoDialogFragment.newInstance(programName, bodyText)
                     .show(childFragmentManager, ProgramInfoDialogFragment.TAG)
+                return@OnActionClickedListener
+            }
+
+            if (action.id == ACTION_WATCH_RECORDING_HLS) {
+                val tsFile = mSelectedRecordedItem?.videoFiles?.firstOrNull { it.type == "ts" }
+                    ?: return@OnActionClickedListener
+                val intent = Intent(requireContext(), PlaybackActivity::class.java)
+                mSelectedRecordedItem?.let { intent.putExtra(DetailsActivity.RECORDEDITEM, it) }
+                intent.putExtra(DetailsActivity.ACTIONID, tsFile.id)
+                intent.putExtra(DetailsActivity.IS_HLS, true)
+                startActivity(intent)
                 return@OnActionClickedListener
             }
 
@@ -589,6 +611,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         internal const val ACTION_WATCH_ORIGINAL_TS = 0L
         internal const val ACTION_SHOW_DESCRIPTION = -1L
+        internal const val ACTION_WATCH_RECORDING_HLS = -2L
 
         private const val DETAIL_THUMB_WIDTH = 274
         private const val DETAIL_THUMB_HEIGHT = 274
