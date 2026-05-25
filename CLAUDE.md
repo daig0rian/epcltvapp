@@ -50,6 +50,29 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | 項目 | 状況 | 理由 |
 |------|------|------|
 | `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在しない。Leanback 自体が deprecated のため今後は Compose for TV への移行で解消予定 |
+| H.264 エンコード済み動画の1:1描画・緑フチ問題 | 未解決・保留中 | 下記「既知の未解決バグ」を参照 |
+
+## 既知の未解決バグ
+
+### H.264 エンコード済み動画が1:1描画される（緑フチ問題）
+
+**現象:** Google Streamer を PC モニター (1920×1080) に接続した環境で、H.264 エンコード済み動画（例: 1280×720）を内蔵 VLC プレーヤーで再生すると、動画がネイティブ解像度 (1:1) で描画され、右・下に未初期化バッファ由来の緑色のフチが表示される。TS コンテンツ（1920×1080）は問題なし。HLS も同様に緑フチが発生する。
+
+**原因の推定:** libVLC 4.0.0-eap24 のネイティブ描画層の問題。`VideoHelper.updateVideoSurfaces()` が H.264 HW デコード (MediaCodec) 時に内部 SurfaceView を動画のネイティブ解像度に縮小し、FitMode.Smaller の適用が効かない模様。Java API レイヤーから完全に制御できない。
+
+**試みて失敗したアプローチ（すべて効果なし）:**
+
+1. **`setWindowSize(1920, 1080)` を明示的に呼ぶ** — `doAttachViews()` と `Event.Vout` の両方で呼んでも変化なし。
+2. **`attachViews()` を VLCVideoLayout のレイアウト確定後に遅延実行** — `OnLayoutChangeListener` で 1920×1080 確定後に呼んでも変化なし。
+3. **`subtitles=false` で android-display vout を回避** — `attachViews(layout, null, false, false)` に変更しても変化なし。
+4. **`Event.Vout` で `setVideoScale(SURFACE_BEST_FIT)` を再適用** — ログ上は呼ばれているが変化なし。
+5. **`IVLCVout.Callback` 経由で `onNewVideoLayout` 後に再適用** — `onNewVideoLayout` は `IVLCVout.Callback` ではなく `IVLCVout.OnNewVideoLayoutListener` に属し、VideoHelper が唯一のリスナーとして占有しているため割り込み不可。
+6. **`Event.Vout` 後に `Handler.post()` で SurfaceView を `MATCH_PARENT` に強制** — VLCVideoLayout 内の子ビューを強制的に `MATCH_PARENT` に設定しても変化なし。
+7. **`textureView=true`** — `attachViews(layout, null, true, true)` に変更しても変化なし。
+
+**将来の対応候補:**
+- libVLC のより新しい EAP バージョンへの更新（EAP なので今後修正される可能性あり）
+- 外部プレーヤー（MX Player / VLC アプリ）への誘導（既存機能として実装済み）
 
 ## 将来の方針
 
