@@ -1,0 +1,6 @@
+[submodule "app/src/main/cpp/tsreadex"]
+	path = app/src/main/cpp/tsreadex
+	url = https://github.com/xtne6f/tsreadex.git
+[submodule "app/src/main/cpp/libaribcaption"]
+	path = app/src/main/cpp/libaribcaption
+	url = https://github.com/xqq/libaribcaption.git
