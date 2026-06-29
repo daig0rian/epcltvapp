@@ -367,6 +367,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 //EPGStation Version 2.x.x
                 mSelectedRecordedItem?.let{intent.putExtra(DetailsActivity.RECORDEDITEM, mSelectedRecordedItem)}
                 intent.putExtra(DetailsActivity.ACTIONID, action.id)
+                // TS コンテンツかどうかを判定して渡す
+                val isTsContent = if (mSelectedRecordedProgram != null) {
+                    action.id == ACTION_WATCH_ORIGINAL_TS
+                } else {
+                    mSelectedRecordedItem?.videoFiles?.find { it.id == action.id }?.type == "ts"
+                }
+                intent.putExtra(DetailsActivity.IS_TS_CONTENT, isTsContent)
                 startActivity(intent)
 
             }else {
