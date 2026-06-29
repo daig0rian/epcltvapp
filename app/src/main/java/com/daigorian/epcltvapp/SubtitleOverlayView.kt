@@ -16,6 +16,9 @@ internal class SubtitleOverlayView(ctx: Context) : View(ctx) {
 
     init {
         setLayerType(LAYER_TYPE_SOFTWARE, null)
+        isFocusable = false
+        isFocusableInTouchMode = false
+        isClickable = false
     }
 
     fun setVideoSize(w: Int, h: Int) {
