@@ -258,8 +258,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     return
                 }
                 hlsStreamId = streamId
-                Log.d(TAG, "HLS stream started: streamId=$streamId")
                 val m3u8Url = EpgStationV2.getHlsStreamUrl(streamId)
+                Log.d(TAG, "HLS stream started: streamId=$streamId m3u8Url=$m3u8Url")
                 activity?.runOnUiThread {
                     val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
                     // EPGStation は HLS 開始直後 M3U8 が未生成で 404 を返すためリトライが必要
