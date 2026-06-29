@@ -25,8 +25,11 @@ import androidx.media3.common.Player
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.DefaultLoadControl
+import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
+import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
@@ -259,7 +262,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 val m3u8Url = EpgStationV2.getHlsStreamUrl(streamId)
                 activity?.runOnUiThread {
                     val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
+                    // EPGStation は HLS 開始直後 M3U8 が未生成で 404 を返すためリトライが必要
+                    val hlsErrorPolicy = object : DefaultLoadErrorHandlingPolicy() {
+                        override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                            val cause = loadErrorInfo.exception
+                            if (cause is HttpDataSource.InvalidResponseCodeException
+                                && cause.responseCode == 404
+                                && loadErrorInfo.errorCount <= 15) {
+                                return 2_000L
+                            }
+                            return super.getRetryDelayMsFor(loadErrorInfo)
+                        }
+                    }
                     val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
+                        .setLoadErrorHandlingPolicy(hlsErrorPolicy)
                         .createMediaSource(MediaItem.fromUri(m3u8Url))
                     exoPlayer?.setMediaSource(mediaSource)
                     exoPlayer?.prepare()
