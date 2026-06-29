@@ -281,7 +281,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         superimposeHandle = AribCaptionFilter.create(1920, 1080, AribCaptionFilter.TYPE_SUPERIMPOSE)
 
         tsFactory.captionPesListener = PesCallback { ptsMs, pesPayload ->
-            Log.d(TAG, "captionPES: pts=${ptsMs}ms len=${pesPayload.size} enabled=$captionEnabled")
             mainHandler.post {
                 val h = captionHandle
                 if (h == 0L || !captionEnabled) return@post
@@ -292,7 +291,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         tsFactory.superimposePesListener = PesCallback { ptsMs, pesPayload ->
-            Log.d(TAG, "superimposePES: pts=${ptsMs}ms len=${pesPayload.size} enabled=$superimposeEnabled")
             mainHandler.post {
                 val h = superimposeHandle
                 if (h == 0L || !superimposeEnabled) return@post
