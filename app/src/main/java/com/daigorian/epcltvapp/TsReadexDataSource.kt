@@ -67,7 +67,10 @@ internal class TsReadexDataSource(private val upstream: DataSource) : DataSource
         lastAudioPtsMain = -1L
         lastAudioPtsSub = -1L
         ptsInjectionCount = 0
-        return upstream.open(dataSpec)
+        upstream.open(dataSpec)
+        // tsreadex は先頭からの逐次処理を前提とするため、ExoPlayer に
+        // ストリーム長不明と伝えて TsDurationReader のシーク試行を抑止する
+        return C.LENGTH_UNSET.toLong()
     }
 
     override fun read(target: ByteArray, offset: Int, length: Int): Int {
