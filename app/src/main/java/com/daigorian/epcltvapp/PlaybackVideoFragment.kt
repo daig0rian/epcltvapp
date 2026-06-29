@@ -137,12 +137,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
-                if (playbackState == Player.STATE_READY) {
-                    resetHideTimer()
-                }
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isPlaying) resetHideTimer()
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "onPlayerError: $error")
@@ -229,31 +223,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         return root
     }
 
-    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-        super.onViewCreated(view, savedInstanceState)
-        // 組み込みの自動非表示を無効化し、独自の 3 秒タイマーで管理する
-        setControlsOverlayAutoHideEnabled(false)
-    }
-
-    private val hideControlsRunnable = Runnable { hideControlsOverlay(true) }
-
-    private fun resetHideTimer() {
-        mainHandler.removeCallbacks(hideControlsRunnable)
-        if (exoPlayer?.isPlaying == true) {
-            mainHandler.postDelayed(hideControlsRunnable, CONTROLS_HIDE_DELAY_MS)
-        }
-    }
-
-    override fun tickle() {
-        super.tickle()
-        resetHideTimer()
-    }
-
     override fun onControlsOverlayVisibilityChanged(visible: Boolean) {
         super.onControlsOverlayVisibilityChanged(visible)
-        mainHandler.removeCallbacks(hideControlsRunnable)
         if (visible) {
-            resetHideTimer()
             // フォーカスを一時停止ボタン（左上）に移動
             view?.post {
                 view?.findFocus()?.let { current ->
@@ -424,7 +396,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     override fun onDestroyView() {
         super.onDestroyView()
-        mainHandler.removeCallbacks(hideControlsRunnable)
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hlsStreamId?.let { id ->
             EpgStationV2.api?.stopStream(id)?.enqueue(object : Callback<ApiErrorV2> {
@@ -454,7 +425,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val TAG = "PlaybackVideoFragment"
         private const val UPDATE_PERIOD_MS = 200
         private const val KEEP_ALIVE_INTERVAL_MS = 10_000L
-        private const val CONTROLS_HIDE_DELAY_MS = 3_000L
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
