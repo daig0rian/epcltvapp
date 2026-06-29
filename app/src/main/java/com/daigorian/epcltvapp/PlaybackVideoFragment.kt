@@ -225,6 +225,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     override fun onResume() {
         super.onResume()
+        setControlsOverlayAutoHideEnabled(true)
         // フォーカスを一時停止ボタン（左上）に移動
         view?.post {
             view?.findFocus()?.let { current ->
