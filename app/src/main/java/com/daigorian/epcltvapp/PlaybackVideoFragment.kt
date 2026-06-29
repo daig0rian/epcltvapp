@@ -223,14 +223,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         return root
     }
 
-    override fun onControlsOverlayVisibilityChanged(visible: Boolean) {
-        super.onControlsOverlayVisibilityChanged(visible)
-        if (visible) {
-            // フォーカスを一時停止ボタン（左上）に移動
-            view?.post {
-                view?.findFocus()?.let { current ->
-                    current.focusSearch(View.FOCUS_UP)?.requestFocus()
-                }
+    override fun onResume() {
+        super.onResume()
+        // フォーカスを一時停止ボタン（左上）に移動
+        view?.post {
+            view?.findFocus()?.let { current ->
+                current.focusSearch(View.FOCUS_UP)?.requestFocus()
             }
         }
     }
