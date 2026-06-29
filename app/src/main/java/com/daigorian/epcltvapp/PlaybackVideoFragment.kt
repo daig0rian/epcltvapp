@@ -223,15 +223,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         return root
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        setControlsOverlayAutoHideEnabled(true)
+    }
+
     override fun onResume() {
         super.onResume()
-        setControlsOverlayAutoHideEnabled(true)
-        // フォーカスを一時停止ボタン（左上）に移動
-        view?.post {
+        // 初回表示時にフォーカスを一時停止ボタン（左上）に移動
+        view?.postDelayed({
             view?.findFocus()?.let { current ->
                 current.focusSearch(View.FOCUS_UP)?.requestFocus()
             }
-        }
+            tickle()
+        }, 200)
     }
 
     private fun startDirectPlayback(url: String, httpClient: OkHttpClient, isTsContent: Boolean) {
