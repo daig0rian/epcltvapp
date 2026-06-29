@@ -228,17 +228,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         setControlsOverlayAutoHideEnabled(true)
     }
 
-    override fun onResume() {
-        super.onResume()
-        // 初回表示時にフォーカスを一時停止ボタン（左上）に移動
-        view?.postDelayed({
-            view?.findFocus()?.let { current ->
-                current.focusSearch(View.FOCUS_UP)?.requestFocus()
-            }
-            tickle()
-        }, 200)
-    }
-
     private fun startDirectPlayback(url: String, httpClient: OkHttpClient, isTsContent: Boolean) {
         val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
         val mediaSource = if (isTsContent) {
