@@ -4,6 +4,7 @@
     <string name="browse_title">EPGStation</string>
     <string name="settings">設定</string>
     <string name="live_channels">現在放送中</string>
+    <string name="refresh_program_names">番組名更新</string>
     <string name="recent_videos">最近の録画</string>
     <string name="rule_id_is_x">ルールID %1$s</string>
     <string name="play_ts">TSを再生</string>

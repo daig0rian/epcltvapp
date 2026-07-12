@@ -57,6 +57,11 @@ object EpgStationV2 {
         @GET("channels")
         fun getChannels(): Call<List<ChannelItem>>
 
+        @GET("schedules/broadcasting")
+        fun getScheduleOnAir(
+            @Query("isHalfWidth") isHalfWidth: Boolean = true
+        ): Call<List<Schedule>>
+
         @GET("streams/recorded/{videoFileId}/hls")
         fun startRecordedHlsStream(
             @Path("videoFileId") videoFileId: Long,
