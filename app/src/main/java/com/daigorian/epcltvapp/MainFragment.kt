@@ -527,6 +527,16 @@ class MainFragment : BrowseSupportFragment() {
         //コンテンツをロード。
         updateRows()
 
+        //"番組名更新"　の単体アクションが乗る行
+        val programRefreshHeader = HeaderItem(-Category.PROGRAM_NAME_REFRESH.ordinal.toLong(), getString(R.string.refresh_program_names))
+        val programRefreshAdapter = ArrayObjectAdapter(SettingsCardPresenter())
+        programRefreshAdapter.add(SettingsCardPresenter.Item(
+            R.drawable.ic_settings_reload,
+            getString(R.string.refresh_program_names),
+            SettingsCardPresenter.Item.Action.REFRESH_PROGRAM_NAMES
+        ))
+        mMainMenuAdapter.addToCategory(Category.PROGRAM_NAME_REFRESH, ListRow(programRefreshHeader, programRefreshAdapter))
+
         //"設定"　のボタンが乗る行
         val gridHeader = HeaderItem(-Category.SETTINGS.ordinal.toLong(), getString(R.string.settings))
         val gridPresenter = SettingsCardPresenter()
@@ -566,6 +576,30 @@ class MainFragment : BrowseSupportFragment() {
         listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
         updateRows()
+    }
+
+    /** 「番組名更新」ボタン押下時に、現在放送中の番組名だけをまとめて取り直してカードに反映する */
+    private fun refreshLiveProgramNames() {
+        val headerId = Category.LIVE_CHANNELS.ordinal.toLong()*10000
+        val adapter = (mMainMenuAdapter.getListRowByHeaderId(headerId)?.adapter as? ArrayObjectAdapter) ?: return
+
+        EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
+            override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                val programByChannelId = response.body()
+                    ?.associate { it.channel.id to it.programs.firstOrNull()?.name }
+                    ?: return
+                for (i in 0 until adapter.size()) {
+                    (adapter.get(i) as? ChannelItem)?.let { it.currentProgramName = programByChannelId[it.id] }
+                }
+                activity?.runOnUiThread {
+                    adapter.notifyArrayItemRangeChanged(0, adapter.size())
+                }
+            }
+            override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                Log.d(TAG,"refreshLiveProgramNames() getScheduleOnAir API Failure")
+                Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+            }
+        })
     }
 
     /** 接続設定の変化検知用フィンガープリント */
@@ -661,6 +695,9 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         SettingsCardPresenter.Item.Action.RELOAD -> {
                             reloadContentRows()
+                        }
+                        SettingsCardPresenter.Item.Action.REFRESH_PROGRAM_NAMES -> {
+                            refreshLiveProgramNames()
                         }
                     }
                 }
@@ -833,6 +870,7 @@ class MainFragment : BrowseSupportFragment() {
     enum class Category {
         //メニューはこの順番で並びます。
         LIVE_CHANNELS,
+        PROGRAM_NAME_REFRESH,
         ON_RECORDING,
         RECENTLY_RECORDED,
         SEARCH_HISTORY,
@@ -868,6 +906,10 @@ class MainFragment : BrowseSupportFragment() {
                         Category.LIVE_CHANNELS -> {
                             //一行しかないのでセクション行は入れない。
                             //ライブ視聴は一番上のグループなので区切り線は入れない。
+                        }
+                        Category.PROGRAM_NAME_REFRESH -> {
+                            //一行しかないのでセクション行は入れない。
+                            //ライブ視聴の付属アクションなので区切り線は入れない。
                         }
                         Category.ON_RECORDING -> {
                             //一行しかないのでセクション行は入れない。
@@ -1179,6 +1221,7 @@ class MainFragment : BrowseSupportFragment() {
     private val sidebarIconMap: Map<Long, Int> by lazy {
         mapOf(
             Category.LIVE_CHANNELS.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_live,
+            -Category.PROGRAM_NAME_REFRESH.ordinal.toLong() to R.drawable.ic_settings_reload,
             Category.ON_RECORDING.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_rec,
             Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
             -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,

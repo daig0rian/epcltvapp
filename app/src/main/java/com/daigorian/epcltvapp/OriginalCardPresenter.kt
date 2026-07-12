@@ -203,7 +203,7 @@ class OriginalCardPresenter() : Presenter() {
             is ChannelItem -> {
                 // ライブ視聴用のチャンネル一覧アイテム
                 cardView.titleText = item.halfWidthName.ifEmpty { item.name }
-                cardView.contentText = ""
+                cardView.contentText = item.currentProgramName ?: ""
                 Glide.with(viewHolder.view.context).clear(cardView.mainImageView)
                 cardView.mainImage = mDefaultCardImage
             }
