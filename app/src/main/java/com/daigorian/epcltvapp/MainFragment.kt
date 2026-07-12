@@ -314,6 +314,58 @@ class MainFragment : BrowseSupportFragment() {
 
     private fun updateRows() {
 
+        EpgStationV2.api?.let { api ->
+            // EPGStation V2.x.x　の場合だけ「ライブ視聴」列を作る
+
+            val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong()*10000
+
+            api.getChannels().enqueue(object : Callback<List<ChannelItem>> {
+                override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
+                    response.body()?.let { channels ->
+                        if (channels.isEmpty()) {
+                            if (mMainMenuAdapter.getListRowByHeaderId(liveHeaderId) != null) {
+                                mMainMenuAdapter.deleteCategory(Category.LIVE_CHANNELS)
+                            }
+                        } else {
+                            val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
+                            val listRowAdapter = if (currentListRow == null) {
+                                ArrayObjectAdapter(mCardPresenter).also { adapter ->
+                                    val header = HeaderItem(liveHeaderId, getString(R.string.live_channels))
+                                    mMainMenuAdapter.addToCategory(Category.LIVE_CHANNELS, ListRow(header, adapter))
+                                }
+                            } else {
+                                currentListRow.adapter as ArrayObjectAdapter
+                            }
+
+                            //既存のリストにあって、レスポンスにないアイテムの削除
+                            var horizontalIndex = 0
+                            while (horizontalIndex < listRowAdapter.size()) {
+                                var found = false
+                                channels.forEach {
+                                    if (listRowAdapter.get(horizontalIndex).equals(it)) found = true
+                                }
+                                if (!found) {
+                                    listRowAdapter.removeItems(horizontalIndex, 1)
+                                } else {
+                                    horizontalIndex += 1
+                                }
+                            }
+
+                            //レスポンスにあって、既存のリストにないアイテムの追加
+                            channels.forEachIndexed { index, it ->
+                                if (listRowAdapter.indexOf(it) == -1) {
+                                    listRowAdapter.add(index, it)
+                                }
+                            }
+                        }
+                    }
+                }
+                override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {
+                    Log.d(TAG, "loadRows() getChannels API Failure")
+                }
+            })
+        }
+
         EpgStationV2.api?.let{ api ->
             // EPGStation V2.x.x　の場合だけ「録画中」列を作る
 
@@ -511,7 +563,7 @@ class MainFragment : BrowseSupportFragment() {
 
     /** 設定行を保持したまま、コンテンツ行だけをクリアして再読み込みする */
     private fun reloadContentRows() {
-        listOf(Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
+        listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
         updateRows()
     }
@@ -578,6 +630,15 @@ class MainFragment : BrowseSupportFragment() {
                     )
                         .toBundle()
                     startActivity(intent, bundle)
+                }
+                is ChannelItem -> {
+                    // ライブ視聴。詳細画面を経由せず直接再生する。
+                    Log.d(TAG, "Item: $item")
+                    val intent = Intent(context!!, PlaybackActivity::class.java)
+                    intent.putExtra(DetailsActivity.IS_LIVE, true)
+                    intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
+                    intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
+                    startActivity(intent)
                 }
                 is SettingsCardPresenter.Item -> {
                     when (item.action) {
@@ -771,6 +832,7 @@ class MainFragment : BrowseSupportFragment() {
 
     enum class Category {
         //メニューはこの順番で並びます。
+        LIVE_CHANNELS,
         ON_RECORDING,
         RECENTLY_RECORDED,
         SEARCH_HISTORY,
@@ -803,6 +865,10 @@ class MainFragment : BrowseSupportFragment() {
                 //もし先ほど加えた行がそのカテゴリの最初の行だった場合
                 if(numOfRowInCategory[cat.ordinal] == 1){
                     when(cat){
+                        Category.LIVE_CHANNELS -> {
+                            //一行しかないのでセクション行は入れない。
+                            //ライブ視聴は一番上のグループなので区切り線は入れない。
+                        }
                         Category.ON_RECORDING -> {
                             //一行しかないのでセクション行は入れない。
                             //録画中と最近の録画は一番上のグループなので区切り線は入れない。
@@ -1112,6 +1178,7 @@ class MainFragment : BrowseSupportFragment() {
     // ヘッダーID → アイコンリソースのマップ（負値はSectionRow/Settings用の固定ID）
     private val sidebarIconMap: Map<Long, Int> by lazy {
         mapOf(
+            Category.LIVE_CHANNELS.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_live,
             Category.ON_RECORDING.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_rec,
             Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
             -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,
