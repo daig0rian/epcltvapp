@@ -91,9 +91,11 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                 updateRows()
             }
-            getString(R.string.pref_key_mac_addr) -> {
-                Log.d(TAG, "prefChanged: mac_addr → updateWakeOnLanCard")
-                updateWakeOnLanCard()
+            getString(R.string.pref_key_mac_addr),
+            getString(R.string.pref_key_custom_url_name),
+            getString(R.string.pref_key_custom_url_value) -> {
+                Log.d(TAG, "prefChanged: $key → syncOptionalSettingsCards")
+                syncOptionalSettingsCards()
             }
         }
     }
@@ -508,33 +510,41 @@ class MainFragment : BrowseSupportFragment() {
 
         mMainMenuAdapter.addToCategory(Category.SETTINGS, ListRow(gridHeader, gridRowAdapter))
 
-        updateWakeOnLanCard()
+        syncOptionalSettingsCards()
 
     }
 
-    /** MACアドレスが設定されているかどうかで、設定行の「Wake on LANで起動」カードを出し入れする */
-    private fun updateWakeOnLanCard() {
+    /**
+     * 設定内容（MACアドレス・カスタムURL）に応じて、設定行の末尾の任意カード
+     * （Wake on LANで起動／カスタムURL実行）を並べ直す。
+     * 固定カード（接続設定・プレイヤー設定・表示設定・再読み込み）より後ろを一旦すべて外してから作り直す。
+     */
+    private fun syncOptionalSettingsCards() {
         val adapter = mSettingsRowAdapter ?: return
-        val hasMac = !PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getString(getString(R.string.pref_key_mac_addr), "").isNullOrEmpty()
-
-        var wolIndex = -1
-        for (i in 0 until adapter.size()) {
-            val item = adapter.get(i) as? SettingsCardPresenter.Item ?: continue
-            if (item.action == SettingsCardPresenter.Item.Action.WAKE_ON_LAN) {
-                wolIndex = i
-                break
-            }
+        while (adapter.size() > FIXED_SETTINGS_CARD_COUNT) {
+            adapter.removeItems(adapter.size() - 1, 1)
         }
 
-        if (hasMac && wolIndex == -1) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
+
+        val mac = prefs.getString(getString(R.string.pref_key_mac_addr), "")
+        if (!mac.isNullOrEmpty()) {
             adapter.add(SettingsCardPresenter.Item(
                 R.drawable.ic_settings_power,
                 getString(R.string.wake_on_lan),
                 SettingsCardPresenter.Item.Action.WAKE_ON_LAN
             ))
-        } else if (!hasMac && wolIndex != -1) {
-            adapter.removeItems(wolIndex, 1)
+        }
+
+        val customUrlName = prefs.getString(getString(R.string.pref_key_custom_url_name), "")
+        val customUrlValue = prefs.getString(getString(R.string.pref_key_custom_url_value), "")
+        if (!customUrlName.isNullOrEmpty() && !customUrlValue.isNullOrEmpty()) {
+            adapter.add(SettingsCardPresenter.Item(
+                0,
+                customUrlName,
+                SettingsCardPresenter.Item.Action.CUSTOM_URL,
+                iconChar = "⤴"
+            ))
         }
     }
 
@@ -645,6 +655,25 @@ class MainFragment : BrowseSupportFragment() {
                                         Log.e(TAG, "WakeOnLan.send failed", e)
                                         activity?.runOnUiThread {
                                             Toast.makeText(requireContext(), getString(R.string.wake_on_lan_failed), Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }.start()
+                            }
+                        }
+                        SettingsCardPresenter.Item.Action.CUSTOM_URL -> {
+                            val url = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                                .getString(getString(R.string.pref_key_custom_url_value), null)
+                            if (!url.isNullOrEmpty()) {
+                                Thread {
+                                    try {
+                                        CustomUrlAction.get(url)
+                                        activity?.runOnUiThread {
+                                            Toast.makeText(requireContext(), getString(R.string.custom_url_sent), Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "CustomUrlAction.get failed", e)
+                                        activity?.runOnUiThread {
+                                            Toast.makeText(requireContext(), getString(R.string.custom_url_failed), Toast.LENGTH_LONG).show()
                                         }
                                     }
                                 }.start()
@@ -1219,6 +1248,8 @@ class MainFragment : BrowseSupportFragment() {
         private const val TAG = "MainFragment"
 
         private const val BACKGROUND_UPDATE_DELAY = 300
+        // 設定行の固定カード数（接続設定・プレイヤー設定・表示設定・再読み込み）
+        private const val FIXED_SETTINGS_CARD_COUNT = 4
     }
 
 

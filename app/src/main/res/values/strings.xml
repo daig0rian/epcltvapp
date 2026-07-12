@@ -19,6 +19,10 @@
     <string name="wake_on_lan">Wake on LAN</string>
     <string name="wake_on_lan_sent">Wake on LAN packet sent</string>
     <string name="wake_on_lan_failed">Failed to send Wake on LAN packet</string>
+    <string name="custom_url_name">Button Name (Custom URL)</string>
+    <string name="custom_url_value">URL to GET</string>
+    <string name="custom_url_sent">Request sent</string>
+    <string name="custom_url_failed">Failed to send request</string>
     <string name="version_of_epgstation">Version of EPGStation</string>
     <string name="reload">Reload</string>
 
@@ -30,6 +34,7 @@
     <string name="not_a_valid_ipv4_addr">%1$s is not a Valid IPV4 Address</string>
     <string name="not_a_valid_port_num">%1$s is not a Valid Port Number</string>
     <string name="not_a_valid_mac_addr">%1$s is not a Valid MAC Address</string>
+    <string name="not_a_valid_url">%1$s is not a Valid URL (must start with http:// or https://)</string>
     <string name="programs_not_found">No program was found containing %1$s is not found</string>
 
     <!-- Preferences-->
@@ -38,6 +43,8 @@
     <string name="pref_key_port_num"               translatable="false">KEY_PORT_NUM</string>
     <string name="pref_val_port_num_default"       translatable="false">8888</string>
     <string name="pref_key_mac_addr"               translatable="false">KEY_MAC_ADDR</string>
+    <string name="pref_key_custom_url_name"        translatable="false">KEY_CUSTOM_URL_NAME</string>
+    <string name="pref_key_custom_url_value"       translatable="false">KEY_CUSTOM_URL_VALUE</string>
     <string name="pref_key_player"                 translatable="false">KEY_PLAYER</string>
     <string name="pref_val_player_default"         translatable="false">@string/pref_options_movie_player_val_MX</string>
     <string name="pref_key_num_of_history"         translatable="false">KEY_NUM_OF_HISTORY</string>

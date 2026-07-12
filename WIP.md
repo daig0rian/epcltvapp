@@ -32,7 +32,36 @@
 - [x] `assembleDebug` ビルド成功確認
 - [x] 実機確認OK（ユーザー確認済み: 「完璧！すばらしい！」）
 
+- [x] コミット・プッシュ済み（PRはブラウザから作成する必要あり: `gh` CLI 未インストール）
+
+## 完了（続き: カスタムURL実行ボタン）
+
+ユーザー要望：サーバー側にシャットダウン用URL等を用意しておき、アプリからワンタッチで
+GETリクエストを送れるボタンが欲しい。セキュリティ考慮は不要（家庭内システムのため）。
+
+- [x] `preferences.xml` の接続設定に「ボタンの名称」「実行するURL」の入力欄を追加
+- [x] `SettingsFragment.kt` にURLの簡易バリデーション追加（http(s)://始まりのみ）
+- [x] `SettingsCardPresenter.kt`
+  - [x] `Action` enum に `CUSTOM_URL` を追加
+  - [x] `Item` に `iconChar: String?` を追加。指定時は `TextIconDrawable`（自前の
+        簡易Drawable、1文字を中央描画するだけ）でアイコンとして描画。
+        今回はU+2934(⤴)をアイコン文字として使用
+- [x] `CustomUrlAction.kt` 新規作成（`HttpURLConnection` でGETするだけの薄いユーティリティ）
+- [x] `MainFragment.kt`
+  - [x] `updateWakeOnLanCard()` を `syncOptionalSettingsCards()` に統合。固定4枚
+        （接続設定/プレイヤー/表示設定/再読み込み）より後ろを毎回作り直す方式にして、
+        WAKE_ON_LAN・CUSTOM_URLの2枚が常に正しい順序（再読み込みの次にWOL、その次にURL）
+        で並ぶようにした（個別add/remove方式だと順序保証が面倒になるため）
+  - [x] `mDisplayPrefChangeListener` にカスタムURL関連キー変更時の同期処理を追加
+  - [x] `ItemViewClickedListener` に `CUSTOM_URL` クリック時のGET送信処理を追加
+- [x] `strings.xml` / `values-ja-rJP/strings.xml` に関連文字列追加
+- [x] `assembleDebug` ビルド成功確認
+
 ## 残タスク
 
-- [ ] コミット
+- [ ] カスタムURLボタンの実機確認をユーザーに依頼
+  - 名称・URL両方設定した時だけボタンが出るか
+  - ⤴ アイコンが正しく表示されるか
+  - 押すと指定URLにGETリクエストが飛ぶか
+- [ ] 確認OK後にコミット・追加プッシュ
 - [ ] `gh pr create` へ誘導（この環境には `gh` CLI がないため、ブラウザでのPR作成URLを案内する）

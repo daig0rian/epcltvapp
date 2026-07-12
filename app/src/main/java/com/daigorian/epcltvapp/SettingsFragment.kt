@@ -143,6 +143,18 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                     false
                 }
             }
+
+            val customUrlValuePref = preferenceScreen.findPreference(getText(R.string.pref_key_custom_url_value)) as EditTextPreference?
+            customUrlValuePref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
+                val urlStr = value.toString()
+                if (urlStr.isEmpty() || urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
+                    Log.i(TAG, "pref custom_url_value changed to '$urlStr'")
+                    true
+                } else {
+                    Toast.makeText(activity, getString(R.string.not_a_valid_url, urlStr), Toast.LENGTH_LONG).show()
+                    false
+                }
+            }
         }
 
         private fun enableCustomBaseUrlUI(boolean: Boolean) {
