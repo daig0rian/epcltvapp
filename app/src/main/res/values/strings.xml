@@ -5,6 +5,8 @@
     <string name="browse_title">EPGStation</string>
     <string name="settings">Settings</string>
     <string name="settings_title">Settings</string>
+    <string name="live_channels">Live TV</string>
+    <string name="refresh_program_names">Update program names</string>
     <string name="now_on_recording">Now On Recording</string>
     <string name="recent_videos">Recent videos</string>
     <string name="rule_id_is_x">Rule ID %1$s</string>
@@ -162,6 +164,8 @@
     <string name="cancel">Cancel</string>
     <string name="play_catchup_hls">Catch-up Playback (HLS)</string>
     <string name="hls_stream_start_failed">Failed to start HLS stream</string>
+    <string name="record_reserved">Recording reserved</string>
+    <string name="record_failed">Failed to reserve recording</string>
     <string name="no_subtitle">No subtitle</string>
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="caption_on">Caption ON</string>

@@ -24,7 +24,7 @@ class SettingsCardPresenter : Presenter() {
         val iconChar: String? = null
     ) {
         enum class Action {
-            CONNECTION, PLAYER, DISPLAY, RELOAD, WAKE_ON_LAN, CUSTOM_URL
+            CONNECTION, PLAYER, DISPLAY, RELOAD, REFRESH_PROGRAM_NAMES, WAKE_ON_LAN, CUSTOM_URL
         }
     }
 

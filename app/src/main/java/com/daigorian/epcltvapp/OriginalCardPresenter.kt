@@ -66,6 +66,7 @@ class OriginalCardPresenter() : Presenter() {
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
 
         viewHolder.view.setOnLongClickListener{
+            if (item is ChannelItem) return@setOnLongClickListener false
 
             AlertDialog.Builder(it.context, AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth)
                 .setTitle(it.context.getString(R.string.do_you_want_to_delete,cardView.titleText.toString()))
@@ -198,6 +199,13 @@ class OriginalCardPresenter() : Presenter() {
                     .centerCrop()
                     .error(if(item.isRecording){mOnRecordingCardImage}else{mDefaultCardImage})
                     .into(cardView.mainImageView)
+            }
+            is ChannelItem -> {
+                // ライブ視聴用のチャンネル一覧アイテム
+                cardView.titleText = item.halfWidthName.ifEmpty { item.name }
+                cardView.contentText = item.currentProgramName ?: ""
+                Glide.with(viewHolder.view.context).clear(cardView.mainImageView)
+                cardView.mainImage = mDefaultCardImage
             }
             is GetRecordedParam -> {
                 // EPGStation Version 1.x.x の先を読み込むBOX。ただ黒いBOX
