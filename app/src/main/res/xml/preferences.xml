@@ -35,6 +35,30 @@
             app:useSimpleSummaryProvider="true"
             />
 
+        <EditTextPreference
+            app:title=       "@string/mac_addr_of_epgstation"
+            app:key=         "@string/pref_key_mac_addr"
+            app:defaultValue=""
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
+
+        <EditTextPreference
+            app:title=       "@string/custom_url_name"
+            app:key=         "@string/pref_key_custom_url_name"
+            app:defaultValue=""
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
+
+        <EditTextPreference
+            app:title=       "@string/custom_url_value"
+            app:key=         "@string/pref_key_custom_url_value"
+            app:defaultValue=""
+            app:dialogLayout="@xml/preference_single_line_edittext"
+            app:useSimpleSummaryProvider="true"
+            />
+
     </PreferenceScreen>
 
     <PreferenceScreen

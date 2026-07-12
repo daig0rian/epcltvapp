@@ -20,6 +20,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
 
         private const val IP_REGEX_PATTERN = """^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"""
         private const val PORT_REGEX_PATTERN = """^([1-9]|[1-9][0-9]{1,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"""
+        private const val MAC_REGEX_PATTERN = """^([0-9A-Fa-f]{2}[:\-]){5}[0-9A-Fa-f]{2}$"""
 
         fun isPreferenceAllExists(context: Context): Boolean {
             val pref = PreferenceManager.getDefaultSharedPreferences(context)
@@ -129,6 +130,31 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                     Toast.makeText(activity, getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
                     true
                 }
+
+            val macAddrPref = preferenceScreen.findPreference(getText(R.string.pref_key_mac_addr)) as EditTextPreference?
+            macAddrPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
+                val macStr = value.toString()
+                val regex = Regex(pattern = MAC_REGEX_PATTERN)
+                if (macStr.isEmpty() || macStr.matches(regex)) {
+                    Log.i(TAG, "pref mac_addr changed to '$macStr'")
+                    true
+                } else {
+                    Toast.makeText(activity, getString(R.string.not_a_valid_mac_addr, macStr), Toast.LENGTH_LONG).show()
+                    false
+                }
+            }
+
+            val customUrlValuePref = preferenceScreen.findPreference(getText(R.string.pref_key_custom_url_value)) as EditTextPreference?
+            customUrlValuePref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, value ->
+                val urlStr = value.toString()
+                if (urlStr.isEmpty() || urlStr.startsWith("http://") || urlStr.startsWith("https://")) {
+                    Log.i(TAG, "pref custom_url_value changed to '$urlStr'")
+                    true
+                } else {
+                    Toast.makeText(activity, getString(R.string.not_a_valid_url, urlStr), Toast.LENGTH_LONG).show()
+                    false
+                }
+            }
         }
 
         private fun enableCustomBaseUrlUI(boolean: Boolean) {
