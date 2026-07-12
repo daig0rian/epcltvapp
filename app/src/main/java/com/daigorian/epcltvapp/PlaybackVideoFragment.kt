@@ -42,7 +42,9 @@ import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.HlsStream
+import com.daigorian.epcltvapp.epgstationv2caller.ManualReserveOption
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationv2caller.Schedule
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
 import retrofit2.Call
@@ -75,6 +77,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     // Content type
     private var isTsContent = false
+
+    // Live viewing state
+    private var liveChannelId: Long = -1L
 
     // HLS state
     private var hlsStreamId: Int? = null
@@ -120,7 +125,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val isHls = activity?.intent?.getBooleanExtra(DetailsActivity.IS_HLS, false) ?: false
         isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
         val isLive = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE, false) ?: false
-        val liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
+        liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
         val liveChannelName = activity?.intent?.getStringExtra(DetailsActivity.CHANNEL_NAME)
 
         // Restore persisted states
@@ -178,7 +183,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, isTsContent, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
+            activity, playerAdapter, isTsContent, isLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
@@ -316,14 +321,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 Log.d(TAG, "Live HLS stream started: streamId=$streamId m3u8Url=$m3u8Url")
                 activity?.runOnUiThread {
                     val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
-                    // EPGStation は HLS 開始直後 M3U8 が未生成で 404 を返すためリトライが必要
+                    // ライブ配信は開始直後、EPGStation側のトランスコーダ(ffmpeg)がまだ
+                    // セグメントを安定して出力できておらず、404だけでなく接続エラーや
+                    // タイムアウトなど様々な失敗が起こりうる（実測で20秒程度かかることがある）。
+                    // 種類を問わずウォームアップ中はリトライし続け、致命的エラーで
+                    // 再生停止してしまうのを防ぐ。
                     val hlsErrorPolicy = object : DefaultLoadErrorHandlingPolicy() {
                         override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
-                            val cause = loadErrorInfo.exception
-                            if (cause is HttpDataSource.InvalidResponseCodeException
-                                && cause.responseCode == 404
-                                && loadErrorInfo.errorCount <= 15) {
-                                return 2_000L
+                            if (loadErrorInfo.errorCount <= LIVE_WARMUP_RETRY_COUNT) {
+                                return LIVE_WARMUP_RETRY_DELAY_MS
                             }
                             return super.getRetryDelayMsFor(loadErrorInfo)
                         }
@@ -444,6 +450,57 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         Toast.makeText(requireContext(), getString(msg), Toast.LENGTH_SHORT).show()
     }
 
+    /** デバッグ用: STBでlogcatが取れない環境向けに、詳細メッセージを連続Toastで読めるだけの時間表示する */
+    private fun showDebugToast(message: String) {
+        Log.e(TAG, message)
+        activity?.runOnUiThread {
+            repeat(3) { Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    fun startRecordingCurrentProgram() {
+        if (liveChannelId < 0) return
+        EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
+            override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                if (!response.isSuccessful) {
+                    mTransportControlGlue.resetRecordActionLabel()
+                    showDebugToast("番組表取得エラー HTTP${response.code()}: ${response.errorBody()?.string()}")
+                    return
+                }
+                val schedules = response.body()
+                val programId = schedules
+                    ?.firstOrNull { it.channel.id == liveChannelId }
+                    ?.programs?.firstOrNull()?.id
+                if (programId == null) {
+                    mTransportControlGlue.resetRecordActionLabel()
+                    showDebugToast("放送中の番組が見つかりません channelId=$liveChannelId channels=${schedules?.map { it.channel.id }}")
+                    return
+                }
+                EpgStationV2.api?.addReserve(ManualReserveOption(programId = programId))
+                    ?.enqueue(object : Callback<okhttp3.ResponseBody> {
+                        override fun onResponse(call: Call<okhttp3.ResponseBody>, response: Response<okhttp3.ResponseBody>) {
+                            mTransportControlGlue.resetRecordActionLabel()
+                            if (response.isSuccessful) {
+                                activity?.runOnUiThread {
+                                    Toast.makeText(requireContext(), getString(R.string.record_reserved), Toast.LENGTH_SHORT).show()
+                                }
+                            } else {
+                                showDebugToast("予約エラー HTTP${response.code()} programId=$programId: ${response.errorBody()?.string()}")
+                            }
+                        }
+                        override fun onFailure(call: Call<okhttp3.ResponseBody>, t: Throwable) {
+                            mTransportControlGlue.resetRecordActionLabel()
+                            showDebugToast("予約通信失敗 programId=$programId: ${t.javaClass.simpleName} ${t.message}")
+                        }
+                    })
+            }
+            override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                mTransportControlGlue.resetRecordActionLabel()
+                showDebugToast("番組表取得通信失敗: ${t.javaClass.simpleName} ${t.message}")
+            }
+        })
+    }
+
     private fun destroyAribSessions() {
         if (captionHandle != 0L) {
             AribCaptionFilter.destroy(captionHandle)
@@ -486,6 +543,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val TAG = "PlaybackVideoFragment"
         private const val UPDATE_PERIOD_MS = 200
         private const val KEEP_ALIVE_INTERVAL_MS = 10_000L
+        // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
+        private const val LIVE_WARMUP_RETRY_COUNT = 20
+        private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
@@ -526,6 +586,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         context: Context?,
         impl: PlayerAdapter,
         private val isTsContent: Boolean,
+        private val isLive: Boolean,
         captionEnabled: Boolean,
         superimposeEnabled: Boolean,
         preferSubAudio: Boolean,
@@ -547,6 +608,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         private var audioActionEnabled = hasSubAudio
 
+        private val recordAction = Action(
+            ACTION_ID_RECORD,
+            "REC",
+            "",
+            getContext()?.getDrawable(R.drawable.ic_sidebar_rec)
+        )
+
         private var primaryActions: ArrayObjectAdapter? = null
 
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
@@ -555,6 +623,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 primaryActionsAdapter.add(ccAction)
                 primaryActionsAdapter.add(superimposeAction)
                 primaryActionsAdapter.add(audioAction)
+            }
+            if (isLive) {
+                primaryActionsAdapter.add(recordAction)
+            }
+            if (isTsContent || isLive) {
                 primaryActions = primaryActionsAdapter
             }
         }
@@ -624,13 +697,30 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                         if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
                     }
                 }
+                recordAction -> {
+                    recordAction.label1 = "REC..."
+                    primaryActions?.let { adapter ->
+                        val idx = adapter.indexOf(recordAction)
+                        if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
+                    }
+                    playbackFragment?.startRecordingCurrentProgram()
+                }
                 else -> super.onActionClicked(action)
+            }
+        }
+
+        fun resetRecordActionLabel() {
+            recordAction.label1 = "REC"
+            primaryActions?.let { adapter ->
+                val idx = adapter.indexOf(recordAction)
+                if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
             }
         }
 
         companion object {
             private const val ACTION_ID_SUPERIMPOSE = 10001L
             private const val ACTION_ID_AUDIO = 10002L
+            private const val ACTION_ID_RECORD = 10003L
         }
     }
 }

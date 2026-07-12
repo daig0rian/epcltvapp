@@ -151,6 +151,8 @@
     <string name="cancel">Cancel</string>
     <string name="play_catchup_hls">Catch-up Playback (HLS)</string>
     <string name="hls_stream_start_failed">Failed to start HLS stream</string>
+    <string name="record_reserved">Recording reserved</string>
+    <string name="record_failed">Failed to reserve recording</string>
     <string name="no_subtitle">No subtitle</string>
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="caption_on">Caption ON</string>
