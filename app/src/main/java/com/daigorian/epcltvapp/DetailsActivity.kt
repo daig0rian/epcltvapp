@@ -25,5 +25,8 @@ class DetailsActivity : FragmentActivity() {
         const val ACTIONID = "Action.id"
         const val IS_HLS = "IsHls"
         const val IS_TS_CONTENT = "IsTsContent"
+        const val IS_LIVE = "IsLive"
+        const val CHANNEL_ID = "ChannelId"
+        const val CHANNEL_NAME = "ChannelName"
     }
 }

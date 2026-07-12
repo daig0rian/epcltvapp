@@ -64,6 +64,12 @@ object EpgStationV2 {
             @Query("mode") mode: Int = 0
         ): Call<HlsStream>
 
+        @GET("streams/live/{channelId}/hls")
+        fun startLiveHlsStream(
+            @Path("channelId") channelId: Long,
+            @Query("mode") mode: Int = 0
+        ): Call<HlsStream>
+
         @DELETE("streams/{streamId}")
         fun stopStream(@Path("streamId") streamId: Int): Call<ApiErrorV2>
 

@@ -119,6 +119,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         val isHls = activity?.intent?.getBooleanExtra(DetailsActivity.IS_HLS, false) ?: false
         isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
+        val isLive = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE, false) ?: false
+        val liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
+        val liveChannelName = activity?.intent?.getStringExtra(DetailsActivity.CHANNEL_NAME)
 
         // Restore persisted states
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -178,14 +181,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             activity, playerAdapter, isTsContent, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
         )
         mTransportControlGlue.host = glueHost
-        mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name
+        mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
-        mTransportControlGlue.isSeekEnabled = true
+        mTransportControlGlue.isSeekEnabled = !isLive
         mTransportControlGlue.playWhenPrepared()
 
         // Build OkHttpClient with auth if needed
         val movieUrl: String
         val okHttpClient: OkHttpClient
+
+        if (isLive && liveChannelId >= 0) {
+            okHttpClient = buildOkHttpClient(EpgStationV2.getVideoURL("0"))
+            startLiveHlsPlayback(liveChannelId, okHttpClient)
+            return
+        }
 
         if (isHls && recordedItem != null) {
             okHttpClient = buildOkHttpClient(EpgStationV2.getVideoURL("0"))
@@ -285,6 +294,51 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onFailure(call: Call<HlsStream>, t: Throwable) {
                 Log.e(TAG, "HLS stream start failed", t)
+                activity?.runOnUiThread {
+                    Toast.makeText(requireContext(), getString(R.string.hls_stream_start_failed), Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+    }
+
+    private fun startLiveHlsPlayback(channelId: Long, httpClient: OkHttpClient) {
+        EpgStationV2.api?.startLiveHlsStream(channelId)?.enqueue(object : Callback<HlsStream> {
+            override fun onResponse(call: Call<HlsStream>, response: Response<HlsStream>) {
+                val streamId = response.body()?.streamId
+                if (streamId == null) {
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), getString(R.string.hls_stream_start_failed), Toast.LENGTH_LONG).show()
+                    }
+                    return
+                }
+                hlsStreamId = streamId
+                val m3u8Url = EpgStationV2.getHlsStreamUrl(streamId)
+                Log.d(TAG, "Live HLS stream started: streamId=$streamId m3u8Url=$m3u8Url")
+                activity?.runOnUiThread {
+                    val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
+                    // EPGStation は HLS 開始直後 M3U8 が未生成で 404 を返すためリトライが必要
+                    val hlsErrorPolicy = object : DefaultLoadErrorHandlingPolicy() {
+                        override fun getRetryDelayMsFor(loadErrorInfo: LoadErrorHandlingPolicy.LoadErrorInfo): Long {
+                            val cause = loadErrorInfo.exception
+                            if (cause is HttpDataSource.InvalidResponseCodeException
+                                && cause.responseCode == 404
+                                && loadErrorInfo.errorCount <= 15) {
+                                return 2_000L
+                            }
+                            return super.getRetryDelayMsFor(loadErrorInfo)
+                        }
+                    }
+                    val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
+                        .setLoadErrorHandlingPolicy(hlsErrorPolicy)
+                        .createMediaSource(MediaItem.fromUri(m3u8Url))
+                    exoPlayer?.setMediaSource(mediaSource)
+                    exoPlayer?.prepare()
+                    exoPlayer?.playWhenReady = true
+                    keepAliveHandler.post(keepAliveRunnable)
+                }
+            }
+            override fun onFailure(call: Call<HlsStream>, t: Throwable) {
+                Log.e(TAG, "Live HLS stream start failed", t)
                 activity?.runOnUiThread {
                     Toast.makeText(requireContext(), getString(R.string.hls_stream_start_failed), Toast.LENGTH_LONG).show()
                 }
