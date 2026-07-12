@@ -91,6 +91,10 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
                 updateRows()
             }
+            getString(R.string.pref_key_mac_addr) -> {
+                Log.d(TAG, "prefChanged: mac_addr → updateWakeOnLanCard")
+                updateWakeOnLanCard()
+            }
         }
     }
 
@@ -504,8 +508,34 @@ class MainFragment : BrowseSupportFragment() {
 
         mMainMenuAdapter.addToCategory(Category.SETTINGS, ListRow(gridHeader, gridRowAdapter))
 
+        updateWakeOnLanCard()
 
+    }
 
+    /** MACアドレスが設定されているかどうかで、設定行の「Wake on LANで起動」カードを出し入れする */
+    private fun updateWakeOnLanCard() {
+        val adapter = mSettingsRowAdapter ?: return
+        val hasMac = !PreferenceManager.getDefaultSharedPreferences(requireContext())
+            .getString(getString(R.string.pref_key_mac_addr), "").isNullOrEmpty()
+
+        var wolIndex = -1
+        for (i in 0 until adapter.size()) {
+            val item = adapter.get(i) as? SettingsCardPresenter.Item ?: continue
+            if (item.action == SettingsCardPresenter.Item.Action.WAKE_ON_LAN) {
+                wolIndex = i
+                break
+            }
+        }
+
+        if (hasMac && wolIndex == -1) {
+            adapter.add(SettingsCardPresenter.Item(
+                R.drawable.ic_settings_power,
+                getString(R.string.wake_on_lan),
+                SettingsCardPresenter.Item.Action.WAKE_ON_LAN
+            ))
+        } else if (!hasMac && wolIndex != -1) {
+            adapter.removeItems(wolIndex, 1)
+        }
     }
 
 
@@ -600,6 +630,25 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         SettingsCardPresenter.Item.Action.RELOAD -> {
                             reloadContentRows()
+                        }
+                        SettingsCardPresenter.Item.Action.WAKE_ON_LAN -> {
+                            val mac = PreferenceManager.getDefaultSharedPreferences(requireContext())
+                                .getString(getString(R.string.pref_key_mac_addr), null)
+                            if (!mac.isNullOrEmpty()) {
+                                Thread {
+                                    try {
+                                        WakeOnLan.send(mac)
+                                        activity?.runOnUiThread {
+                                            Toast.makeText(requireContext(), getString(R.string.wake_on_lan_sent), Toast.LENGTH_SHORT).show()
+                                        }
+                                    } catch (e: Exception) {
+                                        Log.e(TAG, "WakeOnLan.send failed", e)
+                                        activity?.runOnUiThread {
+                                            Toast.makeText(requireContext(), getString(R.string.wake_on_lan_failed), Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }.start()
+                            }
                         }
                     }
                 }

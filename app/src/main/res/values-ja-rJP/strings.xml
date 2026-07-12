@@ -15,6 +15,10 @@
     <string name="movie_player">録画を再生するプレーヤー</string>
     <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
     <string name="port_number_of_epgstation">EPGStation の PORT番号</string>
+    <string name="mac_addr_of_epgstation">EPGStationサーバのMACアドレス（Wake on LAN用）</string>
+    <string name="wake_on_lan">Wake on LANで起動</string>
+    <string name="wake_on_lan_sent">Wake on LANパケットを送信しました</string>
+    <string name="wake_on_lan_failed">Wake on LANパケットの送信に失敗しました</string>
     <string name="pref_options_movie_player_label_MX">MX Player (デフォルト)</string>
     <string name="pref_options_movie_player_label_MX_PRO">MX Player Pro</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
@@ -22,6 +26,7 @@
     <string name="settings_title">設定</string>
     <string name="not_a_valid_ipv4_addr">%1$s は有効なIPv4アドレスではありません</string>
     <string name="not_a_valid_port_num">%1$s は有効なポート番号ではありません</string>
+    <string name="not_a_valid_mac_addr">%1$s は有効なMACアドレスではありません</string>
     <string name="version_of_epgstation">EPGStationのバージョン</string>
     <string name="now_on_recording">録画中</string>
     <string name="reload">録画の再読み込み</string>
