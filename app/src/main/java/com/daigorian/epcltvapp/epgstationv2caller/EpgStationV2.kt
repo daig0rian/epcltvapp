@@ -6,6 +6,7 @@ import okhttp3.Credentials
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
+import okhttp3.ResponseBody
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Retrofit.Builder
@@ -57,10 +58,26 @@ object EpgStationV2 {
         @GET("channels")
         fun getChannels(): Call<List<ChannelItem>>
 
+        @GET("schedules/broadcasting")
+        fun getScheduleOnAir(
+            @Query("isHalfWidth") isHalfWidth: Boolean = true
+        ): Call<List<Schedule>>
+
+        @POST("reserves")
+        fun addReserve(
+            @Body option: ManualReserveOption
+        ): Call<ResponseBody>
+
         @GET("streams/recorded/{videoFileId}/hls")
         fun startRecordedHlsStream(
             @Path("videoFileId") videoFileId: Long,
             @Query("ss") ss: Int = 0,
+            @Query("mode") mode: Int = 0
+        ): Call<HlsStream>
+
+        @GET("streams/live/{channelId}/hls")
+        fun startLiveHlsStream(
+            @Path("channelId") channelId: Long,
             @Query("mode") mode: Int = 0
         ): Call<HlsStream>
 
