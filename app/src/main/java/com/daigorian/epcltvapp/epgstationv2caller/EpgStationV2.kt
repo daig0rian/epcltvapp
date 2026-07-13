@@ -161,6 +161,14 @@ object EpgStationV2 {
         return baseUrl + "videos/" + id
     }
 
+    /**
+     * ライブmpegts直送URL。HLSと違い開始APIが不要で、このURLに接続するだけで
+     * 配信が始まり、切断すると自動的に終了する（streamId管理は不要）。
+     */
+    fun getLiveMpegTsUrl(channelId: Long, mode: Int = 0): String {
+        return baseUrl + "streams/live/$channelId/m2ts?mode=$mode"
+    }
+
     fun getHlsStreamUrl(streamId: Int): String {
         val url = URL(baseUrl)
         val base = "${url.protocol}://${url.host}${if (url.port != -1) ":${url.port}" else ""}"

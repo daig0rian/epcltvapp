@@ -123,8 +123,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         val isHls = activity?.intent?.getBooleanExtra(DetailsActivity.IS_HLS, false) ?: false
-        isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
         val isLive = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE, false) ?: false
+        // 実験的機能: mpegts直送ライブ再生（チャンネルカード長押しから起動）
+        val isLiveMpegTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE_MPEGTS, false) ?: false
+        // 切り分け中: mpegts直送はいったんネイティブTS処理(tsreadex/ARIB字幕)を通さず、
+        // ExoPlayer標準の仕組みだけで再生できるか確認する。isTsContentには含めない。
+        isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
+        val isAnyLive = isLive || isLiveMpegTs
         liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
         val liveChannelName = activity?.intent?.getStringExtra(DetailsActivity.CHANNEL_NAME)
 
@@ -183,17 +188,25 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, isTsContent, isLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
+            activity, playerAdapter, isTsContent, isAnyLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
-        mTransportControlGlue.isSeekEnabled = !isLive
+        mTransportControlGlue.isSeekEnabled = !isAnyLive
         mTransportControlGlue.playWhenPrepared()
 
         // Build OkHttpClient with auth if needed
         val movieUrl: String
         val okHttpClient: OkHttpClient
+
+        if (isLiveMpegTs && liveChannelId >= 0) {
+            val mpegTsUrl = EpgStationV2.getLiveMpegTsUrl(liveChannelId)
+            okHttpClient = buildOkHttpClient(mpegTsUrl)
+            // 切り分け中: 字幕なしのプレーン再生でクラッシュの原因がネイティブTS処理側か確認する
+            startDirectPlayback(mpegTsUrl, okHttpClient, false)
+            return
+        }
 
         if (isLive && liveChannelId >= 0) {
             okHttpClient = buildOkHttpClient(EpgStationV2.getVideoURL("0"))
