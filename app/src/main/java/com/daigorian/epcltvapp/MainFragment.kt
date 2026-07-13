@@ -682,10 +682,10 @@ class MainFragment : BrowseSupportFragment() {
                     startActivity(intent, bundle)
                 }
                 is ChannelItem -> {
-                    // ライブ視聴。詳細画面を経由せず直接再生する。
+                    // ライブ視聴（単押し=mpegts直送）。詳細画面を経由せず直接再生する。
                     Log.d(TAG, "Item: $item")
                     val intent = Intent(context!!, PlaybackActivity::class.java)
-                    intent.putExtra(DetailsActivity.IS_LIVE, true)
+                    intent.putExtra(DetailsActivity.IS_LIVE_MPEGTS, true)
                     intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
                     intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
                     startActivity(intent)

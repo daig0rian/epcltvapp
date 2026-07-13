@@ -68,9 +68,10 @@ class OriginalCardPresenter() : Presenter() {
 
         viewHolder.view.setOnLongClickListener{
             if (item is ChannelItem) {
-                // 実験的機能: 長押しでmpegts直送再生を試す（通常タップはHLS）
+                // 長押しでHLS再生（通常タップはmpegts直送）。字幕が必要な場合や
+                // mpegts側で不安定な場合のフォールバック用途。
                 val intent = Intent(it.context, PlaybackActivity::class.java)
-                intent.putExtra(DetailsActivity.IS_LIVE_MPEGTS, true)
+                intent.putExtra(DetailsActivity.IS_LIVE, true)
                 intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
                 intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
                 it.context.startActivity(intent)
