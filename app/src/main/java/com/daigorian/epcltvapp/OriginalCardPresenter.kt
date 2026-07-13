@@ -1,5 +1,6 @@
 package com.daigorian.epcltvapp
 
+import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.ViewGroup
@@ -66,7 +67,16 @@ class OriginalCardPresenter() : Presenter() {
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
 
         viewHolder.view.setOnLongClickListener{
-            if (item is ChannelItem) return@setOnLongClickListener false
+            if (item is ChannelItem) {
+                // 長押しでHLS再生（通常タップはmpegts直送）。字幕が必要な場合や
+                // mpegts側で不安定な場合のフォールバック用途。
+                val intent = Intent(it.context, PlaybackActivity::class.java)
+                intent.putExtra(DetailsActivity.IS_LIVE, true)
+                intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
+                intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
+                it.context.startActivity(intent)
+                return@setOnLongClickListener true
+            }
 
             AlertDialog.Builder(it.context, AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth)
                 .setTitle(it.context.getString(R.string.do_you_want_to_delete,cardView.titleText.toString()))

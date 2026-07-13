@@ -104,6 +104,8 @@ class MainFragment : BrowseSupportFragment() {
         Log.i(TAG, "onCreate")
         super.onCreate(savedInstanceState)
 
+        showPreviousCrashIfAny()
+
         adapter = mMainMenuAdapter
         mCardPresenter.objAdapter = mMainMenuAdapter
 
@@ -642,6 +644,20 @@ class MainFragment : BrowseSupportFragment() {
         })
     }
 
+    /** USBデバッグなしでもクラッシュ内容を確認できるよう、前回起動時のクラッシュログがあれば表示する */
+    private fun showPreviousCrashIfAny() {
+        val crashFile = java.io.File(requireContext().filesDir, EpgTvApplication.CRASH_LOG_FILENAME)
+        if (!crashFile.exists()) return
+        val content = try { crashFile.readText() } catch (_: Exception) { "" }
+        crashFile.delete()
+        if (content.isBlank()) return
+        androidx.appcompat.app.AlertDialog.Builder(requireContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog_MinWidth)
+            .setTitle("前回のクラッシュ内容")
+            .setMessage(content)
+            .setPositiveButton("閉じる") { _, _ -> }
+            .create().show()
+    }
+
     /** 接続設定の変化検知用フィンガープリント */
     private fun connectionKey(): String {
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -706,10 +722,10 @@ class MainFragment : BrowseSupportFragment() {
                     startActivity(intent, bundle)
                 }
                 is ChannelItem -> {
-                    // ライブ視聴。詳細画面を経由せず直接再生する。
+                    // ライブ視聴（単押し=mpegts直送）。詳細画面を経由せず直接再生する。
                     Log.d(TAG, "Item: $item")
                     val intent = Intent(context!!, PlaybackActivity::class.java)
-                    intent.putExtra(DetailsActivity.IS_LIVE, true)
+                    intent.putExtra(DetailsActivity.IS_LIVE_MPEGTS, true)
                     intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
                     intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
                     startActivity(intent)
