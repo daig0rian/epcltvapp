@@ -80,6 +80,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     // Live viewing state
     private var liveChannelId: Long = -1L
+    private var isLiveMpegTs = false
 
     // HLS state
     private var hlsStreamId: Int? = null
@@ -125,7 +126,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val isHls = activity?.intent?.getBooleanExtra(DetailsActivity.IS_HLS, false) ?: false
         val isLive = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE, false) ?: false
         // 実験的機能: mpegts直送ライブ再生（チャンネルカード長押しから起動）
-        val isLiveMpegTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE_MPEGTS, false) ?: false
+        isLiveMpegTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE_MPEGTS, false) ?: false
         // 切り分け中: mpegts直送はいったんネイティブTS処理(tsreadex/ARIB字幕)を通さず、
         // ExoPlayer標準の仕組みだけで再生できるか確認する。isTsContentには含めない。
         isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
@@ -256,6 +257,32 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setControlsOverlayAutoHideEnabled(true)
+        if (isLiveMpegTs) {
+            hideSeekBar(view)
+        }
+    }
+
+    /**
+     * mpegts直送はシーク不可の生ストリームで、シークバーを見せても意味がない
+     * （HLSは追いかけ再生時のバッファ状況が見えて便利なので残す）。
+     * Leanbackにシークバーの表示/非表示を切り替えるAPIが無いため、コントロール行の
+     * ビューが実際に生成されるのを待って直接 GONE にする。
+     */
+    private fun hideSeekBar(root: View) {
+        val progressBar = root.findViewById<androidx.leanback.widget.SeekBar>(androidx.leanback.R.id.playback_progress)
+        if (progressBar != null) {
+            progressBar.visibility = View.GONE
+            return
+        }
+        root.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                val pb = root.findViewById<androidx.leanback.widget.SeekBar>(androidx.leanback.R.id.playback_progress)
+                if (pb != null) {
+                    pb.visibility = View.GONE
+                    root.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+            }
+        })
     }
 
     private fun startDirectPlayback(url: String, httpClient: OkHttpClient, isTsContent: Boolean) {
@@ -514,6 +541,51 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         })
     }
 
+    fun showCurrentProgramInfo() {
+        if (liveChannelId < 0) return
+        EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
+            override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                val program = response.body()
+                    ?.firstOrNull { it.channel.id == liveChannelId }
+                    ?.programs?.firstOrNull()
+                if (program == null) {
+                    activity?.runOnUiThread {
+                        Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                    }
+                    return
+                }
+                val jst = java.util.TimeZone.getTimeZone("Asia/Tokyo")
+                val dfDateAndTime = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.LONG, java.text.DateFormat.SHORT).also { it.timeZone = jst }
+                val dfTime = java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).also { it.timeZone = jst }
+                val channelName = EpgStationV2.channelMap[liveChannelId] ?: ""
+                val genreText = AribGenre.getGenreText(program.genre1, program.subGenre1)
+                val timeInfo = getString(
+                    R.string.start_end_duration,
+                    dfDateAndTime.format(java.util.Date(program.startAt)),
+                    dfTime.format(java.util.Date(program.endAt)),
+                    (program.endAt - program.startAt) / 60 / 1000
+                )
+                val body = buildString {
+                    if (channelName.isNotEmpty()) { append(channelName); append("\n") }
+                    if (genreText.isNotEmpty()) { append(genreText); append("\n") }
+                    append(timeInfo)
+                    if (!program.description.isNullOrEmpty()) { append("\n\n"); append(program.description) }
+                    if (!program.extended.isNullOrEmpty()) { append("\n"); append(program.extended) }
+                }
+                activity?.runOnUiThread {
+                    ProgramInfoDialogFragment.newInstance(program.name, body)
+                        .show(childFragmentManager, ProgramInfoDialogFragment.TAG)
+                }
+            }
+            override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                Log.e(TAG, "showCurrentProgramInfo: getScheduleOnAir failed", t)
+                activity?.runOnUiThread {
+                    Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                }
+            }
+        })
+    }
+
     private fun destroyAribSessions() {
         if (captionHandle != 0L) {
             AribCaptionFilter.destroy(captionHandle)
@@ -628,6 +700,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             getContext()?.getDrawable(R.drawable.ic_sidebar_rec)
         )
 
+        private val infoAction = Action(
+            ACTION_ID_INFO,
+            getContext()?.getString(R.string.program_info) ?: "",
+            "",
+            getContext()?.getDrawable(R.drawable.ic_action_info)
+        )
+
         private var primaryActions: ArrayObjectAdapter? = null
 
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
@@ -639,6 +718,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             if (isLive) {
                 primaryActionsAdapter.add(recordAction)
+                primaryActionsAdapter.add(infoAction)
             }
             if (isTsContent || isLive) {
                 primaryActions = primaryActionsAdapter
@@ -718,6 +798,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     }
                     playbackFragment?.startRecordingCurrentProgram()
                 }
+                infoAction -> {
+                    playbackFragment?.showCurrentProgramInfo()
+                }
                 else -> super.onActionClicked(action)
             }
         }
@@ -734,6 +817,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             private const val ACTION_ID_SUPERIMPOSE = 10001L
             private const val ACTION_ID_AUDIO = 10002L
             private const val ACTION_ID_RECORD = 10003L
+            private const val ACTION_ID_INFO = 10004L
         }
     }
 }
