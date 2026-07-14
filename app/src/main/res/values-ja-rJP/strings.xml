@@ -8,6 +8,11 @@
     <string name="previous_crash_title">前回のクラッシュ内容</string>
     <string name="record_reserved">録画を予約しました</string>
     <string name="record_failed">録画の予約に失敗しました</string>
+    <string name="no_current_program_info">視聴中のチャンネルには現在番組情報がありません</string>
+    <string name="schedule_fetch_error">番組表取得エラー</string>
+    <string name="record_reserve_error">予約エラー</string>
+    <string name="record_reserve_network_error">予約通信失敗</string>
+    <string name="schedule_fetch_network_error">番組表取得通信失敗</string>
     <string name="recent_videos">最近の録画</string>
     <string name="rule_id_is_x">ルールID %1$s</string>
     <string name="play_ts">TSを再生</string>

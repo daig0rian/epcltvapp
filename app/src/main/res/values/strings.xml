@@ -154,6 +154,11 @@
     <string name="hls_stream_start_failed">Failed to start HLS stream</string>
     <string name="record_reserved">Recording reserved</string>
     <string name="record_failed">Failed to reserve recording</string>
+    <string name="no_current_program_info">No program information available for this channel</string>
+    <string name="schedule_fetch_error">Failed to fetch schedule</string>
+    <string name="record_reserve_error">Failed to reserve</string>
+    <string name="record_reserve_network_error">Network error while reserving</string>
+    <string name="schedule_fetch_network_error">Network error while fetching schedule</string>
     <string name="no_subtitle">No subtitle</string>
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="caption_on">Caption ON</string>

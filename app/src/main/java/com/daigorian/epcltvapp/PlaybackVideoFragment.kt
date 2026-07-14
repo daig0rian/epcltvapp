@@ -490,11 +490,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         Toast.makeText(requireContext(), getString(msg), Toast.LENGTH_SHORT).show()
     }
 
-    /** デバッグ用: STBでlogcatが取れない環境向けに、詳細メッセージを連続Toastで読めるだけの時間表示する */
-    private fun showDebugToast(message: String) {
-        Log.e(TAG, message)
+    /** 録画予約に失敗した際、自己解決やissue報告に使えるよう技術的な詳細をダイアログで表示する */
+    private fun showRecordErrorDialog(detail: String) {
+        Log.e(TAG, detail)
         activity?.runOnUiThread {
-            repeat(3) { Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show() }
+            androidx.appcompat.app.AlertDialog.Builder(requireContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog_MinWidth)
+                .setTitle(getString(R.string.record_failed))
+                .setMessage(detail)
+                .setPositiveButton(getString(R.string.close)) { _, _ -> }
+                .create().show()
         }
     }
 
@@ -504,7 +508,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
                 if (!response.isSuccessful) {
                     mTransportControlGlue.resetRecordActionLabel()
-                    showDebugToast("番組表取得エラー HTTP${response.code()}: ${response.errorBody()?.string()}")
+                    showRecordErrorDialog("${getString(R.string.schedule_fetch_error)}\nHTTP${response.code()}: ${response.errorBody()?.string()}")
                     return
                 }
                 val schedules = response.body()
@@ -513,7 +517,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     ?.programs?.firstOrNull()?.id
                 if (programId == null) {
                     mTransportControlGlue.resetRecordActionLabel()
-                    showDebugToast("放送中の番組が見つかりません channelId=$liveChannelId channels=${schedules?.map { it.channel.id }}")
+                    Log.d(TAG, "startRecordingCurrentProgram: no current program channelId=$liveChannelId channels=${schedules?.map { it.channel.id }}")
+                    activity?.runOnUiThread {
+                        Toast.makeText(
+                            requireContext(),
+                            "${getString(R.string.record_failed)} : ${getString(R.string.no_current_program_info)}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
                     return
                 }
                 EpgStationV2.api?.addReserve(ManualReserveOption(programId = programId))
@@ -525,18 +536,18 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                                     Toast.makeText(requireContext(), getString(R.string.record_reserved), Toast.LENGTH_SHORT).show()
                                 }
                             } else {
-                                showDebugToast("予約エラー HTTP${response.code()} programId=$programId: ${response.errorBody()?.string()}")
+                                showRecordErrorDialog("${getString(R.string.record_reserve_error)}\nHTTP${response.code()} programId=$programId: ${response.errorBody()?.string()}")
                             }
                         }
                         override fun onFailure(call: Call<okhttp3.ResponseBody>, t: Throwable) {
                             mTransportControlGlue.resetRecordActionLabel()
-                            showDebugToast("予約通信失敗 programId=$programId: ${t.javaClass.simpleName} ${t.message}")
+                            showRecordErrorDialog("${getString(R.string.record_reserve_network_error)}\nprogramId=$programId: ${t.javaClass.simpleName} ${t.message}")
                         }
                     })
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
                 mTransportControlGlue.resetRecordActionLabel()
-                showDebugToast("番組表取得通信失敗: ${t.javaClass.simpleName} ${t.message}")
+                showRecordErrorDialog("${getString(R.string.schedule_fetch_network_error)}\n${t.javaClass.simpleName} ${t.message}")
             }
         })
     }
