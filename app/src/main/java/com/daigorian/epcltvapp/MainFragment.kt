@@ -612,9 +612,9 @@ class MainFragment : BrowseSupportFragment() {
         crashFile.delete()
         if (content.isBlank()) return
         androidx.appcompat.app.AlertDialog.Builder(requireContext(), androidx.appcompat.R.style.Theme_AppCompat_Light_Dialog_MinWidth)
-            .setTitle("前回のクラッシュ内容")
+            .setTitle(getString(R.string.previous_crash_title))
             .setMessage(content)
-            .setPositiveButton("閉じる") { _, _ -> }
+            .setPositiveButton(getString(R.string.close)) { _, _ -> }
             .create().show()
     }
 
