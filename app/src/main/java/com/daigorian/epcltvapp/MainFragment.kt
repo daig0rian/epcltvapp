@@ -323,7 +323,9 @@ class MainFragment : BrowseSupportFragment() {
 
             api.getChannels().enqueue(object : Callback<List<ChannelItem>> {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
-                    response.body()?.let { channels ->
+                    response.body()?.let { rawChannels ->
+                        // データ放送専用サービス等（映像・音声を伴わないチャンネル）を除外する
+                        val channels = rawChannels.filter { ChannelItem.isAudioVideoService(it.type) }
                         if (channels.isEmpty()) {
                             if (mMainMenuAdapter.getListRowByHeaderId(liveHeaderId) != null) {
                                 mMainMenuAdapter.deleteCategory(Category.LIVE_CHANNELS)
