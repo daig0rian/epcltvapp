@@ -373,6 +373,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                             }
                             return super.getRetryDelayMsFor(loadErrorInfo)
                         }
+                        // デフォルトはリトライ間隔だけでなく最大リトライ回数も3回に制限されており、
+                        // 上のgetRetryDelayMsForで間隔を伸ばしても3回で致命的エラーになってしまう。
+                        // ウォームアップ中の待機時間(最大40秒)を実際に確保するため回数上限も揃える。
+                        override fun getMinimumLoadableRetryCount(dataType: Int): Int {
+                            return LIVE_WARMUP_RETRY_COUNT
+                        }
                     }
                     val mediaSource = HlsMediaSource.Factory(dataSourceFactory)
                         .setLoadErrorHandlingPolicy(hlsErrorPolicy)
