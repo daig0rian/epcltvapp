@@ -214,8 +214,24 @@ class OriginalCardPresenter() : Presenter() {
                 // ライブ視聴用のチャンネル一覧アイテム
                 cardView.titleText = item.halfWidthName.ifEmpty { item.name }
                 cardView.contentText = item.currentProgramName ?: ""
-                Glide.with(viewHolder.view.context).clear(cardView.mainImageView)
-                cardView.mainImage = mDefaultCardImage
+
+                if (item.hasLogoData) {
+                    val logoURL = EpgStationV2.getChannelLogoURL(item.id)
+                    //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
+                    val glideUrl = if (EpgStationV2.authForGlide != null) {
+                        GlideUrl(logoURL, EpgStationV2.authForGlide)
+                    } else {
+                        GlideUrl(logoURL)
+                    }
+                    Glide.with(viewHolder.view.context)
+                        .load(glideUrl)
+                        .fitCenter()
+                        .error(mDefaultCardImage)
+                        .into(cardView.mainImageView)
+                } else {
+                    Glide.with(viewHolder.view.context).clear(cardView.mainImageView)
+                    cardView.mainImage = mDefaultCardImage
+                }
             }
             is GetRecordedParam -> {
                 // EPGStation Version 1.x.x の先を読み込むBOX。ただ黒いBOX
