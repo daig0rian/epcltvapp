@@ -7,9 +7,13 @@ data class ChannelItem(
     val type: Int? = null,
     val hasLogoData: Boolean = false
 ) {
-    // 「番組名更新」で取得した現在放送中の番組名。equals/hashCode/copy には含めない副次的な状態。
+    // 「番組情報更新」で取得した現在放送中の番組情報。equals/hashCode/copy には含めない副次的な状態。
     @Transient
     var currentProgramName: String? = null
+    @Transient
+    var currentProgramStartAt: Long? = null
+    @Transient
+    var currentProgramEndAt: Long? = null
 
     companion object {
         /**

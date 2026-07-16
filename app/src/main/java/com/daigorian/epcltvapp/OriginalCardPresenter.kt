@@ -213,7 +213,15 @@ class OriginalCardPresenter() : Presenter() {
             is ChannelItem -> {
                 // ライブ視聴用のチャンネル一覧アイテム
                 cardView.titleText = item.halfWidthName.ifEmpty { item.name }
-                cardView.contentText = item.currentProgramName ?: ""
+                val startAt = item.currentProgramStartAt
+                val endAt = item.currentProgramEndAt
+                cardView.contentText = buildString {
+                    if (startAt != null && endAt != null) {
+                        append(formatTimeRange(startAt, endAt))
+                        append("\n")
+                    }
+                    append(item.currentProgramName ?: "")
+                }
 
                 if (item.hasLogoData) {
                     val logoURL = EpgStationV2.getChannelLogoURL(item.id)
@@ -271,6 +279,13 @@ class OriginalCardPresenter() : Presenter() {
     private fun formatDurationMinutes(startUnixTimeMs: Long, endUnixTimeMs: Long): String {
         val minutes = (endUnixTimeMs - startUnixTimeMs) / 60000
         return "${minutes}分"
+    }
+
+    /** 番組の開始〜終了時刻を0埋め24時間表示（例: 19:00〜19:54）で返す */
+    private fun formatTimeRange(startUnixTimeMs: Long, endUnixTimeMs: Long): String {
+        val formatter = SimpleDateFormat("HH:mm", Locale.JAPAN)
+        formatter.timeZone = TimeZone.getTimeZone("Asia/Tokyo")
+        return "${formatter.format(Date(startUnixTimeMs))}〜${formatter.format(Date(endUnixTimeMs))}"
     }
 
     companion object {
