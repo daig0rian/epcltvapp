@@ -239,6 +239,7 @@ class MainFragment : BrowseSupportFragment() {
                             Log.d(TAG, "initEPGStationApi() detect Version 2.x.x")
                             EpgStationV2.initAPI(baseUrl)
                             EpgStationV2.fetchChannels()
+                            EpgStationV2.fetchStreamConfig()
                             loadRows()
                         } else {
                             //Version 1で初期化

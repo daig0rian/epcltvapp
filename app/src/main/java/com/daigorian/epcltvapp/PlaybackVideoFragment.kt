@@ -127,9 +127,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val isLive = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE, false) ?: false
         // 実験的機能: mpegts直送ライブ再生（チャンネルカード長押しから起動）
         isLiveMpegTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_LIVE_MPEGTS, false) ?: false
-        // 切り分け中: mpegts直送はいったんネイティブTS処理(tsreadex/ARIB字幕)を通さず、
-        // ExoPlayer標準の仕組みだけで再生できるか確認する。isTsContentには含めない。
-        isTsContent = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
         val isAnyLive = isLive || isLiveMpegTs
         liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
         val liveChannelName = activity?.intent?.getStringExtra(DetailsActivity.CHANNEL_NAME)
@@ -139,6 +136,28 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         captionEnabled = prefs.getBoolean(PREF_CAPTION_ENABLED, false)
         superimposeEnabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
         preferSubAudio = prefs.getBoolean(PREF_SUB_AUDIO, false)
+
+        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理(tsreadex/ARIB字幕)を
+        // 強制バイパスしていたが、Issue #34でユーザー切り替え可能な設定にした。
+        // #33が実機で未解決のため、デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
+        val nativeTsProcessingEnabled = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
+        isTsContent = ((activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false) || isLiveMpegTs) &&
+                nativeTsProcessingEnabled
+
+        // ストリームプロファイル選択（Issue #34）: config.ymlの並び順ではなくプロファイル名で
+        // ユーザーの選択を永続化してあるので、都度最新のstreamConfigから該当indexを解決する。
+        val recordedHlsMode = EpgStationV2.resolveHlsProfileIndex(
+            prefs.getString(getString(R.string.pref_key_recorded_hls_profile), ""),
+            EpgStationV2.streamConfig?.recorded?.ts?.hls.orEmpty()
+        )
+        val liveHlsMode = EpgStationV2.resolveHlsProfileIndex(
+            prefs.getString(getString(R.string.pref_key_live_hls_profile), ""),
+            EpgStationV2.streamConfig?.live?.ts?.hls.orEmpty()
+        )
+        val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
+            prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
+            EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
+        )
 
         // Build ExoPlayer
         trackSelector = DefaultTrackSelector(requireContext())
@@ -202,22 +221,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val okHttpClient: OkHttpClient
 
         if (isLiveMpegTs && liveChannelId >= 0) {
-            val mpegTsUrl = EpgStationV2.getLiveMpegTsUrl(liveChannelId)
+            val mpegTsUrl = EpgStationV2.getLiveMpegTsUrl(liveChannelId, liveMpegTsMode)
             okHttpClient = buildOkHttpClient(mpegTsUrl)
-            // 切り分け中: 字幕なしのプレーン再生でクラッシュの原因がネイティブTS処理側か確認する
-            startDirectPlayback(mpegTsUrl, okHttpClient, false)
+            startDirectPlayback(mpegTsUrl, okHttpClient, isTsContent)
             return
         }
 
         if (isLive && liveChannelId >= 0) {
             okHttpClient = buildOkHttpClient(EpgStationV2.getVideoURL("0"))
-            startLiveHlsPlayback(liveChannelId, okHttpClient)
+            startLiveHlsPlayback(liveChannelId, okHttpClient, liveHlsMode)
             return
         }
 
         if (isHls && recordedItem != null) {
             okHttpClient = buildOkHttpClient(EpgStationV2.getVideoURL("0"))
-            startHlsPlayback(actionId, okHttpClient)
+            startHlsPlayback(actionId, okHttpClient, recordedHlsMode)
             return
         }
 
@@ -301,8 +319,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer?.playWhenReady = true
     }
 
-    private fun startHlsPlayback(actionId: Long, httpClient: OkHttpClient) {
-        EpgStationV2.api?.startRecordedHlsStream(actionId)?.enqueue(object : Callback<HlsStream> {
+    private fun startHlsPlayback(actionId: Long, httpClient: OkHttpClient, mode: Int) {
+        EpgStationV2.api?.startRecordedHlsStream(actionId, mode = mode)?.enqueue(object : Callback<HlsStream> {
             override fun onResponse(call: Call<HlsStream>, response: Response<HlsStream>) {
                 val streamId = response.body()?.streamId
                 if (streamId == null) {
@@ -346,8 +364,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         })
     }
 
-    private fun startLiveHlsPlayback(channelId: Long, httpClient: OkHttpClient) {
-        EpgStationV2.api?.startLiveHlsStream(channelId)?.enqueue(object : Callback<HlsStream> {
+    private fun startLiveHlsPlayback(channelId: Long, httpClient: OkHttpClient, mode: Int) {
+        EpgStationV2.api?.startLiveHlsStream(channelId, mode = mode)?.enqueue(object : Callback<HlsStream> {
             override fun onResponse(call: Call<HlsStream>, response: Response<HlsStream>) {
                 val streamId = response.body()?.streamId
                 if (streamId == null) {
