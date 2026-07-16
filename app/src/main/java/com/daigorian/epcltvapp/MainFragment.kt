@@ -56,13 +56,8 @@ class MainFragment : BrowseSupportFragment() {
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
-    /** ライブ視聴の番組名を1分ごとに自動更新するRunnable（issue #36） */
-    private val mProgramNameAutoRefreshRunnable = object : Runnable {
-        override fun run() {
-            refreshLiveProgramNames()
-            mHandler.postDelayed(this, PROGRAM_NAME_AUTO_REFRESH_INTERVAL_MS)
-        }
-    }
+    /** ライブ視聴の番組情報を自動更新するRunnable。固定間隔ではなく、次に終了する番組の終了時刻に合わせて都度スケジュールし直す */
+    private val mProgramRefreshRunnable = Runnable { refreshLiveProgramNames() }
 
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
@@ -173,23 +168,15 @@ class MainFragment : BrowseSupportFragment() {
                 updateRows()
             }
         }
-        startProgramNameAutoRefresh()
+        // 表示中のみ動かすため画面を離れたら止める。ポーズ中に終了時刻を迎えた番組があるかもしれないので、
+        // 再開時は都度スケジュールし直すのではなく、最新情報を取り直してから次のタイマーを仕掛け直す。
+        refreshLiveProgramNames()
     }
 
     override fun onPause() {
         super.onPause()
-        stopProgramNameAutoRefresh()
+        mHandler.removeCallbacks(mProgramRefreshRunnable)
         Log.d(TAG, "onPause: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
-    }
-
-    /** ライブ視聴の番組名自動更新タイマーを開始する。表示中のみ動かすため画面を離れたら止める（issue #36） */
-    private fun startProgramNameAutoRefresh() {
-        mHandler.removeCallbacks(mProgramNameAutoRefreshRunnable)
-        mHandler.postDelayed(mProgramNameAutoRefreshRunnable, PROGRAM_NAME_AUTO_REFRESH_INTERVAL_MS)
-    }
-
-    private fun stopProgramNameAutoRefresh() {
-        mHandler.removeCallbacks(mProgramNameAutoRefreshRunnable)
     }
 
     override fun onStart() {
@@ -595,7 +582,11 @@ class MainFragment : BrowseSupportFragment() {
         updateRows()
     }
 
-    /** 現在放送中の番組名だけをまとめて取り直してカードに反映する（1分ごとの自動更新、issue #36） */
+    /**
+     * 現在放送中の番組情報をまとめて取り直し、実際に番組が切り替わったカードだけを再描画する。
+     * 次回の実行は、表示中チャンネルの中で最も早く終了する番組の終了時刻に合わせてスケジュールする
+     * （固定間隔で全カードを再描画するとチラつくため、カード単位の終了時刻ベースの更新に変更）。
+     */
     private fun refreshLiveProgramNames() {
         val headerId = Category.LIVE_CHANNELS.ordinal.toLong()*10000
         if (mMainMenuAdapter.getListRowByHeaderId(headerId) == null) return
@@ -603,21 +594,50 @@ class MainFragment : BrowseSupportFragment() {
         EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
                 val programByChannelId = response.body()
-                    ?.associate { it.channel.id to it.programs.firstOrNull()?.name }
+                    ?.associate { it.channel.id to it.programs.firstOrNull() }
                     ?: return
                 // レスポンス到達までの間に行のアダプタが再生成されている可能性があるため、反映直前に取り直す
                 val adapter = (mMainMenuAdapter.getListRowByHeaderId(headerId)?.adapter as? ArrayObjectAdapter) ?: return
+
+                val changedIndices = mutableListOf<Int>()
+                var nextProgramEndAt = Long.MAX_VALUE
                 for (i in 0 until adapter.size()) {
-                    (adapter.get(i) as? ChannelItem)?.let { it.currentProgramName = programByChannelId[it.id] }
+                    val channelItem = adapter.get(i) as? ChannelItem ?: continue
+                    val program = programByChannelId[channelItem.id]
+                    if (channelItem.currentProgramStartAt != program?.startAt) {
+                        channelItem.currentProgramName = program?.name
+                        channelItem.currentProgramStartAt = program?.startAt
+                        channelItem.currentProgramEndAt = program?.endAt
+                        changedIndices.add(i)
+                    }
+                    program?.endAt?.let { endAt -> if (endAt < nextProgramEndAt) nextProgramEndAt = endAt }
                 }
+
                 activity?.runOnUiThread {
-                    adapter.notifyArrayItemRangeChanged(0, adapter.size())
+                    // 番組が切り替わったカードだけを再描画する（他のカードはチラつかせない）
+                    changedIndices.forEach { adapter.notifyArrayItemRangeChanged(it, 1) }
                 }
+
+                scheduleNextProgramRefresh(nextProgramEndAt)
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
                 Log.d(TAG,"refreshLiveProgramNames() getScheduleOnAir API Failure")
+                // 失敗時もフォールバック間隔でリトライする
+                scheduleNextProgramRefresh(Long.MAX_VALUE)
             }
         })
+    }
+
+    /** 次に番組が終了する時刻（不明な場合は Long.MAX_VALUE）に合わせて自動更新タイマーを仕掛け直す */
+    private fun scheduleNextProgramRefresh(nextProgramEndAt: Long) {
+        val delay = if (nextProgramEndAt == Long.MAX_VALUE) {
+            PROGRAM_REFRESH_FALLBACK_INTERVAL_MS
+        } else {
+            (nextProgramEndAt - System.currentTimeMillis() + PROGRAM_END_REFRESH_BUFFER_MS)
+                .coerceAtLeast(MIN_PROGRAM_REFRESH_DELAY_MS)
+        }
+        mHandler.removeCallbacks(mProgramRefreshRunnable)
+        mHandler.postDelayed(mProgramRefreshRunnable, delay)
     }
 
     /** USBデバッグなしでもクラッシュ内容を確認できるよう、前回起動時のクラッシュログがあれば表示する */
@@ -1304,8 +1324,14 @@ class MainFragment : BrowseSupportFragment() {
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
-        /** ライブ視聴の番組名自動更新間隔（issue #36。3分未満の短い番組の取りこぼしを避けるため1分間隔） */
-        private const val PROGRAM_NAME_AUTO_REFRESH_INTERVAL_MS = 60 * 1000L
+        /** 番組終了時刻が取得できない場合（放送休止中など）のフォールバック更新間隔 */
+        private const val PROGRAM_REFRESH_FALLBACK_INTERVAL_MS = 60 * 1000L
+
+        /** 番組終了時刻ちょうどだとEPGStation側の番組切り替えに間に合わないことがあるための余裕時間 */
+        private const val PROGRAM_END_REFRESH_BUFFER_MS = 5 * 1000L
+
+        /** 自動更新タイマーの最小間隔（連続発火を防ぐ下限） */
+        private const val MIN_PROGRAM_REFRESH_DELAY_MS = 1000L
     }
 
 
