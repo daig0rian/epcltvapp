@@ -58,6 +58,9 @@ object EpgStationV2 {
         @GET("channels")
         fun getChannels(): Call<List<ChannelItem>>
 
+        @GET("config")
+        fun getConfig(): Call<ConfigResponse>
+
         @GET("schedules/broadcasting")
         fun getScheduleOnAir(
             @Query("isHalfWidth") isHalfWidth: Boolean = true
@@ -103,6 +106,7 @@ object EpgStationV2 {
     var api: ApiInterface? = null
     var authForGlide : LazyHeaders? = null
     var channelMap: Map<Long, String> = emptyMap()
+    var streamConfig: StreamConfig? = null
 
     fun fetchChannels() {
         api?.getChannels()?.enqueue(object : Callback<List<ChannelItem>> {
@@ -113,6 +117,40 @@ object EpgStationV2 {
             }
             override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {}
         })
+    }
+
+    fun fetchStreamConfig() {
+        api?.getConfig()?.enqueue(object : Callback<ConfigResponse> {
+            override fun onResponse(call: Call<ConfigResponse>, response: retrofit2.Response<ConfigResponse>) {
+                streamConfig = response.body()?.streamConfig
+            }
+            override fun onFailure(call: Call<ConfigResponse>, t: Throwable) {}
+        })
+    }
+
+    /**
+     * ユーザーが選んだプロファイル名からmodeインデックスを解決する。
+     * config.ymlの並び順が変わってもユーザーの選択がズレないよう、indexではなく名前で永続化・検索する。
+     * selectedNameがnull/空文字/該当なしの場合は先頭(index 0)にフォールバックする。
+     */
+    fun resolveHlsProfileIndex(selectedName: String?, profileNames: List<String>): Int {
+        if (!selectedName.isNullOrEmpty()) {
+            val idx = profileNames.indexOf(selectedName)
+            if (idx >= 0) return idx
+        }
+        return 0
+    }
+
+    /**
+     * ライブMpegTS用。該当なしの場合はisUnconverted(無変換)のプロファイルを優先し、無ければ先頭にフォールバックする。
+     */
+    fun resolveM2tsProfileIndex(selectedName: String?, profiles: List<M2tsStreamParam>): Int {
+        if (!selectedName.isNullOrEmpty()) {
+            val idx = profiles.indexOfFirst { it.name == selectedName }
+            if (idx >= 0) return idx
+        }
+        val unconverted = profiles.indexOfFirst { it.isUnconverted }
+        return if (unconverted >= 0) unconverted else 0
     }
 
     fun initAPI(_baseUrl:String){

@@ -50,6 +50,42 @@
             app:useSimpleSummaryProvider="true"
             />
 
+        <PreferenceCategory
+            app:title="@string/pref_category_stream_profile">
+
+            <ListPreference
+                app:key=         "@string/pref_key_recorded_hls_profile"
+                app:defaultValue=""
+                app:title=       "@string/recorded_hls_profile"
+                app:useSimpleSummaryProvider="true"
+                />
+
+            <ListPreference
+                app:key=         "@string/pref_key_live_hls_profile"
+                app:defaultValue=""
+                app:title=       "@string/live_hls_profile"
+                app:useSimpleSummaryProvider="true"
+                />
+
+            <ListPreference
+                app:key=         "@string/pref_key_live_mpegts_profile"
+                app:defaultValue=""
+                app:title=       "@string/live_mpegts_profile"
+                app:useSimpleSummaryProvider="true"
+                />
+
+        </PreferenceCategory>
+
+        <PreferenceCategory
+            app:title="@string/pref_category_ts_processing">
+
+            <SwitchPreference
+                app:key=         "@string/pref_key_native_ts_processing"
+                app:defaultValue="false"
+                app:title=       "@string/native_ts_processing" />
+
+        </PreferenceCategory>
+
     </PreferenceScreen>
 
     <PreferenceScreen

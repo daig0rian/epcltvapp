@@ -8,6 +8,8 @@ import androidx.leanback.preference.LeanbackPreferenceFragment
 import androidx.leanback.preference.LeanbackSettingsFragment
 import androidx.preference.*
 import androidx.preference.DialogPreference.TargetFragment
+import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
+import com.daigorian.epcltvapp.epgstationv2caller.M2tsStreamParam
 
 
 class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
@@ -129,6 +131,58 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                     Toast.makeText(activity, getString(R.string.history_cleared), Toast.LENGTH_SHORT).show()
                     true
                 }
+
+            // ストリームプロファイル選択（Issue #34）: サーバーから取得したプロファイル名は
+            // 静的リソースにできないため、EpgStationV2にキャッシュされたstreamConfigから動的に構築する。
+            // 未取得(null)の場合は自動ラベルのみのリストになる（表示は壊れない）。
+            val streamConfig = EpgStationV2.streamConfig
+
+            val recordedHlsProfilePref = preferenceScreen.findPreference(getText(R.string.pref_key_recorded_hls_profile)) as ListPreference?
+            recordedHlsProfilePref?.let {
+                val (labels, values) = buildHlsProfileEntries(
+                    streamConfig?.recorded?.ts?.hls.orEmpty(),
+                    getString(R.string.stream_profile_auto_first)
+                )
+                it.entries = labels
+                it.entryValues = values
+            }
+
+            val liveHlsProfilePref = preferenceScreen.findPreference(getText(R.string.pref_key_live_hls_profile)) as ListPreference?
+            liveHlsProfilePref?.let {
+                val (labels, values) = buildHlsProfileEntries(
+                    streamConfig?.live?.ts?.hls.orEmpty(),
+                    getString(R.string.stream_profile_auto_first)
+                )
+                it.entries = labels
+                it.entryValues = values
+            }
+
+            val liveMpegTsProfilePref = preferenceScreen.findPreference(getText(R.string.pref_key_live_mpegts_profile)) as ListPreference?
+            liveMpegTsProfilePref?.let {
+                val (labels, values) = buildM2tsProfileEntries(
+                    streamConfig?.live?.ts?.m2ts.orEmpty(),
+                    getString(R.string.stream_profile_auto_unconverted)
+                )
+                it.entries = labels
+                it.entryValues = values
+            }
+        }
+
+        private fun buildHlsProfileEntries(names: List<String>, autoLabel: String): Pair<Array<CharSequence>, Array<CharSequence>> {
+            val labels = mutableListOf<CharSequence>(autoLabel)
+            val values = mutableListOf<CharSequence>("")
+            names.forEach { labels.add(it); values.add(it) }
+            return labels.toTypedArray() to values.toTypedArray()
+        }
+
+        private fun buildM2tsProfileEntries(profiles: List<M2tsStreamParam>, autoLabel: String): Pair<Array<CharSequence>, Array<CharSequence>> {
+            val labels = mutableListOf<CharSequence>(autoLabel)
+            val values = mutableListOf<CharSequence>("")
+            profiles.forEach { p ->
+                labels.add(if (p.isUnconverted) "${p.name} (無変換)" else p.name)
+                values.add(p.name)
+            }
+            return labels.toTypedArray() to values.toTypedArray()
         }
 
         private fun enableCustomBaseUrlUI(boolean: Boolean) {
