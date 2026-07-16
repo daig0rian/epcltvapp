@@ -157,6 +157,10 @@ object EpgStationV2 {
         return baseUrl + "thumbnails/" + id
     }
 
+    fun getChannelLogoURL(channelId: Long): String {
+        return baseUrl + "channels/" + channelId + "/logo"
+    }
+
     fun getVideoURL(id:String):String{
         return baseUrl + "videos/" + id
     }
