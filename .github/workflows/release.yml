@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: チェックアウト
         uses: actions/checkout@v4
+        with:
+          submodules: recursive
 
       - name: JDK 21 セットアップ
         uses: actions/setup-java@v4
