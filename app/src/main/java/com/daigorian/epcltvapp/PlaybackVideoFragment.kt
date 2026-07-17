@@ -489,7 +489,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .edit().putBoolean(PREF_CAPTION_ENABLED, captionEnabled).apply()
         if (!captionEnabled) overlayView?.clearCaptions()
         val msg = if (captionEnabled) R.string.caption_on else R.string.caption_off
-        Toast.makeText(requireContext(), getString(msg), Toast.LENGTH_SHORT).show()
+        showQuickToast(getString(msg))
     }
 
     fun toggleSuperimpose() {
@@ -498,12 +498,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .edit().putBoolean(PREF_SUPERIMPOSE_ENABLED, superimposeEnabled).apply()
         if (!superimposeEnabled) overlayView?.clearSuperimpose()
         val msg = if (superimposeEnabled) R.string.superimpose_on else R.string.superimpose_off
-        Toast.makeText(requireContext(), getString(msg), Toast.LENGTH_SHORT).show()
+        showQuickToast(getString(msg))
     }
 
     fun toggleAudioTrack() {
         if (!hasSubAudio) {
-            Toast.makeText(requireContext(), getString(R.string.no_sub_audio), Toast.LENGTH_SHORT).show()
+            showQuickToast(getString(R.string.no_sub_audio))
             return
         }
         preferSubAudio = !preferSubAudio
@@ -511,7 +511,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .edit().putBoolean(PREF_SUB_AUDIO, preferSubAudio).apply()
         selectAudioTrack(if (preferSubAudio) 1 else 0)
         val msg = if (preferSubAudio) R.string.audio_sub else R.string.audio_main
-        Toast.makeText(requireContext(), getString(msg), Toast.LENGTH_SHORT).show()
+        showQuickToast(getString(msg))
+    }
+
+    /** アイコンで状態が分かるトグルボタン向けに、通常のToastより短く表示して消す */
+    fun showQuickToast(message: String) {
+        val toast = Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT)
+        toast.show()
+        Handler(Looper.getMainLooper()).postDelayed({ toast.cancel() }, QUICK_TOAST_DURATION_MS)
     }
 
     /** 録画予約に失敗した際、自己解決やissue報告に使えるよう技術的な詳細をダイアログで表示する */
@@ -669,6 +676,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
+        private const val QUICK_TOAST_DURATION_MS = 1000L
 
         private fun buildOkHttpClient(sampleUrl: String): OkHttpClient {
             val builder = OkHttpClient.Builder()
@@ -702,6 +710,25 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
+    private class TwoStateAction(
+        id: Int,
+        context: Context?,
+        offDrawableRes: Int,
+        onDrawableRes: Int,
+        offLabel: String,
+        onLabel: String,
+    ) : PlaybackControlsRow.MultiAction(id) {
+        init {
+            setDrawables(arrayOf(context?.getDrawable(offDrawableRes), context?.getDrawable(onDrawableRes)))
+            setLabels(arrayOf(offLabel, onLabel))
+        }
+
+        companion object {
+            const val INDEX_OFF = 0
+            const val INDEX_ON = 1
+        }
+    }
+
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
@@ -718,13 +745,26 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
         }
 
-        private val superimposeAction = Action(
-            ACTION_ID_SUPERIMPOSE,
-            if (superimposeEnabled) "SI:ON" else "SI:OFF"
-        )
+        private val superimposeAction = TwoStateAction(
+            ACTION_ID_SUPERIMPOSE.toInt(),
+            getContext(),
+            R.drawable.ic_action_superimpose_off,
+            R.drawable.ic_action_superimpose_on,
+            "SI:OFF",
+            "SI:ON"
+        ).apply {
+            index = if (superimposeEnabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
+        }
 
-        private val audioAction = Action(ACTION_ID_AUDIO, if (preferSubAudio) "Sub" else "Main").apply {
-            // Will be updated when tracks are detected
+        private val audioAction = TwoStateAction(
+            ACTION_ID_AUDIO.toInt(),
+            getContext(),
+            R.drawable.ic_action_audio_track_main,
+            R.drawable.ic_action_audio_track_sub,
+            "Main",
+            "Sub"
+        ).apply {
+            index = if (preferSubAudio) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
         private var audioActionEnabled = hasSubAudio
 
@@ -762,16 +802,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         fun updateAudioActionState(enabled: Boolean) {
             audioActionEnabled = enabled
-            audioAction.label1 = if (!enabled) "---"
-                else if ((host?.let {
-                    (it as? VideoSupportFragmentGlueHost)
-                } != null)) {
-                    val fragment = this@MyPlaybackTransportControlGlue.context
-                    if (fragment is Context) {
-                        val prefs = PreferenceManager.getDefaultSharedPreferences(fragment)
-                        if (prefs.getBoolean(PREF_SUB_AUDIO, false)) "Sub" else "Main"
-                    } else "Main"
-                } else "Main"
+            if (enabled) {
+                // Re-apply the current index to restore the icon/label overwritten by the disabled state below.
+                audioAction.index = audioAction.index
+            } else {
+                audioAction.label1 = "---"
+            }
             primaryActions?.let { adapter ->
                 val idx = adapter.indexOf(audioAction)
                 if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
@@ -805,7 +841,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     playbackFragment?.toggleSuperimpose()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val enabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
-                    superimposeAction.label1 = if (enabled) "SI:ON" else "SI:OFF"
+                    superimposeAction.index = if (enabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
                     primaryActions?.let { adapter ->
                         val idx = adapter.indexOf(superimposeAction)
                         if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
@@ -813,13 +849,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
                 audioAction -> {
                     if (!audioActionEnabled) {
-                        Toast.makeText(context, context?.getString(R.string.no_sub_audio), Toast.LENGTH_SHORT).show()
+                        playbackFragment?.showQuickToast(context?.getString(R.string.no_sub_audio) ?: "")
                         return
                     }
                     playbackFragment?.toggleAudioTrack()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val isSub = prefs.getBoolean(PREF_SUB_AUDIO, false)
-                    audioAction.label1 = if (isSub) "Sub" else "Main"
+                    audioAction.index = if (isSub) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
                     primaryActions?.let { adapter ->
                         val idx = adapter.indexOf(audioAction)
                         if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
