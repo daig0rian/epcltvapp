@@ -23,12 +23,21 @@ internal class TsSeekDataProvider(
     private val onSeekGestureStarted: () -> Unit,
 ) : PlaybackSeekDataProvider() {
 
-    /** head起点(0)の相対時刻(ms)。PlayerAdapterのduration/position系と同じ基準。 */
+    /** head起点(0)の相対時刻(ms)。PlayerAdapterのduration/position系と同じ基準。実測の総時間そのもの。 */
     val durationMs: Long = tailPoint.timeMs - headPoint.timeMs
 
+    /**
+     * 実際にシーク先として許容する時刻の上限。durationMsそのものへのシークを許すと、
+     * 着地点近傍(tailPoint.byteOffset付近)にはほぼ再生可能なデータが残っておらず、
+     * MediaSourceの準備が実質失敗してプレーヤーがSTATE_IDLEのまま復帰不能になる不具合が
+     * あったため、末尾からpointIntervalMs分の余裕を残す。真の終端までは通常再生で
+     * 到達させる想定(そちらはTsSeekPlayerAdapter.play()のSTATE_ENDED処理で対応)。
+     */
+    private val maxSeekableMs: Long = (durationMs - pointIntervalMs).coerceAtLeast(0)
+
     private val positions: LongArray = run {
-        val pointCount = ((durationMs / pointIntervalMs) + 1).toInt().coerceIn(2, maxPointCount)
-        LongArray(pointCount) { i -> durationMs * i / (pointCount - 1) }
+        val pointCount = ((maxSeekableMs / pointIntervalMs) + 1).toInt().coerceIn(2, maxPointCount)
+        LongArray(pointCount) { i -> maxSeekableMs * i / (pointCount - 1) }
     }
 
     /** ログ表示等、副作用([getSeekPositions]参照)を発生させずに点数だけ知りたい場合用。 */
@@ -47,10 +56,10 @@ internal class TsSeekDataProvider(
         return positions
     }
 
-    /** head/tailのバイト位置からの線形補間による概算バイト位置(188アライン済み)。 */
+    /** head/tailのバイト位置からの線形補間による概算バイト位置(188アライン済み)。maxSeekableMsを超えないようクランプする。 */
     fun estimateByteOffset(relativeTimeMs: Long): Long {
         if (durationMs <= 0) return headPoint.byteOffset
-        val clamped = relativeTimeMs.coerceIn(0, durationMs)
+        val clamped = relativeTimeMs.coerceIn(0, maxSeekableMs)
         val span = tailPoint.byteOffset - headPoint.byteOffset
         val raw = headPoint.byteOffset + span * clamped / durationMs
         return raw - (raw % TS_PACKET_SIZE)

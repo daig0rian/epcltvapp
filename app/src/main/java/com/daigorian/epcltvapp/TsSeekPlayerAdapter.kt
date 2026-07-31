@@ -122,6 +122,15 @@ internal class TsSeekPlayerAdapter(
     }
 
     override fun play() {
+        if (player.playbackState == Player.STATE_ENDED) {
+            // 終端到達後の再生ボタンは「最初から再生」を期待される。ExoPlayer標準の
+            // Util.handlePlayButtonAction は STATE_ENDED 時に「現在開いている
+            // MediaSourceの先頭」へ戻すだけだが、この場合の「先頭」は直前のシーク開始点
+            // (毎回シークのたびにMediaSourceを作り直しているため)であり、
+            // ファイル本来の先頭ではない。そのため通常のシーク要求として扱う。
+            onSeekRequested(0L)
+            return
+        }
         if (Util.handlePlayButtonAction(player)) getCallback()?.onPlayStateChanged(this)
     }
 
