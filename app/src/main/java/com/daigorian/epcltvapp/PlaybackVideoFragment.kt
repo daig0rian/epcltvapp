@@ -392,6 +392,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             val catFiltered = catOutput.toByteArray()
             Log.i(TAG, "[Phase2調査] CAT(PID=0x0001)パケットを${catPacketCount}個除去 filtered=${catFiltered.size}bytes")
 
+            // [Phase2調査] 2つの仮説が外れたため、推測ではなくPMTの生バイトを直接確認する。
+            // tsreadexの-nフィルタ通過後、PMTはPID=0x01f0に固定される(Readme.txt参照)。
+            dumpPmtHex(catFiltered, 0x01f0)
+
             val retriever = MediaMetadataRetriever()
             val startedAt = SystemClock.elapsedRealtime()
             try {
@@ -410,6 +414,68 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 retriever.release()
             }
         }
+    }
+
+    /** [Phase2調査・一時コード] 指定PIDのPSIセクションを再構成してhexダンプする。 */
+    private fun dumpPmtHex(bytes: ByteArray, targetPid: Int) {
+        var pos = 0
+        var buf = ByteArray(0)
+        var expectedLen = -1
+        while (pos + 188 <= bytes.size) {
+            if (bytes[pos] != 0x47.toByte()) {
+                pos += 188
+                continue
+            }
+            val pid = ((bytes[pos + 1].toInt() and 0x1F) shl 8) or (bytes[pos + 2].toInt() and 0xFF)
+            if (pid != targetPid) {
+                pos += 188
+                continue
+            }
+            val pusi = (bytes[pos + 1].toInt() and 0x40) != 0
+            val afc = (bytes[pos + 3].toInt() shr 4) and 0x03
+            if ((afc and 0x01) == 0) {
+                pos += 188
+                continue
+            }
+            val afLen = if ((afc and 0x02) != 0) (bytes[pos + 4].toInt() and 0xFF) + 1 else 0
+            val payloadStart = pos + 4 + afLen
+            val payloadEnd = pos + 188
+            if (payloadStart >= payloadEnd) {
+                pos += 188
+                continue
+            }
+            if (pusi) {
+                var p = payloadStart
+                val pointerField = bytes[p].toInt() and 0xFF
+                p += 1 + pointerField
+                if (p >= payloadEnd) {
+                    pos += 188
+                    continue
+                }
+                buf = bytes.copyOfRange(p, payloadEnd)
+                if (buf.size < 3) {
+                    expectedLen = -1
+                    pos += 188
+                    continue
+                }
+                val sectionLength = ((buf[1].toInt() and 0x0F) shl 8) or (buf[2].toInt() and 0xFF)
+                expectedLen = 3 + sectionLength
+            } else {
+                if (expectedLen < 0) {
+                    pos += 188
+                    continue
+                }
+                buf += bytes.copyOfRange(payloadStart, payloadEnd)
+            }
+            if (expectedLen in 1..buf.size) {
+                val section = buf.copyOf(expectedLen)
+                Log.i(TAG, "[Phase2調査] PID=0x${targetPid.toString(16)} section(${section.size}bytes) hex=" +
+                    section.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) })
+                return
+            }
+            pos += 188
+        }
+        Log.w(TAG, "[Phase2調査] PID=0x${targetPid.toString(16)}のセクションが見つからなかった")
     }
 
     @androidx.annotation.RequiresApi(Build.VERSION_CODES.M)
