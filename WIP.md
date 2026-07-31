@@ -17,13 +17,36 @@ Phase 1は当初「N点を事前プローブしたテーブル」方式(v2)だ�
 - `getSeekPositions()`の各点は**時刻のみ**で、バイト位置は`estimateByteOffset()`による概算のみ（未検証）。サムネイル生成には実際のバイト位置が必要なため、選定された点ごとに`TsProbe.refineSeekPoint()`相当の軽量プローブで補正するか、概算のまま使うかは要検討
   - サムネイルは元々「参考程度の見た目」なので概算のままでも実用上問題ない可能性がある。まず`MediaMetadataRetriever`自体が動くかどうかの検証を優先し、精度の話は後回しにする
 
+## 検証結果: MediaMetadataRetrieverは生ARIB TSに使えない（確認済み）
+
+Google TV Streamer実機(`adb logcat`で直接確認)で`investigateMediaMetadataRetriever()`(調査用一時コード)を実行した結果:
+
+```
+ATSParser: stream PID 0x140 has invalid stream type 0x0d
+ATSParser: stream PID 0x160/0x161/0x162/0x170/0x171/0x172 has invalid stream type 0x0d
+ATSParser: Receiving scrambled streams without descrambler!
+MPEG2TSExtractor: stopped parsing scrambled content, haveAudio=1, haveVideo=1, elaspedTime=15858
+StagefrightMetadataRetriever: all codecs failed to extract frame.
+MetadataRetrieverClient: failed to capture a video frame
+MediaMetadataRetrieverJNI: getFrameAtTime: videoFrame is a NULL pointer
+```
+
+**原因**: Android標準の`MPEG2TSExtractor`/`ATSParser`は、生ARIB TS中のstream_type=0x0d(DSM-CC、ARIBのデータ放送/字幕系PID)のPIDを認識できず、「スクランブルされたストリームだがデスクランブラが無い」と誤判定して解析を中断する。音声・映像自体は検出できている(`haveAudio=1, haveVideo=1`)が、この誤判定によりコーデックにデータが渡らずフレーム取得が失敗する。
+
+これはタイミングや取得位置に依存する問題ではなく、生ARIB TSの構造自体をAndroid標準パーサーが扱えないという構造的な問題。PAT/PMTでこれらのPIDは録画全体に存在するため、どの時刻を狙っても同じ結果になると考えられる（tsreadexが元々この種の非標準ARIB構造を標準デコーダ/プレーヤー向けに正規化するために存在することを踏まえると、想定内の結果）。
+
+**→ MediaMetadataRetrieverをそのまま使う案は不採用。**
+
 ## 残タスク
 
-- [ ] **最優先**: `MediaMetadataRetriever`が生ARIB放送TS(HTTP経由、認証ヘッダ・Range対応込み)から実際にフレームを取得できるか、実機で検証する
-- [ ] （検証がOKなら）サムネイル生成のタイミング・キャッシュ方針の設計
+- [ ] **方針決定**: 以下のいずれかで進める
+  - (a) tsreadexで正規化した後のバイト列を`MediaMetadataRetriever`に渡す（API 23+の`MediaDataSource`でメモリ上のバイト列を供給、ファイル書き出し不要。minSdk22機種では非対応にするか要検討）
+  - (b) 自前でMediaCodecを使い1フレームだけデコードする（実装コストが高い）
+- [ ] （方針決定後）サムネイル生成のタイミング・キャッシュ方針の設計
 - [ ] BFS選定順序の実装（v3のgetSeekPositions()配列に対して）
 - [ ] `TsSeekDataProvider.getThumbnail(index, callback)`の実装（現在は基底クラスのデフォルト実装＝何もしない）
 - [ ] UI側の表示確認
+- [ ] 調査用一時コード(`investigateMediaMetadataRetriever`)を削除するか、正式な検証コードに置き換える
 
 ## 重要な決定事項
 
