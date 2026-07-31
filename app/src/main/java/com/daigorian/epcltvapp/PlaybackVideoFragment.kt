@@ -356,6 +356,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 return@execute
             }
 
+            // [Phase2調査] 1回目の検証で判明: tsreadex正規化後もtransport_scrambling_control
+            // ビット(TSヘッダbyte3の上位2bit)が残っており、Android標準のATSParserが
+            // 「スクランブルされたストリーム」と誤判定して解析を中断していた。
+            // 実際のペイロードは平文なので、このビットを強制的にクリアして再検証する。
+            var scrambledPacketCount = 0
+            var i = 0
+            while (i + 188 <= normalized.size) {
+                if (normalized[i] == 0x47.toByte() && (normalized[i + 3].toInt() and 0xC0) != 0) {
+                    scrambledPacketCount++
+                    normalized[i + 3] = (normalized[i + 3].toInt() and 0x3F).toByte()
+                }
+                i += 188
+            }
+            Log.i(TAG, "[Phase2調査] transport_scrambling_controlをクリアしたパケット数=$scrambledPacketCount")
+
             val retriever = MediaMetadataRetriever()
             val startedAt = SystemClock.elapsedRealtime()
             try {
