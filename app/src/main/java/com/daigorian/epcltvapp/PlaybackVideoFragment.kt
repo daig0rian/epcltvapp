@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -65,6 +66,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var captionHandle: Long = 0
     private var superimposeHandle: Long = 0
     private val mainHandler = Handler(Looper.getMainLooper())
+    // 字幕PES処理・遅延レンダリングのHandlerコールバックに付けるトークン。
+    // シーク時にmainHandler全体ではなくこれらだけを選択的にキャンセルするために使う
+    // (mainHandlerは他の目的にも使い回している共有インスタンスのため)。
+    private val captionCallbackToken = Any()
 
     // Persisted toggle states
     private var captionEnabled = false
@@ -77,6 +82,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     // Content type
     private var isTsContent = false
+    // ARIB字幕/デュアルモノ副音声を扱うtsreadexネイティブフィルタを使うかどうか。
+    // isTsContentのサブセット(TSでなければ常にfalse)。
+    private var useNativeTsProcessing = false
+
+    // TS seek support (録画オリジナルTSのみ)
+    private var tsSeekAdapter: TsSeekPlayerAdapter? = null
+    private var tsSeekUrl: String? = null
+    private var tsSeekHttpClient: OkHttpClient? = null
+    private var tsSeekDataProvider: TsSeekDataProvider? = null
+    private val tsProbeExecutor: java.util.concurrent.ExecutorService =
+        java.util.concurrent.Executors.newSingleThreadExecutor()
 
     // Live viewing state
     private var liveChannelId: Long = -1L
@@ -137,12 +153,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         superimposeEnabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
         preferSubAudio = prefs.getBoolean(PREF_SUB_AUDIO, false)
 
-        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理(tsreadex/ARIB字幕)を
-        // 強制バイパスしていたが、Issue #34でユーザー切り替え可能な設定にした。
-        // #33が実機で未解決のため、デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
-        val nativeTsProcessingEnabled = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
-        isTsContent = ((activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false) || isLiveMpegTs) &&
-                nativeTsProcessingEnabled
+        // isTsContent は「TSファイルかどうか」のみを表すフラグ。
+        // ネイティブ処理(tsreadex/ARIB字幕/デュアルモノ副音声)を使うかどうかは
+        // useNativeTsProcessing として別管理する——TS向けシーク機能はネイティブ処理を
+        // 使わなくても(生バイトを直接読むだけなので)動作するため、両者は独立している。
+        //
+        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
+        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
+        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
+        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
+        isTsContent = (activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false) || isLiveMpegTs
+        useNativeTsProcessing = isTsContent && nativeTsProcessingPref
 
         // ストリームプロファイル選択（Issue #34）: config.ymlの並び順ではなくプロファイル名で
         // ユーザーの選択を永続化してあるので、都度最新のstreamConfigから該当indexを解決する。
@@ -204,16 +225,29 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         })
 
         // Leanback glue
-        val playerAdapter = LeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS)
+        // 録画オリジナルTS再生時は、TsReadexDataSource が duration を C.TIME_UNSET として
+        // 隠しているため、TsProbe の実測値とシーク時のオフセットを自前管理できる
+        // TsSeekPlayerAdapter を使う（LeanbackPlayerAdapter は final のため継承不可）。
+        val playerAdapter: PlayerAdapter = if (isTsContent && !isAnyLive) {
+            TsSeekPlayerAdapter(exoPlayer!!, UPDATE_PERIOD_MS) { targetMs ->
+                performTsSeek(targetMs)
+            }.also { tsSeekAdapter = it }
+        } else {
+            LeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS)
+        }
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, isTsContent, isAnyLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
+            activity, playerAdapter, useNativeTsProcessing, isAnyLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
-        mTransportControlGlue.isSeekEnabled = !isAnyLive
+        // 録画オリジナルTSはシーク点テーブルの構築が終わるまでシーク不可にする
+        // (テーブル未完成の間にシーク操作されると、Leanbackのデフォルトの1%刻み挙動＋
+        // 都度のバイト位置探索という避けたかった経路に落ちてしまうため)。
+        // テーブル完成後に startTsProbing() 内で true に切り替える。
+        mTransportControlGlue.isSeekEnabled = if (isTsContent && !isAnyLive) false else !isAnyLive
         mTransportControlGlue.playWhenPrepared()
 
         // Build OkHttpClient with auth if needed
@@ -223,7 +257,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isLiveMpegTs && liveChannelId >= 0) {
             val mpegTsUrl = EpgStationV2.getLiveMpegTsUrl(liveChannelId, liveMpegTsMode)
             okHttpClient = buildOkHttpClient(mpegTsUrl)
-            startDirectPlayback(mpegTsUrl, okHttpClient, isTsContent)
+            startDirectPlayback(mpegTsUrl, okHttpClient, isTsContent, useNativeTsProcessing)
             return
         }
 
@@ -251,7 +285,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         okHttpClient = buildOkHttpClient(movieUrl)
         val cleanUrl = stripAuthFromUrl(movieUrl)
-        startDirectPlayback(cleanUrl, okHttpClient, isTsContent)
+        startDirectPlayback(cleanUrl, okHttpClient, isTsContent, useNativeTsProcessing)
+        if (isTsContent) {
+            tsSeekUrl = cleanUrl
+            tsSeekHttpClient = okHttpClient
+            startTsProbing(cleanUrl, okHttpClient)
+        }
     }
 
     override fun onCreateView(
@@ -260,7 +299,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         savedInstanceState: Bundle?
     ): View? {
         val root = super.onCreateView(inflater, container, savedInstanceState) as ViewGroup?
-        if (isTsContent) {
+        if (useNativeTsProcessing) {
             overlayView = SubtitleOverlayView(requireContext()).apply {
                 layoutParams = ViewGroup.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT,
@@ -303,11 +342,22 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         })
     }
 
-    private fun startDirectPlayback(url: String, httpClient: OkHttpClient, isTsContent: Boolean) {
+    private fun startDirectPlayback(
+        url: String,
+        httpClient: OkHttpClient,
+        isTsContent: Boolean,
+        useNativeTsProcessing: Boolean,
+    ) {
         val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
         val mediaSource = if (isTsContent) {
-            val tsFactory = TsReadexDataSource.Factory(dataSourceFactory)
-            setupCaptionListeners(tsFactory)
+            // TsReadexDataSource は startByteOffset によるシーク制御を担うため、
+            // ネイティブ処理(ARIB字幕等)のオン/オフにかかわらず常に経由させる。
+            val tsFactory = TsReadexDataSource.Factory(dataSourceFactory).apply {
+                nativeProcessingEnabled = useNativeTsProcessing
+            }
+            if (useNativeTsProcessing) {
+                setupCaptionListeners(tsFactory)
+            }
             ProgressiveMediaSource.Factory(tsFactory)
                 .createMediaSource(MediaItem.fromUri(url))
         } else {
@@ -317,6 +367,118 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer?.setMediaSource(mediaSource)
         exoPlayer?.prepare()
         exoPlayer?.playWhenReady = true
+    }
+
+    /**
+     * 録画オリジナルTSのシーク対応: ファイル先頭・末尾を軽量プロービングして実測の
+     * 総時間を求める。EPGStationのメタデータ(番組時間・ファイルサイズ)は使わない
+     * ——録画がエラー等で途中終了し、メタデータと実データが乖離するケースがあるため。
+     */
+    private fun startTsProbing(url: String, client: OkHttpClient) {
+        tsProbeExecutor.execute {
+            val fileSize = TsProbe.fetchFileSize(url, client)
+            val head = if (fileSize != null) TsProbe.probeHead(url, client) else null
+            if (fileSize == null || head == null) {
+                Log.w(TAG, "startTsProbing: head probe failed, seek stays disabled")
+                return@execute
+            }
+            val tail = TsProbe.probeTail(url, client, fileSize, head.pcrPid)
+            if (tail == null) {
+                Log.w(TAG, "startTsProbing: tail probe failed, seek stays disabled")
+                return@execute
+            }
+            if (tail.timeMs - head.firstPcr.timeMs <= 0) {
+                Log.w(TAG, "startTsProbing: invalid duration=${tail.timeMs - head.firstPcr.timeMs}")
+                return@execute
+            }
+            // head/tailの2点だけでdurationとシークを即座に有効化する(再生開始を待たせない)。
+            // 各シーク位置の正確なバイト位置はここでは求めず、確定時に1回だけ軽量プローブして
+            // 補正する(performTsSeek参照)。これにより起動時に必要なプロービングは
+            // fetchFileSize+probeHead+probeTailの3リクエストのみで済む。
+            val provider = TsSeekDataProvider(
+                fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
+            ) {
+                // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。
+                // シークバーへ移動しただけで再生が止まると「シークが実行された」と誤解させてしまうため。
+                tsSeekAdapter?.resumePlaybackIfWasPlaying()
+            }
+            mainHandler.post {
+                if (!isAdded) return@post
+                tsSeekDataProvider = provider
+                tsSeekAdapter?.setKnownDuration(provider.durationMs)
+                mTransportControlGlue.setSeekProvider(provider)
+                mTransportControlGlue.isSeekEnabled = true
+                Log.d(TAG, "startTsProbing: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
+            }
+        }
+    }
+
+    /**
+     * シークバー確定(DPAD_CENTER/ENTER)時にTsSeekPlayerAdapterから呼ばれるエントリポイント。
+     *
+     * PlaybackSeekDataProvider(TsSeekDataProvider)を設定している間、LeanbackはD-pad操作の
+     * 途中経過ではPlayerAdapter.seekTo()を呼ばず、確定時に1回だけ呼ぶ。ここでは概算バイト位置
+     * (線形補間)を求めた上で、その近傍を1回だけ軽量プローブして実際の位置に補正する。
+     *
+     * 確定直後(mIsSeekがfalseに変わり通常ポーリングが再開する瞬間)から補正プローブ完了までの
+     * 短い空白期間、シークバーが一瞬古い位置に戻ってから正しい位置へ進むという不自然な動きに
+     * なるのを防ぐため、notifySeekPending()で概算位置を即座に(ネットワークI/O前に)反映する。
+     */
+    private fun performTsSeek(targetPositionMs: Long) {
+        val provider = tsSeekDataProvider ?: return
+        val url = tsSeekUrl ?: return
+        val client = tsSeekHttpClient ?: return
+        val clampedTarget = targetPositionMs.coerceIn(0, provider.durationMs)
+        val guessByteOffset = provider.estimateByteOffset(clampedTarget)
+        tsSeekAdapter?.notifySeekPending(clampedTarget)
+        tsProbeExecutor.execute {
+            val refined = TsProbe.refineSeekPoint(url, client, provider.fileSize, provider.pcrPid, guessByteOffset)
+            mainHandler.post {
+                if (!isAdded) return@post
+                if (refined != null) {
+                    restartTsPlaybackAt(refined.byteOffset, provider.toRelativeMs(refined.timeMs))
+                } else {
+                    // 補正プローブに失敗した場合は概算値のまま着地する(何もしないよりまし)
+                    Log.w(TAG, "performTsSeek: refine probe failed, falling back to estimate")
+                    restartTsPlaybackAt(guessByteOffset, clampedTarget)
+                }
+            }
+        }
+    }
+
+    /** 解決したバイト位置から MediaSource を作り直し、疑似シークを実行する。 */
+    private fun restartTsPlaybackAt(byteOffset: Long, newPositionOffsetMs: Long) {
+        val url = tsSeekUrl ?: return
+        val client = tsSeekHttpClient ?: return
+        // 一時停止中にシークした場合は一時停止のままにする(自動再開させない)
+        val wasPlaying = exoPlayer?.playWhenReady ?: true
+        // シーク前の字幕PES処理・遅延レンダリングコールバックが残っていると、シーク後も
+        // 古い字幕がしばらく表示され続けてしまうため、キャンセルした上でオーバーレイと
+        // デコーダ内部状態(表示継続時間等)の両方をクリアする。
+        mainHandler.removeCallbacksAndMessages(captionCallbackToken)
+        overlayView?.clearCaptions()
+        overlayView?.clearSuperimpose()
+        if (captionHandle != 0L) AribCaptionFilter.flush(captionHandle)
+        if (superimposeHandle != 0L) AribCaptionFilter.flush(superimposeHandle)
+        val dataSourceFactory = OkHttpDataSource.Factory(client)
+        val tsFactory = TsReadexDataSource.Factory(dataSourceFactory).apply {
+            startByteOffset = byteOffset
+            nativeProcessingEnabled = useNativeTsProcessing
+        }
+        if (useNativeTsProcessing) {
+            setupCaptionListeners(tsFactory)
+        }
+        val mediaSource = ProgressiveMediaSource.Factory(tsFactory).createMediaSource(MediaItem.fromUri(url))
+        exoPlayer?.setMediaSource(mediaSource)
+        exoPlayer?.prepare()
+        exoPlayer?.playWhenReady = wasPlaying
+        tsSeekAdapter?.notifySeekApplied(newPositionOffsetMs)
+        // シーク中ずっと再生中だった場合のみ、確定後にコントロールオーバーレイを閉じる
+        // (戻るボタン押下時と同じhideControlsOverlay()。一時停止中にシークしていた場合は
+        // ブラウズ中とみなしオーバーレイを表示したままにする)
+        if (wasPlaying) {
+            hideControlsOverlay(true)
+        }
     }
 
     private fun startHlsPlayback(actionId: Long, httpClient: OkHttpClient, mode: Int) {
@@ -417,13 +579,18 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     private fun setupCaptionListeners(tsFactory: TsReadexDataSource.Factory) {
-        captionHandle = AribCaptionFilter.create(1920, 1080, AribCaptionFilter.TYPE_CAPTION)
-        superimposeHandle = AribCaptionFilter.create(1920, 1080, AribCaptionFilter.TYPE_SUPERIMPOSE)
+        // シーク(MediaSource再構築)のたびに呼ばれるため、ハンドルは使い回す
+        if (captionHandle == 0L) {
+            captionHandle = AribCaptionFilter.create(1920, 1080, AribCaptionFilter.TYPE_CAPTION)
+        }
+        if (superimposeHandle == 0L) {
+            superimposeHandle = AribCaptionFilter.create(1920, 1080, AribCaptionFilter.TYPE_SUPERIMPOSE)
+        }
 
         tsFactory.captionPesListener = PesCallback { ptsMs, pesPayload ->
-            mainHandler.post {
+            postCaptionCallback {
                 val h = captionHandle
-                if (h == 0L || !captionEnabled) return@post
+                if (h == 0L || !captionEnabled) return@postCaptionCallback
                 if (AribCaptionFilter.decode(h, ptsMs, pesPayload, 0, pesPayload.size)) {
                     scheduleWithBufferDelay { scheduleCaptionRender(ptsMs) }
                 }
@@ -431,14 +598,19 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         tsFactory.superimposePesListener = PesCallback { ptsMs, pesPayload ->
-            mainHandler.post {
+            postCaptionCallback {
                 val h = superimposeHandle
-                if (h == 0L || !superimposeEnabled) return@post
+                if (h == 0L || !superimposeEnabled) return@postCaptionCallback
                 if (AribCaptionFilter.decode(h, ptsMs, pesPayload, 0, pesPayload.size)) {
                     scheduleWithBufferDelay { scheduleSuperimposeRender(ptsMs) }
                 }
             }
         }
+    }
+
+    /** 字幕関連のHandlerコールバックをcaptionCallbackToken付きで投函する(シーク時に選択的キャンセルするため)。 */
+    private fun postCaptionCallback(delayMs: Long = 0L, action: () -> Unit) {
+        mainHandler.postAtTime(action, captionCallbackToken, SystemClock.uptimeMillis() + delayMs)
     }
 
     private fun scheduleWithBufferDelay(action: () -> Unit) {
@@ -447,7 +619,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             (p.bufferedPosition - p.currentPosition).coerceAtLeast(0)
         } else 0L
         if (delayMs > 50) {
-            mainHandler.postDelayed(action, delayMs)
+            postCaptionCallback(delayMs, action)
         } else {
             action()
         }
@@ -654,6 +826,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             hlsStreamId = null
         }
         mainHandler.removeCallbacksAndMessages(null)
+        tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
         destroyAribSessions()
         exoPlayer?.release()
@@ -670,6 +843,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val TAG = "PlaybackVideoFragment"
         private const val UPDATE_PERIOD_MS = 200
         private const val KEEP_ALIVE_INTERVAL_MS = 10_000L
+        // 録画TSシークバーの目標刻み間隔。実測durationからこの間隔に収まるよう
+        // getSeekPositions()の点数を逆算する(各点は起動時にプローブ済みではなく、
+        // duration/head/tailからの計算のみで求める——シーク確定時に1点だけ補正する)。
+        private const val SEEK_POINT_INTERVAL_MS = 15_000L
+        // シーク点数(=getSeekPositions()の配列長)の安全上限。点数自体はプロービング
+        // コストを伴わないが、配列が際限なく肥大化しないための歯止め。
+        // これを超える長さの録画は刻み間隔がSEEK_POINT_INTERVAL_MSより広がる。
+        private const val SEEK_POINT_COUNT_MAX = 400
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L
@@ -732,7 +913,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
-        private val isTsContent: Boolean,
+        // ARIB字幕/デュアルモノ副音声のUI(CC/SI/音声切替ボタン)を出すかどうか。
+        // TSかどうかではなく、tsreadexネイティブ処理を実際に使っているかで決める。
+        private val useNativeTsProcessing: Boolean,
         private val isLive: Boolean,
         captionEnabled: Boolean,
         superimposeEnabled: Boolean,
@@ -786,7 +969,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
-            if (isTsContent) {
+            if (useNativeTsProcessing) {
                 primaryActionsAdapter.add(ccAction)
                 primaryActionsAdapter.add(superimposeAction)
                 primaryActionsAdapter.add(audioAction)
@@ -795,7 +978,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 primaryActionsAdapter.add(recordAction)
                 primaryActionsAdapter.add(infoAction)
             }
-            if (isTsContent || isLive) {
+            if (useNativeTsProcessing || isLive) {
                 primaryActions = primaryActionsAdapter
             }
         }

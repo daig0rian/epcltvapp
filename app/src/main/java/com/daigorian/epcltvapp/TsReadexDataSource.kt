@@ -24,7 +24,17 @@ internal fun interface PesCallback {
 }
 
 @UnstableApi
-internal class TsReadexDataSource(private val upstream: DataSource) : DataSource {
+internal class TsReadexDataSource(
+    private val upstream: DataSource,
+    // シーク時、既知のバイト位置から再生を再開するためのオフセット(TsProbeが確定した188アライン済み位置)。
+    // 通常再生時は0。
+    private val startByteOffset: Long = 0L,
+    // false の場合 tsreadex ネイティブフィルタ(ARIB字幕多重化・音声PTS補完)を一切呼ばず、
+    // upstream のバイト列をそのまま素通しする。「TSかどうか」と「ネイティブ処理を使うか」は
+    // 独立した設定であるため、シーク(startByteOffset)機能は nativeProcessingEnabled の値に
+    // かかわらず常に有効。C.LENGTH_UNSET を返す判断も両モード共通(常に自前でシークを制御するため)。
+    private val nativeProcessingEnabled: Boolean = true,
+) : DataSource {
 
     private var filterHandle: Long = 0
 
@@ -51,14 +61,21 @@ internal class TsReadexDataSource(private val upstream: DataSource) : DataSource
     }
 
     override fun open(dataSpec: DataSpec): Long {
-        filterHandle = TsReadexFilter.create(
-            programNumberOrIndex = -1,
-            audio1Mode = 1 + 4 + 8,
-            audio2Mode = 1 + 4,
-            captionMode = 1,
-            superimposeMode = 1,
-        )
-        Log.d(TAG, "open: filter handle=$filterHandle uri=${dataSpec.uri}")
+        if (nativeProcessingEnabled) {
+            filterHandle = TsReadexFilter.create(
+                programNumberOrIndex = -1,
+                audio1Mode = 1 + 4 + 8,
+                audio2Mode = 1 + 4,
+                captionMode = 1,
+                superimposeMode = 1,
+            )
+        }
+        val openSpec = if (startByteOffset > 0) {
+            dataSpec.buildUpon().setPosition(dataSpec.position + startByteOffset).build()
+        } else {
+            dataSpec
+        }
+        Log.d(TAG, "open: filter handle=$filterHandle uri=${openSpec.uri} position=${openSpec.position}")
         partialLen = 0
         outputBytes = EMPTY
         outputPos = 0
@@ -67,14 +84,19 @@ internal class TsReadexDataSource(private val upstream: DataSource) : DataSource
         lastAudioPtsMain = -1L
         lastAudioPtsSub = -1L
         ptsInjectionCount = 0
-        upstream.open(dataSpec)
-        // tsreadex は先頭からの逐次処理を前提とするため、ExoPlayer に
-        // ストリーム長不明と伝えて TsDurationReader のシーク試行を抑止する
+        upstream.open(openSpec)
+        // シークは TsProbe が構築したテーブル + startByteOffset で自前制御するため、
+        // ExoPlayer にはストリーム長不明と伝えて TsDurationReader 自身のシーク試行を
+        // 常に抑止する(nativeProcessingEnabled の値にかかわらず)。
         return C.LENGTH_UNSET.toLong()
     }
 
     override fun read(target: ByteArray, offset: Int, length: Int): Int {
         if (length == 0) return 0
+
+        if (!nativeProcessingEnabled) {
+            return upstream.read(target, offset, length)
+        }
 
         if (outputPos < outputBytes.size) {
             val toCopy = minOf(outputBytes.size - outputPos, length)
@@ -205,9 +227,11 @@ internal class TsReadexDataSource(private val upstream: DataSource) : DataSource
     class Factory(private val upstreamFactory: DataSource.Factory) : DataSource.Factory {
         var captionPesListener: PesCallback? = null
         var superimposePesListener: PesCallback? = null
+        var startByteOffset: Long = 0L
+        var nativeProcessingEnabled: Boolean = true
 
         override fun createDataSource(): DataSource =
-            TsReadexDataSource(upstreamFactory.createDataSource()).also {
+            TsReadexDataSource(upstreamFactory.createDataSource(), startByteOffset, nativeProcessingEnabled).also {
                 it.captionPesListener = captionPesListener
                 it.superimposePesListener = superimposePesListener
             }
