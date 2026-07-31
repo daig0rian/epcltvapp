@@ -85,9 +85,11 @@ internal class TsReadexDataSource(
         lastAudioPtsSub = -1L
         ptsInjectionCount = 0
         upstream.open(openSpec)
-        // シークは TsProbe が構築したテーブル + startByteOffset で自前制御するため、
-        // ExoPlayer にはストリーム長不明と伝えて TsDurationReader 自身のシーク試行を
-        // 常に抑止する(nativeProcessingEnabled の値にかかわらず)。
+        // ExoPlayerは通常、再生開始前にduration/シーク可否をTsDurationReader等で
+        // 確定させようとするが、これは非常に遅く即座の再生開始を妨げる。そのため
+        // ストリーム長不明と伝えてこの処理自体を常に抑止し(nativeProcessingEnabled の
+        // 値にかかわらず)、シークはTsSeekDataProviderの概算＋startByteOffsetによる
+        // 疑似シーク(確定時に1回だけ補正プローブ)で自前制御する。
         return C.LENGTH_UNSET.toLong()
     }
 
