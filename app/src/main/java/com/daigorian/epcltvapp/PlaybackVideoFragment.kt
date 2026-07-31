@@ -49,6 +49,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Schedule
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
+import okhttp3.Request
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -291,47 +292,100 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             tsSeekUrl = cleanUrl
             tsSeekHttpClient = okHttpClient
             startTsProbing(cleanUrl, okHttpClient)
-            investigateMediaMetadataRetriever(cleanUrl, movieUrl)
+            investigateTsreadexNormalizedThumbnail(cleanUrl, okHttpClient)
         }
     }
 
     /**
-     * [Phase 2調査・一時コード] サムネイル機能の最大の不確定要素——
-     * MediaMetadataRetrieverが生ARIB放送TSからフレームを取得できるか——を検証する。
-     * 動画の5秒地点で1回だけ試し、成否・所要時間をLogに出す。TsReadexDataSource
-     * (tsreadexフィルタ)は経由せず、生バイトを直接読ませる想定。
+     * [Phase 2調査・一時コード] 生ARIB TSを直接MediaMetadataRetrieverに渡す案は、
+     * 実機検証(ATSParserが「スクランブルされたストリーム」と誤判定して解析を中断)により
+     * 不採用と判明済み。次の案として、tsreadexフィルタで正規化した後のバイト列を
+     * MediaDataSource(API23+)経由でMediaMetadataRetrieverに渡せるか検証する。
+     * ファイル先頭付近を数MB読み、tsreadexで正規化し、その結果をメモリ上のまま渡す。
      * 検証結果が出たら本メソッドと呼び出しは削除するか、正式な実装に置き換える。
      */
-    private fun investigateMediaMetadataRetriever(url: String, movieUrlWithAuth: String) {
+    private fun investigateTsreadexNormalizedThumbnail(url: String, client: OkHttpClient) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            Log.w(TAG, "[Phase2調査] MediaDataSourceはAPI23未満で使えないため調査スキップ")
+            return
+        }
         tsProbeExecutor.execute {
-            val headers = mutableMapOf<String, String>()
-            try {
-                val userInfo = URL(movieUrlWithAuth).userInfo
-                if (userInfo != null && userInfo.contains(":")) {
-                    val parts = userInfo.split(":", limit = 2)
-                    headers["Authorization"] = Credentials.basic(parts[0], parts[1])
+            val rawBytes = try {
+                val request = Request.Builder().url(url)
+                    .header("Range", "bytes=0-${THUMBNAIL_PROBE_RAW_BYTES - 1}")
+                    .build()
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) null else response.body?.bytes()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.w(TAG, "[Phase2調査] 生データ取得で例外発生", e)
+                null
+            }
+            if (rawBytes == null) {
+                Log.w(TAG, "[Phase2調査] 生データ取得失敗")
+                return@execute
+            }
+
+            val filterHandle = TsReadexFilter.create(
+                programNumberOrIndex = -1,
+                audio1Mode = 1 + 4 + 8,
+                audio2Mode = 1 + 4,
+                captionMode = 1,
+                superimposeMode = 1,
+            )
+            val normalized = try {
+                val output = java.io.ByteArrayOutputStream()
+                val usableBytes = (rawBytes.size / 188) * 188
+                var offset = 0
+                val batchSize = 188 * 64
+                while (offset < usableBytes) {
+                    val len = minOf(batchSize, usableBytes - offset)
+                    val alignedLen = (len / 188) * 188
+                    if (alignedLen <= 0) break
+                    val processed = TsReadexFilter.processPackets(filterHandle, rawBytes.copyOfRange(offset, offset + alignedLen), alignedLen)
+                    if (processed.isNotEmpty()) output.write(processed)
+                    offset += alignedLen
+                }
+                output.toByteArray()
+            } finally {
+                TsReadexFilter.destroy(filterHandle)
+            }
+            Log.i(TAG, "[Phase2調査] tsreadex正規化: raw=${rawBytes.size}bytes normalized=${normalized.size}bytes")
+            if (normalized.isEmpty()) {
+                Log.w(TAG, "[Phase2調査] 正規化後データが空のため中止")
+                return@execute
             }
 
             val retriever = MediaMetadataRetriever()
             val startedAt = SystemClock.elapsedRealtime()
             try {
-                retriever.setDataSource(url, headers)
-                val frame = retriever.getFrameAtTime(5_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                retriever.setDataSource(ThumbnailInvestigationDataSource(normalized))
+                val frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 if (frame != null) {
-                    Log.i(TAG, "[Phase2調査] MediaMetadataRetriever: 成功 width=${frame.width} height=${frame.height} elapsedMs=$elapsedMs")
+                    Log.i(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: 成功 width=${frame.width} height=${frame.height} elapsedMs=$elapsedMs")
                 } else {
-                    Log.w(TAG, "[Phase2調査] MediaMetadataRetriever: getFrameAtTimeがnullを返した elapsedMs=$elapsedMs")
+                    Log.w(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: getFrameAtTimeがnullを返した elapsedMs=$elapsedMs")
                 }
             } catch (e: Exception) {
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-                Log.w(TAG, "[Phase2調査] MediaMetadataRetriever: 例外発生 elapsedMs=$elapsedMs", e)
+                Log.w(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: 例外発生 elapsedMs=$elapsedMs", e)
             } finally {
                 retriever.release()
             }
         }
+    }
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.M)
+    private class ThumbnailInvestigationDataSource(private val data: ByteArray) : android.media.MediaDataSource() {
+        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
+            if (position >= data.size) return -1
+            val length = minOf(size, (data.size - position).toInt())
+            System.arraycopy(data, position.toInt(), buffer, offset, length)
+            return length
+        }
+        override fun getSize(): Long = data.size.toLong()
+        override fun close() {}
     }
 
     override fun onCreateView(
@@ -892,6 +946,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // コストを伴わないが、配列が際限なく肥大化しないための歯止め。
         // これを超える長さの録画は刻み間隔がSEEK_POINT_INTERVAL_MSより広がる。
         private const val SEEK_POINT_COUNT_MAX = 400
+        // [Phase2調査・一時定数] サムネイル向けtsreadex正規化テストで先頭から読む生バイト数。
+        // 高ビットレート録画でも数秒分(PAT/PMT複数回・キーフレーム含む)を確保できるよう余裕を持たせる。
+        private const val THUMBNAIL_PROBE_RAW_BYTES = 8L * 1024 * 1024
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L

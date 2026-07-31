@@ -37,16 +37,18 @@ MediaMetadataRetrieverJNI: getFrameAtTime: videoFrame is a NULL pointer
 
 **→ MediaMetadataRetrieverをそのまま使う案は不採用。**
 
+## 検証中: (a) tsreadex正規化後のバイト列をMediaDataSource経由で渡す案
+
+`investigateTsreadexNormalizedThumbnail()`（[PlaybackVideoFragment.kt](app/src/main/java/com/daigorian/epcltvapp/PlaybackVideoFragment.kt)、調査用一時コード）を実装済み。ファイル先頭から`THUMBNAIL_PROBE_RAW_BYTES`(8MB)を読み、`TsReadexFilter`(tsreadexネイティブ、実再生と同じもの)で正規化した後、`ThumbnailInvestigationDataSource`(`android.media.MediaDataSource`実装、API23+)経由でメモリ上のまま`MediaMetadataRetriever`に渡す。ログタグは同じく`[Phase2調査]`。実機での結果待ち。
+
 ## 残タスク
 
-- [ ] **方針決定**: 以下のいずれかで進める
-  - (a) tsreadexで正規化した後のバイト列を`MediaMetadataRetriever`に渡す（API 23+の`MediaDataSource`でメモリ上のバイト列を供給、ファイル書き出し不要。minSdk22機種では非対応にするか要検討）
-  - (b) 自前でMediaCodecを使い1フレームだけデコードする（実装コストが高い）
-- [ ] （方針決定後）サムネイル生成のタイミング・キャッシュ方針の設計
+- [ ] **実機検証待ち**: (a)案(tsreadex正規化+MediaDataSource)でフレーム取得が成功するか確認
+- [ ] （検証がOKなら）サムネイル生成のタイミング・キャッシュ方針の設計。NGなら(b)自前MediaCodec実装を検討
 - [ ] BFS選定順序の実装（v3のgetSeekPositions()配列に対して）
 - [ ] `TsSeekDataProvider.getThumbnail(index, callback)`の実装（現在は基底クラスのデフォルト実装＝何もしない）
 - [ ] UI側の表示確認
-- [ ] 調査用一時コード(`investigateMediaMetadataRetriever`)を削除するか、正式な検証コードに置き換える
+- [ ] 調査用一時コード(`investigateTsreadexNormalizedThumbnail`等)を削除するか、正式な検証コードに置き換える
 
 ## 重要な決定事項
 
