@@ -358,8 +358,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
             // [Phase2調査] 1回目の検証で判明: tsreadex正規化後もtransport_scrambling_control
             // ビット(TSヘッダbyte3の上位2bit)が残っており、Android標準のATSParserが
-            // 「スクランブルされたストリーム」と誤判定して解析を中断していた。
-            // 実際のペイロードは平文なので、このビットを強制的にクリアして再検証する。
+            // 「スクランブルされたストリーム」と誤判定して解析を中断していた……という仮説だったが、
+            // 2回目の検証でこのビットは既に0であることが判明(scrambledPacketCount=0)。
+            // それでも同じ誤判定が起きたため、ビットの問題ではないと分かった。
             var scrambledPacketCount = 0
             var i = 0
             while (i + 188 <= normalized.size) {
@@ -371,10 +372,30 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             Log.i(TAG, "[Phase2調査] transport_scrambling_controlをクリアしたパケット数=$scrambledPacketCount")
 
+            // [Phase2調査] 3回目の仮説: 個別ストリームではなく5ストリーム全部が一律で
+            // descrambling対象扱いされていたことから、CAT(PID=0x0001, tsreadexの-nフィルタは
+            // 0x0030未満のPIDをそのまま素通しするため残っている)がCA(限定受信)利用を宣言して
+            // おり、それをATSParserが見て番組全体をスクランブル扱いしている可能性を検証する。
+            val catOutput = java.io.ByteArrayOutputStream()
+            var catPacketCount = 0
+            var j = 0
+            while (j + 188 <= normalized.size) {
+                val isCat = normalized[j] == 0x47.toByte() &&
+                    (((normalized[j + 1].toInt() and 0x1F) shl 8) or (normalized[j + 2].toInt() and 0xFF)) == 0x0001
+                if (isCat) {
+                    catPacketCount++
+                } else {
+                    catOutput.write(normalized, j, 188)
+                }
+                j += 188
+            }
+            val catFiltered = catOutput.toByteArray()
+            Log.i(TAG, "[Phase2調査] CAT(PID=0x0001)パケットを${catPacketCount}個除去 filtered=${catFiltered.size}bytes")
+
             val retriever = MediaMetadataRetriever()
             val startedAt = SystemClock.elapsedRealtime()
             try {
-                retriever.setDataSource(ThumbnailInvestigationDataSource(normalized))
+                retriever.setDataSource(ThumbnailInvestigationDataSource(catFiltered))
                 val frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
                 val elapsedMs = SystemClock.elapsedRealtime() - startedAt
                 if (frame != null) {
