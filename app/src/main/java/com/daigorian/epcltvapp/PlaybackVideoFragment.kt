@@ -1,6 +1,7 @@
 package com.daigorian.epcltvapp
 
 import android.content.Context
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -290,6 +291,46 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             tsSeekUrl = cleanUrl
             tsSeekHttpClient = okHttpClient
             startTsProbing(cleanUrl, okHttpClient)
+            investigateMediaMetadataRetriever(cleanUrl, movieUrl)
+        }
+    }
+
+    /**
+     * [Phase 2調査・一時コード] サムネイル機能の最大の不確定要素——
+     * MediaMetadataRetrieverが生ARIB放送TSからフレームを取得できるか——を検証する。
+     * 動画の5秒地点で1回だけ試し、成否・所要時間をLogに出す。TsReadexDataSource
+     * (tsreadexフィルタ)は経由せず、生バイトを直接読ませる想定。
+     * 検証結果が出たら本メソッドと呼び出しは削除するか、正式な実装に置き換える。
+     */
+    private fun investigateMediaMetadataRetriever(url: String, movieUrlWithAuth: String) {
+        tsProbeExecutor.execute {
+            val headers = mutableMapOf<String, String>()
+            try {
+                val userInfo = URL(movieUrlWithAuth).userInfo
+                if (userInfo != null && userInfo.contains(":")) {
+                    val parts = userInfo.split(":", limit = 2)
+                    headers["Authorization"] = Credentials.basic(parts[0], parts[1])
+                }
+            } catch (_: Exception) {
+            }
+
+            val retriever = MediaMetadataRetriever()
+            val startedAt = SystemClock.elapsedRealtime()
+            try {
+                retriever.setDataSource(url, headers)
+                val frame = retriever.getFrameAtTime(5_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                if (frame != null) {
+                    Log.i(TAG, "[Phase2調査] MediaMetadataRetriever: 成功 width=${frame.width} height=${frame.height} elapsedMs=$elapsedMs")
+                } else {
+                    Log.w(TAG, "[Phase2調査] MediaMetadataRetriever: getFrameAtTimeがnullを返した elapsedMs=$elapsedMs")
+                }
+            } catch (e: Exception) {
+                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
+                Log.w(TAG, "[Phase2調査] MediaMetadataRetriever: 例外発生 elapsedMs=$elapsedMs", e)
+            } finally {
+                retriever.release()
+            }
         }
     }
 
