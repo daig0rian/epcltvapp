@@ -26,7 +26,7 @@ private const val TAG = "TsThumbnailGenerator"
  * 同じ絵柄なのか区別がつかない」というUXフィードバックで不採用になった。続けて試した
  * 「NO IMAGE」画像もUX上好ましくなかったため、完全透過画像を採用した(実機確認で良好)。
  */
-private const val REAL_THUMBNAIL_STRIDE = 4
+private const val REAL_THUMBNAIL_STRIDE = 2
 
 /** プレースホルダーの表示サイズ。正方形だと実サムネイルの列の中で浮いて見えるため、
  *  Leanbackのシークバー上での見た目を確認した上で2:1に調整した。 */
