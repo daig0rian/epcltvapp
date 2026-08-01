@@ -18,8 +18,8 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
-- **最小 SDK:** API 23 (Android 6.0)
-- **コンパイル SDK:** API 35 (Android 15)
+- **最小 SDK:** API 22 (Android 5.1)
+- **コンパイル SDK:** API 34 (Android 14)
 - **ターゲット SDK:** API 34 (Android 14)
 
 ## 開発環境
@@ -40,10 +40,9 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | Gradle | 7.0.2 | **8.9** | JDK 21 非対応のため |
 | AGP | 7.0.3 | **8.7.3** | JDK 21 非対応のため |
 | Kotlin | 1.5.31 | **2.0.21** | JDK 21 対応 |
-| compileSdk | 30 | **35** | media3 1.9.2 が compileSdk 35 以上を要求するため |
-| targetSdk | 30 | **34 (変更なし)** | targetSdk 引き上げに伴う挙動変更(edge-to-edge強制等)は本アップグレードのスコープ外のため据え置き |
-| minSdk | 22 | **23** | API22 世代 (Fire TV 1st/2nd Gen, Fire TV Stick 1st/2nd Gen) が Amazon 公式サポート終了済みのため引き上げ。media3 1.9.0 以降が要求する minSdk 23 とも一致 |
-| media3 (ExoPlayer) | 1.3.1 | **1.9.2** | `media3-inspector` の `FrameExtractor` API (1.9.0+) 利用のため |
+| compileSdk | 30 | **34** | Compose for TV 移行準備 |
+| targetSdk | 30 | **34** | compileSdk に合わせて更新 |
+| minSdk | 22 | **22 (変更なし)** | Fire TV 全世代サポート維持 |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
 
 ## 既知の技術的負債
@@ -81,7 +80,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **Compose for TV (`androidx.tv:tv-material`)** が Google 推奨の新方向。
 - 移行戦略：既存 Leanback Fragment に `ComposeView` を埋め込む段階的移行を計画。
   - 最初のターゲット：Settings 画面（`PreferenceFragment` 問題も同時解消）
-- minSdkVersion は 23 (Fire TV 3rd Gen 以降が対応する Fire OS 6 / API 25 が実運用上の最低ライン)。API22 世代 (Fire OS 5) は Amazon 公式サポート終了 (2024-11-30 発表) のため対象外とした。Compose の最低要件 (API 21) は満たしており、Compose 移行時も変更不要。
+- minSdkVersion は Compose 移行まで 22 を維持。移行時も Compose の最低要件 (API 21) を満たしており変更不要。
 
 ## セットアップ進捗
 
