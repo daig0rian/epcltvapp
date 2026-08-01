@@ -24,13 +24,14 @@ private const val TAG = "TsThumbnailGenerator"
  * 非現実的。そこで[REAL_THUMBNAIL_STRIDE]点に1点だけ実際に生成し、残りは即座に
  * [placeholderBitmap]を返す。同じサムネイルを複数ステップに使い回す案は「未取得なのか
  * 同じ絵柄なのか区別がつかない」というUXフィードバックで不採用になった。続けて試した
- * 「NO IMAGE」画像もUX上好ましくなかったため、現在は完全透過画像で検証中。
+ * 「NO IMAGE」画像もUX上好ましくなかったため、完全透過画像を採用した(実機確認で良好)。
  */
 private const val REAL_THUMBNAIL_STRIDE = 4
 
-/** プレースホルダーの表示サイズ。実サムネイルと同じ16:9で作らないと正方形で浮いて見える。 */
+/** プレースホルダーの表示サイズ。正方形だと実サムネイルの列の中で浮いて見えるため、
+ *  Leanbackのシークバー上での見た目を確認した上で2:1に調整した。 */
 private const val PLACEHOLDER_WIDTH = 320
-private const val PLACEHOLDER_HEIGHT = 180
+private const val PLACEHOLDER_HEIGHT = 160
 
 /**
  * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]

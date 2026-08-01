@@ -61,16 +61,25 @@ Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済�
 - [x] `TsSeekDataProvider.kt`: `httpClient`を追加受け取り、`estimateByteOffset`メソッド参照を`TsThumbnailGenerator`に渡す
 - [x] `PlaybackVideoFragment.kt`: `TsSeekDataProvider`構築時に`client`を渡すよう変更
 
-### 4周目: 生成コストが高いため粒度をバケット化(オンデマンド性は維持)
+### 4周目: バケット化を試して撤回、代わりに生成コスト自体を下げた
 
-実機の所要時間ログで判明: 個々の生成は約1.3秒/回のスループット(media3内部の直列化キューで律速、デコーダをハードウェア優先に変えても改善せず——パイプライン新規構築コスト自体が支配的)。ハードウェアデコード優先化(`MediaCodecSelector.DEFAULT`)は効果がなかったため撤回(デフォルトの`PREFER_SOFTWARE`に戻した)。
+隣接シーク点をバケットにまとめて使い回す案を一度実装したが、実機確認で「未取得なのか同じ絵柄なのか区別がつかずグリッチに見える」というUXフィードバックにより撤回し、生インデックスごとの生成に戻した。代わりに生成コスト自体を下げる方向に転換した。
 
-全シーク点ごとに生成すると総待ち時間が非現実的になるため、`getThumbnail`は要求された生インデックスではなく`BUCKET_SIZE`(10)点単位のバケットに丸めて生成するよう変更。生成完了時はそのバケットに属する全ての生インデックスの保留中コールバックへ結果をまとめて配る。オンデマンド性(触れられた時に触れられた分だけ生成)は維持したまま、実際のパイプライン起動回数を約1/10に削減した。
+**根本原因の特定**: media3 1.10.1の`FrameExtractorInternal`ソースを直接確認し判明——`needsNewPlayer`判定に`request.mediaSourceFactory != currentMediaSourceFactory`という**参照比較**が含まれる。シーク点ごとに新しい`MediaSource.Factory`インスタンスを作っていたため、リクエストのたびに**ExoPlayerインスタンス自体が一から作り直されていた**(MediaSourceの再準備どころではない重いコスト)。これが1.3〜1.5秒/枚の主因だった。
+
+**対策**: `TsReadexDataSource.Factory`/`ProgressiveMediaSource.Factory`のインスタンスを1つだけ保持して使い回し、`startByteOffset`はその可変プロパティの書き換えでシーク点ごとの違いを表現する方式に変更。書き換えと実際の`open()`呼び出しの間で競合しないよう、生成リクエストをキューで1件ずつ直列処理する。これにより**700〜900ms/枚まで改善**(ハードウェアデコード優先化`MediaCodecSelector.DEFAULT`は効果がなかったため撤回済み、デフォルトの`PREFER_SOFTWARE`のまま)。
+
+**さらなる安定化**: 読み取りbytes数が1回あたり3〜76MBとばらついており(ExoPlayerのLoadControlデフォルトの先読みバッファ目標が原因と推測、`FrameExtractor`の公開APIには`setLoadControl()`相当が無く直接調整不可)、`TsReadexDataSource`に`maxReadLength`(6MB)を追加してサムネイル生成時のみ強制的に早期EOFを起こすようにした。これにより最悪ケースの外れ値(最大7.7秒)が解消され、**500〜1000ms/枚に安定**。
+
+### 5周目: シークステップとサムネイルを1:1にせずプレースホルダーで間引く
+
+Leanbackの制約上シークステップとgetThumbnail()呼び出しは1:1になるが、1枚500ms〜1秒の生成コストを全ステップ分実行するのは非現実的。`REAL_THUMBNAIL_STRIDE`(4)点に1点だけ実際に生成し、残りは即座にプレースホルダーを返す設計に変更。
+
+プレースホルダーの中身は試行錯誤: 黒一色の1x1ビットマップ→正方形のまま表示され列の中で浮いて見える。`R.drawable.no_iamge`(カード一覧の「NO IMAGE」画像)を16:9キャンバスに収めた版→UX的に好ましくなかった。**完全透過(`Color.TRANSPARENT`)のビットマップ→実機確認で良好**、これを採用。サイズは16:9で試した後、実機の見た目を見て**2:1**に調整。
 
 ## 残タスク
 
-- [ ] **バケット化版の実機動作確認待ち**: 体感速度が改善したか、サムネイルの表示が不自然にならないか
-- [ ] 動作確認が取れ次第、`feature/ts-seek-thumbnails`ブランチのコミットを整理し、PR作成
+- [ ] 動作確認が取れ次第、調査用ログ(`[調査]`タグの`Log.d`)を整理するか残すか判断した上で、`feature/ts-seek-thumbnails`ブランチのコミットを整理してPR作成
 - [ ] AGP 9.0/Gradle 9.1.0/compileSdk 36への引き上げをCLAUDE.mdの依存関係バージョン表に反映する(PR化のタイミングで)
 
 ## 重要な決定事項
