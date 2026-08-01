@@ -18,6 +18,16 @@ import okhttp3.OkHttpClient
 private const val TAG = "TsThumbnailGenerator"
 
 /**
+ * Leanbackの制約上、シークステップとgetThumbnail()呼び出しは1:1にせざるを得ない。
+ * しかし1枚の生成コストは実測で500ms〜1秒程度あり、これを全シークステップ分実行するのは
+ * 非現実的。そこで[REAL_THUMBNAIL_STRIDE]点に1点だけ実際に生成し、残りは即座に
+ * 小さな黒画像(プレースホルダー)を返す。同じサムネイルを複数ステップに使い回す案は
+ * 「未取得なのか同じ絵柄なのか区別がつかない」というUXフィードバックで不採用になったため、
+ * 代わりに明確に区別できる無地画像で「サムネイル無し」を表現する。
+ */
+private const val REAL_THUMBNAIL_STRIDE = 4
+
+/**
  * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]
  * (ExoPlayer自身のTsExtractorを使ってフレームをデコードするAPI)を使う。
  *
@@ -73,6 +83,11 @@ internal class TsThumbnailGenerator(
     }
     private val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
 
+    /** [REAL_THUMBNAIL_STRIDE]点に満たない中間点用の、明確に「サムネイル無し」と分かる無地画像。 */
+    private val placeholderBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+        eraseColor(android.graphics.Color.BLACK)
+    }
+
     private val cache = HashMap<Int, Bitmap>()
     private val pendingCallbacks = HashMap<Int, PlaybackSeekDataProvider.ResultCallback>()
     private val queue = ArrayDeque<Int>()
@@ -81,8 +96,12 @@ internal class TsThumbnailGenerator(
     private val openExtractors = ArrayList<FrameExtractor>()
     private var released = false
 
-    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。未生成ならキューに積む。 */
+    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。[REAL_THUMBNAIL_STRIDE]点に1点だけ実際に生成する。 */
     fun getThumbnail(index: Int, callback: PlaybackSeekDataProvider.ResultCallback) {
+        if (index % REAL_THUMBNAIL_STRIDE != 0) {
+            callback.onThumbnailLoaded(placeholderBitmap, index)
+            return
+        }
         val cached = cache[index]
         if (cached != null) {
             callback.onThumbnailLoaded(cached, index)
