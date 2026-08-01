@@ -5,11 +5,11 @@ plugins {
 
 android {
     namespace "com.daigorian.epcltvapp"
-    compileSdkVersion 36
+    compileSdkVersion 34
 
     defaultConfig {
         applicationId "com.daigorian.epcltvapp"
-        minSdkVersion 23
+        minSdkVersion 22
         targetSdkVersion 34
         versionCode 32
         versionName "1.32"
@@ -72,14 +72,10 @@ dependencies {
     implementation "androidx.preference:preference-ktx:$preference_version"
 
     //ExoPlayer (Media3) + Leanback integration
-    def media3_version = "1.10.1"
+    def media3_version = "1.3.1"
     implementation "androidx.media3:media3-exoplayer:$media3_version"
     implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
     implementation "androidx.media3:media3-datasource-okhttp:$media3_version"
     implementation "androidx.media3:media3-ui-leanback:$media3_version"
-    //TSシーク点サムネイル生成用(androidx.media3.inspector.frame.FrameExtractor)。
-    //1.10.0でmedia3-inspectorから分離された専用モジュール。Builder.setMediaSourceFactory()が
-    //使えるようになったのがこのモジュールを使う目的(カスタムDataSourceでのシークに必要)。
-    implementation "androidx.media3:media3-inspector-frame:$media3_version"
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

@@ -18,8 +18,8 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
-- **最小 SDK:** API 23 (Android 6.0)
-- **コンパイル SDK:** API 36 (Android 16)
+- **最小 SDK:** API 22 (Android 5.1)
+- **コンパイル SDK:** API 34 (Android 14)
 - **ターゲット SDK:** API 34 (Android 14)
 
 ## 開発環境
@@ -37,20 +37,13 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 
 | 項目 | 元の値 | 現在値 | 更新理由 |
 |------|--------|--------|---------|
-| Gradle | 7.0.2 | **9.1.0** | media3 1.10.x が要求する compileSdk 36 に AGP 9.0 系が必要なため |
-| AGP | 7.0.3 | **9.0.1** | 同上。compileSdk 36 対応は AGP 8.9 系では上限35までのため不可 |
+| Gradle | 7.0.2 | **8.9** | JDK 21 非対応のため |
+| AGP | 7.0.3 | **8.7.3** | JDK 21 非対応のため |
 | Kotlin | 1.5.31 | **2.0.21** | JDK 21 対応 |
-| compileSdk | 30 | **36** | media3 1.10.x が compileSdk 36 以上を要求するため |
-| targetSdk | 30 | **34 (変更なし)** | targetSdk 引き上げに伴う挙動変更(edge-to-edge強制等)は本アップグレードのスコープ外のため据え置き |
-| minSdk | 22 | **23** | API22 世代 (Fire TV 1st/2nd Gen, Fire TV Stick 1st/2nd Gen) が Amazon 公式サポート終了済みのため引き上げ。media3 1.9.0 以降が要求する minSdk 23 とも一致 |
-| media3 (ExoPlayer) | 1.3.1 | **1.10.1** | TSシーク点サムネイル生成用の `FrameExtractor.setMediaSourceFactory()` (1.10.0+) 利用のため |
+| compileSdk | 30 | **34** | Compose for TV 移行準備 |
+| targetSdk | 30 | **34** | compileSdk に合わせて更新 |
+| minSdk | 22 | **22 (変更なし)** | Fire TV 全世代サポート維持 |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
-
-**AGP 9.0 の新DSL/built-in Kotlinはオプトアウト中**: `gradle.properties` に
-`android.newDsl=false` / `android.builtInKotlin=false` を設定し、既存の
-`kotlin-android` プラグイン構成のまま compileSdk 36 の解禁だけを受けている。
-両フラグは AGP 10.0 で廃止予定のため、その前に新DSL・built-in Kotlinへの
-本移行が別途必要になる。
 
 ## 既知の技術的負債
 
@@ -81,13 +74,50 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - libVLC のより新しい EAP バージョンへの更新（EAP なので今後修正される可能性あり）
 - 外部プレーヤー（MX Player / VLC アプリ）への誘導（既存機能として実装済み）
 
+## 検討して撤回した機能
+
+### TSシークバーのサムネイル表示 (PR #45 → revert, Issue #46)
+
+`androidx.media3.inspector.frame.FrameExtractor` (media3 1.10.0+) でTSシーク点のサムネイルを
+生成する機能を一度実装したが、実機で致命的な不具合が見つかり撤回した。同時に、この機能のためだけに
+上げていた minSdk 23 / media3 1.10.1 等の依存関係更新 (PR #44, #45) も撤回した。
+
+**現象:** Fire TV (AFTSSS) で録画済みTS再生中、シークバーのサムネイル生成が2枚目以降を要求した
+タイミングで、本編再生の映像デコードだけが完全にハングする（音声は継続する非対称な停止）。
+この状態になるとアプリを再起動しても再現し、**端末上の別アプリ (VLC) での動画再生すら
+できなくなり、端末の完全な再起動でしか復旧しない**、という極めて深刻な不具合だった。
+
+**原因の推定:** この端末のMediaTek製ハードウェアMPEG2デコーダー(`OMX.MTK.VIDEO.DECODER.MPEG2` /
+`c2.mtk.mpeg2.decoder`)は、本編再生用と別に2つ目のデコーダーインスタンスをサムネイル生成用に
+同時に開こうとすると、ドライバ/HALレベルでハングする。コーデックXML上は`concurrent-instances
+max="4"`と宣言されており(Fire TV・Google TV Streamerの実機とも同様)、宣言上は問題ないはずだが
+実態と合っていない。
+
+**試みて失敗したアプローチ（すべて効果なし）:**
+
+1. **`FrameExtractor`のclose()漏れ修正** — サムネイル1枚ごとに新規生成していた`FrameExtractor`
+   を都度close()し、内部シングルトンの参照カウントリークを解消。実在するリークではあったが、
+   ハング自体は解消せず。
+2. **`MediaCodecSelector`をsoftwareOnlyに限定** — 本編再生と同じHWデコーダーを取り合わないよう、
+   サムネイル生成をソフトウェアデコーダー限定にした。ハングは解消したが、代わりにサムネイルが
+   一切表示されなくなった。Fire TV・Google TV Streamerとも、コーデック定義XML上は一部の機種に
+   `c2.android.mpeg2.decoder`(ソフトウェア)の宣言があるものの、`MediaCodecSelector.DEFAULT`
+   経由では実機ログ上一度も候補に現れず、アプリからは実質使用不可能と判明した。
+
+**結論:** 本編再生と同時にオンデバイスでMPEG2をデコードしてサムネイルを生成する方式は、この
+機種群では成立しない。media3固有の問題ではなく、「圧縮映像から1枚の画像を得るにはデコードが
+必須」という制約とハードウェアデコーダーの信頼性不足の組み合わせによるもので、自前で
+MediaCodecを直接叩く実装に置き換えても同じ壁にぶつかる。将来再挑戦する場合は、EPGStation
+(サーバー) 側での事前サムネイル生成など、クライアント端末上でのオンデマンドデコードに
+依存しない方式を検討すること。
+
 ## 将来の方針
 
 - **Leanback は deprecated**（Google 公式、2026年3月）。新機能追加なし・メンテナンスのみ。
 - **Compose for TV (`androidx.tv:tv-material`)** が Google 推奨の新方向。
 - 移行戦略：既存 Leanback Fragment に `ComposeView` を埋め込む段階的移行を計画。
   - 最初のターゲット：Settings 画面（`PreferenceFragment` 問題も同時解消）
-- minSdkVersion は 23 (Fire TV 3rd Gen 以降が対応する Fire OS 6 / API 25 が実運用上の最低ライン)。API22 世代 (Fire OS 5) は Amazon 公式サポート終了 (2024-11-30 発表) のため対象外とした。Compose の最低要件 (API 21) は満たしており、Compose 移行時も変更不要。
+- minSdkVersion は Compose 移行まで 22 を維持。移行時も Compose の最低要件 (API 21) を満たしており変更不要。
 
 ## セットアップ進捗
 
