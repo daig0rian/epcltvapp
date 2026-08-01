@@ -36,7 +36,6 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
-import androidx.media3.ui.leanback.LeanbackPlayerAdapter
 import androidx.preference.PreferenceManager
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
@@ -90,6 +89,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     // TS seek support (録画オリジナルTSのみ)
     private var tsSeekAdapter: TsSeekPlayerAdapter? = null
+    // TS以外(エンコード済み直接再生・HLS)のシーク対応
+    private var seekableAdapter: SeekableLeanbackPlayerAdapter? = null
     private var tsSeekUrl: String? = null
     private var tsSeekHttpClient: OkHttpClient? = null
     private var tsSeekDataProvider: TsSeekDataProvider? = null
@@ -249,7 +250,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 performTsSeek(targetMs)
             }.also { tsSeekAdapter = it }
         } else {
-            LeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS)
+            SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS).also { seekableAdapter = it }
         }
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
@@ -259,6 +260,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
         mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
+        // TS以外はExoPlayerがdurationをネイティブに把握しているため、TSのような事前プロービング
+        // 待ちなしで直接シークプロバイダを組める(ExoPlayerネイティブのseekTo(ms)がそのまま使える)。
+        // これによりLeanbackはDpadでのスクラブ中に実シークを都度呼ばず確定時に1回だけ呼ぶようになり、
+        // かつシーク開始時の自動pauseもTSと同様に打ち消せる(SeekableLeanbackPlayerAdapter参照)。
+        seekableAdapter?.let { adapter ->
+            mTransportControlGlue.setSeekProvider(
+                DurationSeekDataProvider(exoPlayer!!) { adapter.resumePlaybackIfWasPlaying() }
+            )
+        }
         // 録画オリジナルTSはシーク点テーブルの構築が終わるまでシーク不可にする
         // (テーブル未完成の間にシーク操作されると、Leanbackのデフォルトの1%刻み挙動＋
         // 都度のバイト位置探索という避けたかった経路に落ちてしまうため)。
