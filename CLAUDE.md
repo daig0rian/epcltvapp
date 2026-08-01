@@ -17,7 +17,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **UI:** Leanback (Android TV) ※将来的に Compose for TV への移行を計画
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
-- **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
+- **動画再生:** ExoPlayer (media3) + Leanback (`androidx.media3:media3-ui-leanback`) による内蔵プレーヤー + 外部プレーヤー対応 (MX Player / VLC)
 - **最小 SDK:** API 22 (Android 5.1)
 - **コンパイル SDK:** API 34 (Android 14)
 - **ターゲット SDK:** API 34 (Android 14)
@@ -50,9 +50,13 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | 項目 | 状況 | 理由 |
 |------|------|------|
 | `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在しない。Leanback 自体が deprecated のため今後は Compose for TV への移行で解消予定 |
-| H.264 エンコード済み動画の1:1描画・緑フチ問題 | 未解決・保留中 | 下記「既知の未解決バグ」を参照 |
 
-## 既知の未解決バグ
+## 過去の既知バグ（libVLC内蔵プレーヤー時代・現在は非該当）
+
+> **注記:** 以下は内蔵プレーヤーが libVLC ベースだった当時の記録。その後 ExoPlayer (media3) +
+> Leanback ベースの内蔵プレーヤーに移行しており、libVLC 関連の依存関係・クラスは現在の
+> コードベースに存在しない。この問題が現行の内蔵プレーヤーにも当てはまるかは未検証。
+> 経緯の記録として残す。
 
 ### H.264 エンコード済み動画が1:1描画される（緑フチ問題）
 
