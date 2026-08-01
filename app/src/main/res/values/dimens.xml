@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Leanbackのシークサムネイル一覧(ThumbsBar)のサムネイル1枚あたりのサイズ。
+        androidx.leanback本体のデフォルト値(154dp x 154dp / hero: 192dp x 192dp、
+        いずれも正方形)を同名リソースで上書きしている。androidx.leanback.widget.ThumbsBar
+        は@RestrictTo(LIBRARY_GROUP)でAPIとして触れないため、この上書きが唯一の調整手段。
+
+        - 動画サムネイルは16:9系コンテンツなので正方形だと不自然(letterboxが目立つ)。
+        - サムネイル1枚の幅が表示可能枚数を決める(ThumbsBar.calculateNumOfThumbs参照)ため、
+          幅を小さくするほど同時に見える枚数が増える。
+    -->
+    <dimen name="lb_playback_transport_thumbs_width">70dp</dimen>
+    <dimen name="lb_playback_transport_thumbs_height">35dp</dimen>
+    <dimen name="lb_playback_transport_hero_thumbs_width">88dp</dimen>
+    <dimen name="lb_playback_transport_hero_thumbs_height">44dp</dimen>
+</resources>

@@ -77,6 +77,12 @@ Leanbackの制約上シークステップとgetThumbnail()呼び出しは1:1に�
 
 プレースホルダーの中身は試行錯誤: 黒一色の1x1ビットマップ→正方形のまま表示され列の中で浮いて見える。`R.drawable.no_iamge`(カード一覧の「NO IMAGE」画像)を16:9キャンバスに収めた版→UX的に好ましくなかった。**完全透過(`Color.TRANSPARENT`)のビットマップ→実機確認で良好**、これを採用。サイズは16:9で試した後、実機の見た目を見て**2:1**に調整。
 
+### 6周目: サムネイル表示サイズ・表示枚数はBitmapではなくLeanbackのdimenリソースで決まっていた
+
+Bitmapのサイズを2:1に変えても実機では4:1に見え、同時に表示されるサムネイルが5枚しかないという指摘を受け、leanbackのソース(`androidx.leanback.widget.ThumbsBar`、`@RestrictTo(LIBRARY_GROUP)`で非公開API)を確認。各サムネイルは固定サイズの`ImageView`で、そのサイズは`R.dimen.lb_playback_transport_thumbs_width/height`(通常)・`R.dimen.lb_playback_transport_hero_thumbs_width/height`(フォーカス中央)というandroidx.leanback本体のdimenリソースで決まっており、**我々が渡すBitmapのサイズは表示形状に一切影響しない**(ImageViewがその固定枠にフィットさせるだけ)。デフォルト値はどちらも正方形(154dp/192dp)。
+
+表示枚数も`ThumbsBar.calculateNumOfThumbs()`がサムネイル幅から自動計算しており、幅を小さくするほど同時表示枚数が増える。BitmapではなくこれらのdimenリソースをAndroidの標準機構(同名リソースによる上書き)でアプリ側から上書きすることで、アスペクト比と表示枚数を同時に解決できる。`app/src/main/res/values/dimens.xml`(新規)に70dp x 35dp(通常)・88dp x 44dp(hero)で上書きした。実機での見た目を見て要調整。
+
 ## 残タスク
 
 - [ ] 動作確認が取れ次第、調査用ログ(`[調査]`タグの`Log.d`)を整理するか残すか判断した上で、`feature/ts-seek-thumbnails`ブランチのコミットを整理してPR作成
