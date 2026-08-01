@@ -498,7 +498,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     /**
      * 収録中TS追いかけ再生（Issue #42）: STATE_ENDED検知時に「今の終端」へ疑似シークする。
      * [performTsSeek]とは異なり、シークバー用の安全マージン(maxSeekableMs、15秒)ではなく
-     * [TS_CATCHUP_SAFETY_MARGIN_MS](2秒、日本の放送のキーフレーム間隔目安)だけ手前を狙う
+     * [TS_CATCHUP_SAFETY_MARGIN_MS](1秒)だけ手前を狙う
      * ([TsSeekDataProvider.estimateByteOffsetNearTail]参照)。
      */
     private fun performTsCatchUpSeek() {
@@ -949,8 +949,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // 収録中TS追いかけ再生(Issue #42)専用のEOF手前マージン。SEEK_POINT_INTERVAL_MS
         // (シークバー目盛り間隔という別の関心事のための定数、15秒)は流用しない——STATE_ENDED
         // のたびにこの秒数だけ巻き戻って見えると追いかけ再生の体験として不自然なため、
-        // 日本の地上波/BS放送で一般的なキーフレーム(GOP)間隔の目安である2秒に短くする。
-        private const val TS_CATCHUP_SAFETY_MARGIN_MS = 2_000L
+        // 日本の地上波/BS放送のキーフレーム(GOP)間隔の目安(2秒)より短く1秒にする。
+        private const val TS_CATCHUP_SAFETY_MARGIN_MS = 1_000L
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L
