@@ -196,7 +196,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
             }
             override fun onPlayerError(error: PlaybackException) {
-                Log.e(TAG, "onPlayerError", error)
+                Log.e(TAG, "onPlayerError: $error")
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
@@ -375,9 +375,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * ——録画がエラー等で途中終了し、メタデータと実データが乖離するケースがあるため。
      */
     private fun startTsProbing(url: String, client: OkHttpClient) {
-        // requireContext()はFragmentがアタッチされているスレッドから呼ぶ必要があるため、
-        // バックグラウンド実行(tsProbeExecutor)に入る前にメインスレッドで取得しておく。
-        val appContext = requireContext().applicationContext
         tsProbeExecutor.execute {
             val fileSize = TsProbe.fetchFileSize(url, client)
             val head = if (fileSize != null) TsProbe.probeHead(url, client) else null
@@ -399,7 +396,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             // 補正する(performTsSeek参照)。これにより起動時に必要なプロービングは
             // fetchFileSize+probeHead+probeTailの3リクエストのみで済む。
             val provider = TsSeekDataProvider(
-                appContext, url, client,
                 fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
             ) {
                 // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。
@@ -833,8 +829,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
         destroyAribSessions()
-        tsSeekDataProvider?.release()
-        tsSeekDataProvider = null
         exoPlayer?.release()
         exoPlayer = null
         overlayView = null

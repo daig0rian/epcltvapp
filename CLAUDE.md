@@ -19,7 +19,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
 - **最小 SDK:** API 23 (Android 6.0)
-- **コンパイル SDK:** API 36 (Android 16)
+- **コンパイル SDK:** API 35 (Android 15)
 - **ターゲット SDK:** API 34 (Android 14)
 
 ## 開発環境
@@ -37,20 +37,14 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 
 | 項目 | 元の値 | 現在値 | 更新理由 |
 |------|--------|--------|---------|
-| Gradle | 7.0.2 | **9.1.0** | media3 1.10.x が要求する compileSdk 36 に AGP 9.0 系が必要なため |
-| AGP | 7.0.3 | **9.0.1** | 同上。compileSdk 36 対応は AGP 8.9 系では上限35までのため不可 |
+| Gradle | 7.0.2 | **8.9** | JDK 21 非対応のため |
+| AGP | 7.0.3 | **8.7.3** | JDK 21 非対応のため |
 | Kotlin | 1.5.31 | **2.0.21** | JDK 21 対応 |
-| compileSdk | 30 | **36** | media3 1.10.x が compileSdk 36 以上を要求するため |
+| compileSdk | 30 | **35** | media3 1.9.2 が compileSdk 35 以上を要求するため |
 | targetSdk | 30 | **34 (変更なし)** | targetSdk 引き上げに伴う挙動変更(edge-to-edge強制等)は本アップグレードのスコープ外のため据え置き |
 | minSdk | 22 | **23** | API22 世代 (Fire TV 1st/2nd Gen, Fire TV Stick 1st/2nd Gen) が Amazon 公式サポート終了済みのため引き上げ。media3 1.9.0 以降が要求する minSdk 23 とも一致 |
-| media3 (ExoPlayer) | 1.3.1 | **1.10.1** | TSシーク点サムネイル生成用の `FrameExtractor.setMediaSourceFactory()` (1.10.0+) 利用のため |
+| media3 (ExoPlayer) | 1.3.1 | **1.9.2** | `media3-inspector` の `FrameExtractor` API (1.9.0+) 利用のため |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
-
-**AGP 9.0 の新DSL/built-in Kotlinはオプトアウト中**: `gradle.properties` に
-`android.newDsl=false` / `android.builtInKotlin=false` を設定し、既存の
-`kotlin-android` プラグイン構成のまま compileSdk 36 の解禁だけを受けている。
-両フラグは AGP 10.0 で廃止予定のため、その前に新DSL・built-in Kotlinへの
-本移行が別途必要になる。
 
 ## 既知の技術的負債
 
