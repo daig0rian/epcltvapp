@@ -1,6 +1,7 @@
 package com.daigorian.epcltvapp
 
 import android.net.Uri
+import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -56,6 +57,12 @@ internal class TsReadexDataSource(
     private var lastAudioPtsSub  = -1L
     private var ptsInjectionCount = 0
 
+    // [調査用] サムネイル生成(nativeProcessingEnabled=false)時のみ、open()〜初回read()〜
+    // close()の所要時間を計測する。通常再生時のread()は毎秒何十回も呼ばれるためログ対象外にする。
+    private var debugOpenAtMs = 0L
+    private var debugFirstReadLogged = false
+    private var debugBytesRead = 0L
+
     companion object {
         private val EMPTY = ByteArray(0)
     }
@@ -84,7 +91,13 @@ internal class TsReadexDataSource(
         lastAudioPtsMain = -1L
         lastAudioPtsSub = -1L
         ptsInjectionCount = 0
+        debugOpenAtMs = SystemClock.elapsedRealtime()
+        debugFirstReadLogged = false
+        debugBytesRead = 0L
         upstream.open(openSpec)
+        if (!nativeProcessingEnabled) {
+            Log.d(TAG, "[調査] open()完了 upstream.open所要ms=${SystemClock.elapsedRealtime() - debugOpenAtMs} position=${openSpec.position}")
+        }
         // ExoPlayerは通常、再生開始前にduration/シーク可否をTsDurationReader等で
         // 確定させようとするが、これは非常に遅く即座の再生開始を妨げる。そのため
         // ストリーム長不明と伝えてこの処理自体を常に抑止し(nativeProcessingEnabled の
@@ -97,7 +110,13 @@ internal class TsReadexDataSource(
         if (length == 0) return 0
 
         if (!nativeProcessingEnabled) {
-            return upstream.read(target, offset, length)
+            if (!debugFirstReadLogged) {
+                debugFirstReadLogged = true
+                Log.d(TAG, "[調査] 初回read()呼び出し open()から${SystemClock.elapsedRealtime() - debugOpenAtMs}ms")
+            }
+            val n = upstream.read(target, offset, length)
+            if (n > 0) debugBytesRead += n
+            return n
         }
 
         if (outputPos < outputBytes.size) {
@@ -210,6 +229,9 @@ internal class TsReadexDataSource(
     }
 
     override fun close() {
+        if (!nativeProcessingEnabled && debugOpenAtMs != 0L) {
+            Log.d(TAG, "[調査] close() open()から${SystemClock.elapsedRealtime() - debugOpenAtMs}ms 総読み取りbytes=$debugBytesRead")
+        }
         try {
             upstream.close()
         } finally {
