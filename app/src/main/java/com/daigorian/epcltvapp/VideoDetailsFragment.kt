@@ -234,11 +234,12 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mSelectedRecordedProgram?.let {
             // EPGStation Version 1.x.x
             // オリジナルのTSがある場合は "TS を再生" アクションアダプタを追加
+            // (収録中は「追いかけ再生」の意味を持つラベルにする。収録済みなら通常の再生ラベル)
             if (it.original) {
                 actionAdapter.add(
                     Action(
                         ACTION_WATCH_ORIGINAL_TS,
-                        getString(R.string.play_ts)
+                        if (it.recording) getString(R.string.play_ts) else getString(R.string.play_original_ts)
                     )
                 )
             }
@@ -258,7 +259,13 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 actionAdapter.add(
                     Action(
                         videoFIle.id,
-                        getString(R.string.play_x,videoFIle.name)
+                        // 収録中のtsファイルのみ「追いかけ再生」の意味を持つラベルにする。
+                        // 収録済みなら従来通りファイル名ベースの通常の再生ラベル。
+                        if (videoFIle.type == "ts" && recordedItem.isRecording) {
+                            getString(R.string.play_ts)
+                        } else {
+                            getString(R.string.play_x, videoFIle.name)
+                        }
                     )
                 )
             }

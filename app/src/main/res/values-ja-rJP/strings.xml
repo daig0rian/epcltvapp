@@ -14,7 +14,8 @@
     <string name="schedule_fetch_network_error">番組表取得通信失敗</string>
     <string name="recent_videos">最近の録画</string>
     <string name="rule_id_is_x">ルールID %1$s</string>
-    <string name="play_ts">TSを再生</string>
+    <string name="play_ts">簡易追いかけ再生(TS)</string>
+    <string name="play_original_ts">TSを再生</string>
     <string name="play_x">%1$sを再生</string>
     <string name="videos_in_same_rule">同じルールの録画</string>
     <string name="search_results">検索結果</string>
@@ -75,7 +76,7 @@
     <string name="delete_failed">削除に失敗しました</string>
     <string name="delete">削除</string>
     <string name="cancel">キャンセル</string>
-    <string name="play_catchup_hls">追いかけ再生(HLS)</string>
+    <string name="play_catchup_hls">シームレス追いかけ再生(HLS)</string>
     <string name="no_subtitle">字幕なし</string>
     <string name="caption_on">字幕 ON</string>
     <string name="caption_off">字幕 OFF</string>

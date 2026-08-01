@@ -56,13 +56,28 @@ internal class TsSeekDataProvider(
         return positions
     }
 
+    /** head/tailのバイト位置からの線形補間による概算バイト位置(188アライン済み)。 */
+    private fun byteOffsetForRelativeMs(clampedRelativeMs: Long): Long {
+        val span = tailPoint.byteOffset - headPoint.byteOffset
+        val raw = headPoint.byteOffset + span * clampedRelativeMs / durationMs
+        return raw - (raw % TS_PACKET_SIZE)
+    }
+
     /** head/tailのバイト位置からの線形補間による概算バイト位置(188アライン済み)。maxSeekableMsを超えないようクランプする。 */
     fun estimateByteOffset(relativeTimeMs: Long): Long {
         if (durationMs <= 0) return headPoint.byteOffset
-        val clamped = relativeTimeMs.coerceIn(0, maxSeekableMs)
-        val span = tailPoint.byteOffset - headPoint.byteOffset
-        val raw = headPoint.byteOffset + span * clamped / durationMs
-        return raw - (raw % TS_PACKET_SIZE)
+        return byteOffsetForRelativeMs(relativeTimeMs.coerceIn(0, maxSeekableMs))
+    }
+
+    /**
+     * 収録中TS追いかけ再生（Issue #42）用: [estimateByteOffset]と異なり、シークバー用の
+     * 安全マージンである[maxSeekableMs](15秒)にはクランプしない。STATE_ENDED直後の再オープンは
+     * シークバーの目盛り幅とは無関係に「今の終端の手前marginMs」へ近づくことが目的のため、
+     * 0からdurationMsの全域を使ってhead/tailの平均ビットレートで見積もる。
+     */
+    fun estimateByteOffsetNearTail(marginMs: Long): Long {
+        if (durationMs <= 0) return headPoint.byteOffset
+        return byteOffsetForRelativeMs((durationMs - marginMs).coerceIn(0, durationMs))
     }
 
     /** TsProbeが返す絶対PCR時刻(ms)を、duration/position系と同じ基準(head起点の相対時刻)に変換する。 */
