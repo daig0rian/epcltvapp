@@ -51,7 +51,34 @@ internal class TsThumbnailGenerator(
         started = true
         val order = buildBfsOrder(positionsMs.size, THUMBNAIL_DENSITY)
         Log.d(TAG, "start: generating ${order.size}/${positionsMs.size} thumbnails")
+        logContentLengthDiagnostic()
         generateNext(order, 0)
+    }
+
+    /**
+     * [調査用一時コード] FrameExtractorが内部で使うのと同じ素のHttpURLConnection(OkHttp非経由)で
+     * videoUrlを開き、Content-Lengthが正しく取れるか確認する。全シーク点が同一フレーム(先頭付近)
+     * しか返さない不具合の原因調査用——TsExtractorは入力長が不明(C.LENGTH_UNSET)だとシーク不能な
+     * SeekMap.Unseekableにフォールバックするため、これが原因かどうかを切り分ける。
+     */
+    private fun logContentLengthDiagnostic() {
+        Thread {
+            try {
+                val connection = java.net.URL(videoUrl).openConnection() as java.net.HttpURLConnection
+                connection.requestMethod = "GET"
+                connection.connect()
+                Log.d(
+                    TAG,
+                    "[調査] plain GET responseCode=${connection.responseCode} " +
+                        "Content-Length=${connection.getHeaderField("Content-Length")} " +
+                        "Transfer-Encoding=${connection.getHeaderField("Transfer-Encoding")} " +
+                        "Accept-Ranges=${connection.getHeaderField("Accept-Ranges")}",
+                )
+                connection.disconnect()
+            } catch (e: Exception) {
+                Log.w(TAG, "[調査] plain GET診断で例外発生", e)
+            }
+        }.start()
     }
 
     /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。 */
