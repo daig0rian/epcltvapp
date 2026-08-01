@@ -10,7 +10,8 @@
     <string name="now_on_recording">Now On Recording</string>
     <string name="recent_videos">Recent videos</string>
     <string name="rule_id_is_x">Rule ID %1$s</string>
-    <string name="play_ts">Play TS</string>
+    <string name="play_ts">Simple Catch-up Playback (TS)</string>
+    <string name="play_original_ts">Play TS</string>
     <string name="play_x">Play %1$s</string>
     <string name="videos_in_same_rule">Videos in same Rule</string>
     <string name="search_results">Search Result</string>
@@ -149,7 +150,7 @@
     <string name="delete_failed">Delete failed</string>
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
-    <string name="play_catchup_hls">Catch-up Playback (HLS)</string>
+    <string name="play_catchup_hls">Seamless Catch-up Playback (HLS)</string>
     <string name="hls_stream_start_failed">Failed to start HLS stream</string>
     <string name="record_reserved">Recording reserved</string>
     <string name="record_failed">Failed to reserve recording</string>
