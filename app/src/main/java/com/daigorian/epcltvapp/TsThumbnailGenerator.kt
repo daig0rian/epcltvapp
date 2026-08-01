@@ -2,6 +2,10 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.RectF
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
@@ -21,11 +25,15 @@ private const val TAG = "TsThumbnailGenerator"
  * Leanbackの制約上、シークステップとgetThumbnail()呼び出しは1:1にせざるを得ない。
  * しかし1枚の生成コストは実測で500ms〜1秒程度あり、これを全シークステップ分実行するのは
  * 非現実的。そこで[REAL_THUMBNAIL_STRIDE]点に1点だけ実際に生成し、残りは即座に
- * 小さな黒画像(プレースホルダー)を返す。同じサムネイルを複数ステップに使い回す案は
+ * 「NO IMAGE」プレースホルダーを返す。同じサムネイルを複数ステップに使い回す案は
  * 「未取得なのか同じ絵柄なのか区別がつかない」というUXフィードバックで不採用になったため、
- * 代わりに明確に区別できる無地画像で「サムネイル無し」を表現する。
+ * 代わりに明確に区別できる画像で「サムネイル無し」を表現する。
  */
 private const val REAL_THUMBNAIL_STRIDE = 4
+
+/** プレースホルダーの表示サイズ。実サムネイルと同じ16:9で作らないと正方形で浮いて見える。 */
+private const val PLACEHOLDER_WIDTH = 320
+private const val PLACEHOLDER_HEIGHT = 180
 
 /**
  * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]
@@ -83,9 +91,21 @@ internal class TsThumbnailGenerator(
     }
     private val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
 
-    /** [REAL_THUMBNAIL_STRIDE]点に満たない中間点用の、明確に「サムネイル無し」と分かる無地画像。 */
-    private val placeholderBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
-        eraseColor(android.graphics.Color.BLACK)
+    /**
+     * [REAL_THUMBNAIL_STRIDE]点に満たない中間点用の、明確に「サムネイル無し」と分かる画像。
+     * 既存のR.drawable.no_iamge(カード一覧でサムネイル取得失敗時に使われるのと同じ画像)を
+     * 16:9のキャンバスに収める。正方形のまま使うと実サムネイルの列の中で浮いて見えるため。
+     */
+    private val placeholderBitmap: Bitmap = run {
+        val source = BitmapFactory.decodeResource(context.resources, R.drawable.no_iamge)
+        val canvasBitmap = Bitmap.createBitmap(PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(canvasBitmap)
+        canvas.drawColor(Color.BLACK)
+        val scale = PLACEHOLDER_HEIGHT.toFloat() / source.height
+        val scaledWidth = source.width * scale
+        val left = (PLACEHOLDER_WIDTH - scaledWidth) / 2f
+        canvas.drawBitmap(source, null, RectF(left, 0f, left + scaledWidth, PLACEHOLDER_HEIGHT.toFloat()), null)
+        canvasBitmap
     }
 
     private val cache = HashMap<Int, Bitmap>()
