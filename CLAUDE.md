@@ -19,7 +19,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **画像:** Glide
 - **動画再生:** libVLC (内蔵) + 外部プレーヤー対応 (MX Player / VLC)
 - **最小 SDK:** API 23 (Android 6.0)
-- **コンパイル SDK:** API 34 (Android 14)
+- **コンパイル SDK:** API 35 (Android 15)
 - **ターゲット SDK:** API 34 (Android 14)
 
 ## 開発環境
@@ -40,8 +40,8 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | Gradle | 7.0.2 | **8.9** | JDK 21 非対応のため |
 | AGP | 7.0.3 | **8.7.3** | JDK 21 非対応のため |
 | Kotlin | 1.5.31 | **2.0.21** | JDK 21 対応 |
-| compileSdk | 30 | **34** | Compose for TV 移行準備 |
-| targetSdk | 30 | **34** | compileSdk に合わせて更新 |
+| compileSdk | 30 | **35** | media3 1.9.2 が compileSdk 35 以上を要求するため |
+| targetSdk | 30 | **34 (変更なし)** | targetSdk 引き上げに伴う挙動変更(edge-to-edge強制等)は本アップグレードのスコープ外のため据え置き |
 | minSdk | 22 | **23** | API22 世代 (Fire TV 1st/2nd Gen, Fire TV Stick 1st/2nd Gen) が Amazon 公式サポート終了済みのため引き上げ。media3 1.9.0 以降が要求する minSdk 23 とも一致 |
 | media3 (ExoPlayer) | 1.3.1 | **1.9.2** | `media3-inspector` の `FrameExtractor` API (1.9.0+) 利用のため |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |

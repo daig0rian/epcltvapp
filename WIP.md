@@ -13,9 +13,11 @@ Phase 2 (TSシークバーへのサムネイル表示、[feature/ts-seek-thumbna
 - [x] `app/build.gradle`: `minSdkVersion 22` → `23`
 - [x] `app/build.gradle`: `media3_version` `1.3.1` → `1.9.2`
 - [x] `CLAUDE.md`: 技術スタック・依存関係バージョン表・将来の方針のminSdk記述を更新
+- [x] **ビルド1回目失敗・修正済み**: `assembleDebug`が`checkDebugAarMetadata`で失敗。media3 1.9.2の全モジュールが「compileSdk 35以上必須」を要求(実際にはAARメタデータのハード要件であり、リリースノート上の「R8のcompileSdk=35相当バージョン」という記述より強い制約だった)。`compileSdkVersion`を`34`→`35`に変更して対応。`targetSdkVersion`は挙動変更(edge-to-edge強制等)を避けるため`34`のまま据え置き(compileSdk >= targetSdkの制約は満たしている)。
 
 ## 残タスク
 
+- [ ] **ユーザー側でAndroid SDK Platform 35のインストールが必要**: ローカルSDKには`android-34`と`android-36.1`のみ存在し`android-35`が未インストールを確認済み。Android StudioのSDK Managerからインストールしてから再ビルドが必要。
 - [ ] **ユーザーによるビルド確認待ち**: Android Studioでのgradle sync・assembleDebug・実機/エミュレータでの動作確認 (media3を1.3.1→1.9.2へ6マイナーバージョン分一気に上げるため、既存のTS再生・シーク機能(`TsReadexDataSource`, `TsSeekPlayerAdapter`, `TsSeekDataProvider`)、および非TSコンテンツ再生(`LeanbackPlayerAdapter`経由)の両方で回帰がないか要確認)
 - [ ] 動作確認が取れ次第、コミットしてPR作成 (`feature/ts-seek-thumbnails`とは無関係な独立した変更のため、先にこちらをマージする)
 
