@@ -9,9 +9,16 @@
         - 動画サムネイルは16:9系コンテンツなので正方形だと不自然(letterboxが目立つ)。
         - サムネイル1枚の幅が表示可能枚数を決める(ThumbsBar.calculateNumOfThumbs参照)ため、
           幅を小さくするほど同時に見える枚数が増える。
+
+        【重要】ThumbsBarのコンストラクタにwidth/heightを取り違えるバグがあり、
+        hero_thumbs_width の値が実際には高さに、hero_thumbs_height の値が実際には
+        幅に使われる(androidx.leanback 1.0.0のソースで確認済み)。デフォルト値が
+        width=height=192dp(正方形)だったため表面化していなかった。以下のhero系2つは
+        このバグを打ち消すため、実際に欲しいサイズ(幅88dp×高さ50dp)とは意図的に
+        逆にして指定している。
     -->
     <dimen name="lb_playback_transport_thumbs_width">70dp</dimen>
     <dimen name="lb_playback_transport_thumbs_height">39dp</dimen>
-    <dimen name="lb_playback_transport_hero_thumbs_width">88dp</dimen>
-    <dimen name="lb_playback_transport_hero_thumbs_height">50dp</dimen>
+    <dimen name="lb_playback_transport_hero_thumbs_width">50dp</dimen>
+    <dimen name="lb_playback_transport_hero_thumbs_height">88dp</dimen>
 </resources>
