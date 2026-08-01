@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace "com.daigorian.epcltvapp"
-    compileSdkVersion 35
+    compileSdkVersion 36
 
     defaultConfig {
         applicationId "com.daigorian.epcltvapp"

@@ -4,6 +4,19 @@
 
 Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済み）でTS再生のシーク機能を実装した。そのシーク点の一部にサムネイルを付与する。
 
+## ⚠️ このブランチは現在スパイク(実験)状態
+
+`FrameExtractor.setMediaSourceFactory()`(media3 1.10.0+)を使うためにはcompileSdk 36が必要で、
+それにはAGP 9.0.1 + Gradle 9.1.0へのメジャーバージョンアップ(旧DSL/kotlin-androidプラグイン
+非互換のBreaking Change付き)が必要と判明した。サムネイル機能のためのスコープとしては
+過大という認識のもと、**「このアプローチのノックアウト点を見つける」ことを目的とした
+スパイクとして継続中**。マージされない可能性がある前提で進めている。
+
+- `android.newDsl=false` / `android.builtInKotlin=false`(`gradle.properties`)でAGP 9.0の
+  破壊的変更を一時的にオプトアウトしつつ、compileSdk 36の解禁だけを得る方針で試行中。
+- ユーザーはローカルSDKに「Android 16.0 (Baklava) API Level 36.0」(plain、36.1とは別)の
+  追加インストールが必要な可能性がある(現状36.1のみ導入済み)。
+
 ## 確定した設計(2周目・実機検証を経て確定)
 
 `androidx.media3.inspector.frame.FrameExtractor`（ExoPlayer自身のTsExtractorでフレームをデコードするAPI、media3 1.10.0でmedia3-inspector-frameモジュールに分離）を使う。media3を1.10.1にアップグレード済み([#44](https://github.com/daig0rian/epcltvapp/pull/44)は1.9.2への上げだったが、Phase 2実装中にこの後さらに1.10.1へ再アップグレードした)。
@@ -38,8 +51,9 @@ Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済�
 
 ## 残タスク
 
-- [ ] **ビルド・実機動作確認待ち**: 2周目の設計でサムネイルが実際に(異なる内容で)表示されるか確認
-- [ ] 動作確認が取れ次第、`feature/ts-seek-thumbnails`ブランチのコミットを整理し、PR作成
+- [ ] **ビルド確認待ち(スパイク中)**: AGP 9.0.1/Gradle 9.1.0/compileSdk 36で`assembleDebug`が通るか。通らなければそこがこのアプローチのノックアウト点
+- [ ] ビルドが通ったら、2周目の設計でサムネイルが実際に(異なる内容で)表示されるか実機確認
+- [ ] スパイクの結果次第で: (a)このままPR化して正式採用、(b)media3 1.9.2+AGP 8.7.3に戻してImageReader自前実装に切り替え、のいずれかを選ぶ
 
 ## 重要な決定事項
 
