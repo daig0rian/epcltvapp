@@ -1,7 +1,6 @@
 package com.daigorian.epcltvapp
 
 import android.net.Uri
-import android.os.SystemClock
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
@@ -35,9 +34,9 @@ internal class TsReadexDataSource(
     // 独立した設定であるため、シーク(startByteOffset)機能は nativeProcessingEnabled の値に
     // かかわらず常に有効。C.LENGTH_UNSET を返す判断も両モード共通(常に自前でシークを制御するため)。
     private val nativeProcessingEnabled: Boolean = true,
-    // [調査用] サムネイル生成時、ExoPlayerのLoadControlデフォルトの先読みバッファ目標
-    // (数秒分=数MB)によって1フレーム取得が不必要に遅くなっている疑いがあるため、強制的に
-    // 早期EOFにしてこの仮説を検証する。Long.MAX_VALUEなら無制限(通常再生時の挙動と同じ)。
+    // サムネイル生成時、ExoPlayerのLoadControlデフォルトの先読みバッファ目標(数MB相当)による
+    // 生成コストの外れ値(実測で最大7.7秒)を抑えるため、強制的に早期EOFにする上限。
+    // Long.MAX_VALUEなら無制限(通常再生時の挙動)。
     private val maxReadLength: Long = Long.MAX_VALUE,
 ) : DataSource {
 
@@ -60,12 +59,6 @@ internal class TsReadexDataSource(
     private var lastAudioPtsMain = -1L
     private var lastAudioPtsSub  = -1L
     private var ptsInjectionCount = 0
-
-    // [調査用] サムネイル生成(nativeProcessingEnabled=false)時のみ、open()〜初回read()〜
-    // close()の所要時間を計測する。通常再生時のread()は毎秒何十回も呼ばれるためログ対象外にする。
-    private var debugOpenAtMs = 0L
-    private var debugFirstReadLogged = false
-    private var debugBytesRead = 0L
 
     companion object {
         private val EMPTY = ByteArray(0)
@@ -105,13 +98,7 @@ internal class TsReadexDataSource(
         lastAudioPtsMain = -1L
         lastAudioPtsSub = -1L
         ptsInjectionCount = 0
-        debugOpenAtMs = SystemClock.elapsedRealtime()
-        debugFirstReadLogged = false
-        debugBytesRead = 0L
         upstream.open(openSpec)
-        if (!nativeProcessingEnabled) {
-            Log.d(TAG, "[調査] open()完了 upstream.open所要ms=${SystemClock.elapsedRealtime() - debugOpenAtMs} position=${openSpec.position}")
-        }
         // ExoPlayerは通常、再生開始前にduration/シーク可否をTsDurationReader等で
         // 確定させようとするが、これは非常に遅く即座の再生開始を妨げる。そのため
         // ストリーム長不明と伝えてこの処理自体を常に抑止し(nativeProcessingEnabled の
@@ -124,13 +111,7 @@ internal class TsReadexDataSource(
         if (length == 0) return 0
 
         if (!nativeProcessingEnabled) {
-            if (!debugFirstReadLogged) {
-                debugFirstReadLogged = true
-                Log.d(TAG, "[調査] 初回read()呼び出し open()から${SystemClock.elapsedRealtime() - debugOpenAtMs}ms")
-            }
-            val n = upstream.read(target, offset, length)
-            if (n > 0) debugBytesRead += n
-            return n
+            return upstream.read(target, offset, length)
         }
 
         if (outputPos < outputBytes.size) {
@@ -243,9 +224,6 @@ internal class TsReadexDataSource(
     }
 
     override fun close() {
-        if (!nativeProcessingEnabled && debugOpenAtMs != 0L) {
-            Log.d(TAG, "[調査] close() open()から${SystemClock.elapsedRealtime() - debugOpenAtMs}ms 総読み取りbytes=$debugBytesRead")
-        }
         try {
             upstream.close()
         } finally {

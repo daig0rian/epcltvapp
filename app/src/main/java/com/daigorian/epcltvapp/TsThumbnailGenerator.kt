@@ -3,7 +3,6 @@ package com.daigorian.epcltvapp
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
-import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.PlaybackSeekDataProvider
@@ -82,18 +81,15 @@ internal class TsThumbnailGenerator(
     // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
     // 単純なバイト位置オフセットの素通しだけを行う。ExoPlayer自体の使い回しのため
     // インスタンスは1つだけ保持し、startByteOffsetをリクエストごとに書き換える。
-    // [調査用] maxReadLengthでLoadControlデフォルトの先読みバッファ目標より小さい
-    // 上限を強制し、早期EOFで1フレーム取得が速くなるかを検証する。
+    // maxReadLengthはExoPlayerのLoadControlデフォルトの先読みバッファ目標(数MB相当)を
+    // 早期打ち切りし、生成コストの外れ値(実測で最大7.7秒)を解消するための上限。
     private val tsFactory = TsReadexDataSource.Factory(OkHttpDataSource.Factory(httpClient)).apply {
         nativeProcessingEnabled = false
         maxReadLength = 6L * 1024 * 1024
     }
     private val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
 
-    /**
-     * [調査用] 完全透過のプレースホルダーで、Leanbackのシークバー上で「何も描かれない」
-     * 見た目になるかを確認する(NO IMAGE画像はUX上好ましくなかったため)。
-     */
+    /** 完全透過のプレースホルダー。実サムネイルとの区別を明確にしつつ視覚的に邪魔をしない。 */
     private val placeholderBitmap: Bitmap = Bitmap.createBitmap(
         PLACEHOLDER_WIDTH, PLACEHOLDER_HEIGHT, Bitmap.Config.ARGB_8888
     ).apply {
@@ -169,14 +165,11 @@ internal class TsThumbnailGenerator(
             .build()
         openExtractors.add(extractor)
 
-        val startedAtMs = SystemClock.elapsedRealtime()
         val future = extractor.getThumbnail()
         Futures.addCallback(
             future,
             object : FutureCallback<FrameExtractor.Frame> {
                 override fun onSuccess(result: FrameExtractor.Frame?) {
-                    val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                    Log.d(TAG, "[調査] index=$index elapsedMs=$elapsedMs 成功")
                     if (result != null) {
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
@@ -187,8 +180,7 @@ internal class TsThumbnailGenerator(
                 }
 
                 override fun onFailure(t: Throwable) {
-                    val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                    Log.w(TAG, "[調査] index=$index elapsedMs=$elapsedMs 失敗", t)
+                    Log.w(TAG, "getThumbnail failed for index=$index", t)
                     queued.remove(index)
                     generating = false
                     processQueueIfIdle()
