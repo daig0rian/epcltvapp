@@ -35,6 +35,14 @@ jobs:
           key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
+      - name: 必要な CMake バージョンをインストール
+        # app/build.gradle の externalNativeBuild.cmake.version と一致させること。
+        # AGPはNDKと違いCMakeを自動ダウンロードしないため、sdkmanagerで明示的に取得する。
+        run: |
+          SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -maxdepth 2 -name sdkmanager | head -n1)
+          yes | "$SDKMANAGER" --licenses > /dev/null || true
+          "$SDKMANAGER" "cmake;3.30.5"
+
       - name: キーストアを復元
         env:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
