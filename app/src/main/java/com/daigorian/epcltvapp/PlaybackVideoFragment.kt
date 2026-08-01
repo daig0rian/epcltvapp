@@ -39,12 +39,14 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.leanback.LeanbackPlayerAdapter
 import androidx.preference.PreferenceManager
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
+import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.HlsStream
 import com.daigorian.epcltvapp.epgstationv2caller.ManualReserveOption
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationv2caller.Records
 import com.daigorian.epcltvapp.epgstationv2caller.Schedule
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
@@ -93,6 +95,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var tsSeekDataProvider: TsSeekDataProvider? = null
     private val tsProbeExecutor: java.util.concurrent.ExecutorService =
         java.util.concurrent.Executors.newSingleThreadExecutor()
+
+    // TS追いかけ再生（Issue #42）: Details画面表示時点で収録中だったTSのみ有効化する。
+    // 収録終了を確認した時点でfalseに固定し、以後は再プローブ/再確認を行わない。
+    private var tsCatchUpActive = false
+    private var tsCatchUpRecordedProgramId: Long? = null // EPGStation v1
+    private var tsCatchUpRecordedItemId: Long? = null // EPGStation v2
+    // probeHeadの結果は再生中不変のため一度だけ保持し、再プローブのたびに使い回す。
+    private var tsHeadPoint: TsProbe.HeadProbeResult? = null
 
     // Live viewing state
     private var liveChannelId: Long = -1L
@@ -194,6 +204,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
+                if (playbackState == Player.STATE_ENDED && tsCatchUpActive) {
+                    // 通常のシーク(performTsSeek)と全く同じ経路を使い、EOF手前の安全マージン分だけ
+                    // 戻した位置へ「今と同時刻へのシーク」を行う。これがrestartTsPlaybackAt()を
+                    // 経由して開き直しになり、その末尾で収録状況の再確認とシークバー更新が再度走る。
+                    tsSeekDataProvider?.let { provider ->
+                        performTsSeek((provider.durationMs - TS_CATCHUP_SAFETY_MARGIN_MS).coerceAtLeast(0))
+                    }
+                }
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "onPlayerError: $error")
@@ -289,6 +307,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isTsContent) {
             tsSeekUrl = cleanUrl
             tsSeekHttpClient = okHttpClient
+            tsCatchUpActive = recordedProgram?.recording == true || recordedItem?.isRecording == true
+            tsCatchUpRecordedProgramId = recordedProgram?.id
+            tsCatchUpRecordedItemId = recordedItem?.id
             startTsProbing(cleanUrl, okHttpClient)
         }
     }
@@ -382,34 +403,79 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 Log.w(TAG, "startTsProbing: head probe failed, seek stays disabled")
                 return@execute
             }
-            val tail = TsProbe.probeTail(url, client, fileSize, head.pcrPid)
-            if (tail == null) {
-                Log.w(TAG, "startTsProbing: tail probe failed, seek stays disabled")
-                return@execute
-            }
-            if (tail.timeMs - head.firstPcr.timeMs <= 0) {
-                Log.w(TAG, "startTsProbing: invalid duration=${tail.timeMs - head.firstPcr.timeMs}")
-                return@execute
-            }
-            // head/tailの2点だけでdurationとシークを即座に有効化する(再生開始を待たせない)。
-            // 各シーク位置の正確なバイト位置はここでは求めず、確定時に1回だけ軽量プローブして
-            // 補正する(performTsSeek参照)。これにより起動時に必要なプロービングは
-            // fetchFileSize+probeHead+probeTailの3リクエストのみで済む。
-            val provider = TsSeekDataProvider(
-                fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
-            ) {
-                // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。
-                // シークバーへ移動しただけで再生が止まると「シークが実行された」と誤解させてしまうため。
-                tsSeekAdapter?.resumePlaybackIfWasPlaying()
-            }
-            mainHandler.post {
-                if (!isAdded) return@post
-                tsSeekDataProvider = provider
-                tsSeekAdapter?.setKnownDuration(provider.durationMs)
-                mTransportControlGlue.setSeekProvider(provider)
-                mTransportControlGlue.isSeekEnabled = true
-                Log.d(TAG, "startTsProbing: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
-            }
+            tsHeadPoint = head
+            refreshTailAndSeekBar(url, client, head)
+        }
+        // ①(再生開始時点): 追いかけ再生対象なら収録状況を確認しておく。
+        if (tsCatchUpActive) refreshCatchUpRecordingStatus()
+    }
+
+    /**
+     * tail(ファイル終端)を再プローブしシークバーへ反映する。tsProbeExecutor上の
+     * バックグラウンドスレッドから呼ぶ前提(fetchFileSize/probeTailがブロッキングI/Oのため)。
+     * 初回再生開始時(startTsProbing)・シーク完了時(restartTsPlaybackAt)の両方から呼ばれる
+     * ——追いかけ再生(Issue #42)はこの「毎回tailを取り直す」性質を利用して、シークバーの
+     * 終端を最新の実データに追従させる。
+     */
+    private fun refreshTailAndSeekBar(url: String, client: OkHttpClient, head: TsProbe.HeadProbeResult) {
+        val fileSize = TsProbe.fetchFileSize(url, client)
+        val tail = if (fileSize != null) TsProbe.probeTail(url, client, fileSize, head.pcrPid) else null
+        if (fileSize == null || tail == null || tail.timeMs - head.firstPcr.timeMs <= 0) {
+            Log.w(TAG, "refreshTailAndSeekBar: probe failed or invalid duration")
+            return
+        }
+        // head/tailの2点だけでdurationとシークを即座に有効化する(再生開始を待たせない)。
+        // 各シーク位置の正確なバイト位置はここでは求めず、確定時に1回だけ軽量プローブして
+        // 補正する(performTsSeek参照)。
+        val provider = TsSeekDataProvider(
+            fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
+        ) {
+            // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。
+            // シークバーへ移動しただけで再生が止まると「シークが実行された」と誤解させてしまうため。
+            tsSeekAdapter?.resumePlaybackIfWasPlaying()
+        }
+        mainHandler.post {
+            if (!isAdded) return@post
+            tsSeekDataProvider = provider
+            tsSeekAdapter?.setKnownDuration(provider.durationMs)
+            mTransportControlGlue.setSeekProvider(provider)
+            mTransportControlGlue.isSeekEnabled = true
+            Log.d(TAG, "refreshTailAndSeekBar: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
+        }
+    }
+
+    /**
+     * 収録中TS追いかけ再生（Issue #42）: 現在の収録状況をEPGStation APIへ再確認する。
+     * v1/v2とも単一IDで収録状況を問い合わせるエンドポイントが存在しないため、「収録中一覧」を
+     * 取得して対象IDが含まれるかで判定する。収録終了を確認したら tsCatchUpActive を false に
+     * 固定し、以後は呼び出し元(startTsProbing/restartTsPlaybackAt)がこの再確認自体を呼ばなくなる。
+     * 問い合わせ失敗時は現状維持とし、次回のシーク/再オープン時に再試行する。
+     */
+    private fun refreshCatchUpRecordingStatus() {
+        val programId = tsCatchUpRecordedProgramId
+        val itemId = tsCatchUpRecordedItemId
+        if (programId != null) {
+            EpgStation.api?.getRecorded(recording = true)?.enqueue(object : Callback<GetRecordedResponse> {
+                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                    if (response.isSuccessful) {
+                        tsCatchUpActive = response.body()?.recorded?.any { it.id == programId } == true
+                    }
+                }
+                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    Log.w(TAG, "refreshCatchUpRecordingStatus(v1) failed: ${t.message}")
+                }
+            })
+        } else if (itemId != null) {
+            EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    if (response.isSuccessful) {
+                        tsCatchUpActive = response.body()?.records?.any { it.id == itemId } == true
+                    }
+                }
+                override fun onFailure(call: Call<Records>, t: Throwable) {
+                    Log.w(TAG, "refreshCatchUpRecordingStatus(v2) failed: ${t.message}")
+                }
+            })
         }
     }
 
@@ -478,6 +544,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // ブラウズ中とみなしオーバーレイを表示したままにする)
         if (wasPlaying) {
             hideControlsOverlay(true)
+        }
+        // ①(シーク完了時点): MediaSourceの再構築(=このメソッド)は追いかけ再生対象TSにとって
+        // 「今この瞬間の実データで開き直された」タイミングそのものなので、tailを再プローブして
+        // シークバーを追従させ、収録状況も再確認する(視聴中に収録が終わっている可能性があるため)。
+        val head = tsHeadPoint
+        if (tsCatchUpActive && head != null) {
+            tsProbeExecutor.execute { refreshTailAndSeekBar(url, client, head) }
+            refreshCatchUpRecordingStatus()
         }
     }
 
@@ -851,6 +925,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // コストを伴わないが、配列が際限なく肥大化しないための歯止め。
         // これを超える長さの録画は刻み間隔がSEEK_POINT_INTERVAL_MSより広がる。
         private const val SEEK_POINT_COUNT_MAX = 400
+        // 収録中TS追いかけ再生(Issue #42)専用のEOF手前マージン。SEEK_POINT_INTERVAL_MS
+        // (シークバー目盛り間隔という別の関心事のための定数、15秒)は流用しない——STATE_ENDED
+        // のたびにこの秒数だけ巻き戻って見えると追いかけ再生の体験として不自然なため、
+        // 日本の地上波/BS放送で一般的なキーフレーム(GOP)間隔の目安である2秒に短くする。
+        private const val TS_CATCHUP_SAFETY_MARGIN_MS = 2_000L
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L
