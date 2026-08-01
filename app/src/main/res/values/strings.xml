@@ -36,14 +36,14 @@
     <string name="pref_key_port_num"               translatable="false">KEY_PORT_NUM</string>
     <string name="pref_val_port_num_default"       translatable="false">8888</string>
     <string name="pref_key_player"                 translatable="false">KEY_PLAYER</string>
-    <string name="pref_val_player_default"         translatable="false">@string/pref_options_movie_player_val_MX</string>
+    <string name="pref_val_player_default"         translatable="false">@string/pref_options_movie_player_val_INTERNAL</string>
     <string name="pref_key_num_of_history"         translatable="false">KEY_NUM_OF_HISTORY</string>
     <string name="pref_val_num_of_history_default" translatable="false">@string/pref_options_num_of_history_val_3</string>
 
-    <string name="pref_options_movie_player_label_MX">MX Player (Default)</string>
+    <string name="pref_options_movie_player_label_MX">MX Player</string>
     <string name="pref_options_movie_player_label_MX_PRO">MX Player Pro</string>
     <string name="pref_options_movie_player_label_VLC">VLC</string>
-    <string name="pref_options_movie_player_label_INTERNAL">Internal</string>
+    <string name="pref_options_movie_player_label_INTERNAL">Internal (Default)</string>
 
     <string-array name="pref_options_movie_player_label" >
         <item>@string/pref_options_movie_player_label_MX</item>
