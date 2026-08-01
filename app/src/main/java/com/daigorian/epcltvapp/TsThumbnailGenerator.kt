@@ -65,8 +65,11 @@ internal class TsThumbnailGenerator(
     // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
     // 単純なバイト位置オフセットの素通しだけを行う。ExoPlayer自体の使い回しのため
     // インスタンスは1つだけ保持し、startByteOffsetをリクエストごとに書き換える。
+    // [調査用] maxReadLengthでLoadControlデフォルトの先読みバッファ目標より小さい
+    // 上限を強制し、早期EOFで1フレーム取得が速くなるかを検証する。
     private val tsFactory = TsReadexDataSource.Factory(OkHttpDataSource.Factory(httpClient)).apply {
         nativeProcessingEnabled = false
+        maxReadLength = 6L * 1024 * 1024
     }
     private val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
 

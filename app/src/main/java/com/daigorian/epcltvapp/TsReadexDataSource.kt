@@ -35,6 +35,10 @@ internal class TsReadexDataSource(
     // 独立した設定であるため、シーク(startByteOffset)機能は nativeProcessingEnabled の値に
     // かかわらず常に有効。C.LENGTH_UNSET を返す判断も両モード共通(常に自前でシークを制御するため)。
     private val nativeProcessingEnabled: Boolean = true,
+    // [調査用] サムネイル生成時、ExoPlayerのLoadControlデフォルトの先読みバッファ目標
+    // (数秒分=数MB)によって1フレーム取得が不必要に遅くなっている疑いがあるため、強制的に
+    // 早期EOFにしてこの仮説を検証する。Long.MAX_VALUEなら無制限(通常再生時の挙動と同じ)。
+    private val maxReadLength: Long = Long.MAX_VALUE,
 ) : DataSource {
 
     private var filterHandle: Long = 0
@@ -77,10 +81,20 @@ internal class TsReadexDataSource(
                 superimposeMode = 1,
             )
         }
-        val openSpec = if (startByteOffset > 0) {
-            dataSpec.buildUpon().setPosition(dataSpec.position + startByteOffset).build()
-        } else {
-            dataSpec
+        val openSpec = run {
+            var builder = dataSpec.buildUpon()
+            if (startByteOffset > 0) {
+                builder = builder.setPosition(dataSpec.position + startByteOffset)
+            }
+            if (maxReadLength != Long.MAX_VALUE) {
+                val cappedLength = if (dataSpec.length == C.LENGTH_UNSET.toLong()) {
+                    maxReadLength
+                } else {
+                    minOf(dataSpec.length, maxReadLength)
+                }
+                builder = builder.setLength(cappedLength)
+            }
+            builder.build()
         }
         Log.d(TAG, "open: filter handle=$filterHandle uri=${openSpec.uri} position=${openSpec.position}")
         partialLen = 0
@@ -253,9 +267,10 @@ internal class TsReadexDataSource(
         var superimposePesListener: PesCallback? = null
         var startByteOffset: Long = 0L
         var nativeProcessingEnabled: Boolean = true
+        var maxReadLength: Long = Long.MAX_VALUE
 
         override fun createDataSource(): DataSource =
-            TsReadexDataSource(upstreamFactory.createDataSource(), startByteOffset, nativeProcessingEnabled).also {
+            TsReadexDataSource(upstreamFactory.createDataSource(), startByteOffset, nativeProcessingEnabled, maxReadLength).also {
                 it.captionPesListener = captionPesListener
                 it.superimposePesListener = superimposePesListener
             }
