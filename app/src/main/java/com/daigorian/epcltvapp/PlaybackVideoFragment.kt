@@ -186,17 +186,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .setBufferDurationsMs(1_000, 8_000, 500, 1_000)
             .build()
 
-        val renderersFactory = DefaultRenderersFactory(requireContext()).apply {
-            // Issue #46: Fire TV実機(Fire OS API 28〜30, com.amazon.hardware.tv_screen)は、
-            // media3のDefaultMediaCodecAdapterFactoryがこの機種向けに特別に有効化する
-            // 非同期MediaCodecアダプタ(HandlerThreadコールバック経由)でMediaCodec configure/start
-            // 直後にハングする。SDK 31以上は全機種で非同期が安定していると upstream が明言しており
-            // 対象外、この条件のみ同期アダプタに強制フォールバックする。
-            if (isFireTvAsyncMediaCodecHangProne(requireContext())) {
-                forceDisableMediaCodecAsynchronousQueueing()
-            }
-        }
-        exoPlayer = ExoPlayer.Builder(requireContext(), renderersFactory)
+        exoPlayer = ExoPlayer.Builder(requireContext(), DefaultRenderersFactory(requireContext()))
             .setTrackSelector(trackSelector!!)
             .setLoadControl(loadControl)
             .build()
@@ -893,19 +883,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             } catch (_: Exception) {}
             return builder.build()
-        }
-
-        /**
-         * androidx.media3.exoplayer.mediacodec.DefaultMediaCodecAdapterFactory は
-         * SDK 28〜30 かつ com.amazon.hardware.tv_screen (Amazon Fire TV) の場合のみ、
-         * 通常は非対象のこのSDK帯で非同期MediaCodecアダプタを特別に有効化する
-         * (パフォーマンス改善目的の意図的な機種別分岐)。Issue #46ではこの条件に該当する
-         * 実機でMediaCodec configure/start直後にハングする不具合を確認したため、
-         * この組み合わせでのみ同期アダプタへ強制的にフォールバックする。
-         */
-        private fun isFireTvAsyncMediaCodecHangProne(context: Context): Boolean {
-            return Build.VERSION.SDK_INT in Build.VERSION_CODES.P..Build.VERSION_CODES.R &&
-                context.packageManager.hasSystemFeature("com.amazon.hardware.tv_screen")
         }
 
         private fun stripAuthFromUrl(url: String): String {
