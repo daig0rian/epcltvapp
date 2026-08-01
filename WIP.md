@@ -4,43 +4,46 @@
 
 Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済み）でTS再生のシーク機能を実装した。そのシーク点の一部にサムネイルを付与する。
 
-## 確定した設計
+## 確定した設計(2周目・実機検証を経て確定)
 
-media3を1.9.2にアップグレード済み([#44](https://github.com/daig0rian/epcltvapp/pull/44))なので、`androidx.media3.inspector.FrameExtractor`（ExoPlayer自身のTsExtractorでフレームをデコードするAPI）を使う。
+`androidx.media3.inspector.frame.FrameExtractor`（ExoPlayer自身のTsExtractorでフレームをデコードするAPI、media3 1.10.0でmedia3-inspector-frameモジュールに分離）を使う。media3を1.10.1にアップグレード済み([#44](https://github.com/daig0rian/epcltvapp/pull/44)は1.9.2への上げだったが、Phase 2実装中にこの後さらに1.10.1へ再アップグレードした)。
 
-**重要な発見**: `FrameExtractor.Builder`はカスタム`DataSource.Factory`を注入できず(`Context`と`MediaItem`のみ)、内部で`DefaultMediaSourceFactory`+標準HTTPデータソースを直接使う。つまりtsreadexを一切経由しない。ExoPlayer組み込みの`TsExtractor`はファイル先頭・末尾のPCRを軽量に読んで概算durationを求める`TsDurationReader`と、そこからPCRベースの二分探索でシークする`TsBinarySearchSeeker`を元々持っている（media3 1.3.1時点から存在、ソース確認済み・今回のアップグレードで新規に得た能力ではない）。`TsReadexDataSource`が`C.LENGTH_UNSET`を返して意図的にこれを無効化しているのは、tsreadexがステートフルなフィルタでランダムシークに耐えられないため。`FrameExtractor`はtsreadexを経由しないのでこの制約自体が関係なく、組み込みの効率的なシーク機構がそのまま使える。
+### 1周目の設計は実機検証で否定された
 
-**→ 独自のバイト位置計算は不要。`TsSeekDataProvider`が既に持つ相対時刻(ms)をそのまま`FrameExtractor.getFrame(ms)`に渡すだけでよい。**
+当初は「FrameExtractorはtsreadexを経由せずExoPlayer内蔵の`TsExtractor`が持つPCRベースの二分探索シーク機構(`TsBinarySearchSeeker`)がそのまま使えるはずなので、独自のバイト位置計算は不要」という設計で実装したが、実機検証(ADB logcat)で**全シーク点が同一の先頭付近フレームしか返さない**不具合が発生した。
 
-旧調査コード(`investigateTsreadexNormalizedThumbnail`, `dumpPmtHex`, `ThumbnailInvestigationDataSource`, `THUMBNAIL_PROBE_RAW_BYTES`)は削除済み。MediaMetadataRetrieverが生ARIB TSを扱えない件の調査結果(CA_descriptor起因、詳細は削除済み旧WIPおよびgit historyのdocsコミット参照)は、FrameExtractor採用によりそもそも無関係になった。
+原因はmedia3のソース(`FrameExtractorInternal.PlayerListener.onPlaybackStateChanged`)のコメントで確認: 「If the seek resolves to the current position, the renderer position will not be reset and extractedFrameNeedsRendering remains false. No frames are rendered. Repeat the previously returned frame.」——ExoPlayer自身の内部`seekTo()`が、このアプリのARIB TSに対しては要求位置に関わらず常に「現在位置と同じ」と判定し、実質何もしていなかった。Content-Lengthは正しく取得できていることをcurlで直接確認済みなので、それが原因ではない。
 
-### API上の注意(1.9.2時点)
+### 2周目の設計: Phase 1の実績あるシーク機構を流用する
 
-`androidx.media3:media3-inspector:1.9.2`で`androidx.media3.inspector.FrameExtractor`。**1.10.0で`media3-inspector-frame`モジュールに分離され`androidx.media3.inspector.frame.FrameExtractor`にパッケージが変わる破壊的変更がある**(Web上の最新ドキュメントは1.10系向けなので鵜呑みにしないこと)。将来1.10以降へ上げる際はこの移行が必要。
+`FrameExtractor`の内部`seekTo()`には一切頼らず、Phase 1で確立済みの「シーク点ごとに、その概算バイト位置(`TsSeekDataProvider.estimateByteOffset`)から開始する`MediaSource`を都度新規に構築する」方式(`TsReadexDataSource.startByteOffset`)をサムネイル生成にも流用する。
+
+- media3 1.10.0以降で`FrameExtractor.Builder.setMediaSourceFactory(MediaSource.Factory)`が追加された(1.9.xには無い)。これによりシーク点ごとに`TsReadexDataSource.Factory(dataSourceFactory).apply { startByteOffset = ...; nativeProcessingEnabled = false }`を包んだ`ProgressiveMediaSource.Factory`を注入できる。
+- 各シーク点で**新しい`MediaItem`(mediaIdを点ごとに変える)+新しい`FrameExtractor`インスタンス**を作る。これによりFrameExtractor内部の「同一MediaItemなら`seekTo()`で済ませる」再利用判定(`needsPrepare`)を確実に不成立にし、都度フルの再準備(prepare)をさせる。
+- `getFrame(ms)`ではなく`getThumbnail()`を使う。常に「そのオフセット済みストリームの先頭付近のいいフレーム」を返すヒューリスティックで、機能しない`seekTo()`経路を通らない(内部で一度`positionMs=0`相当のprepare結果を取得し、それがヒューリスティックの目標と一致すればそのまま返す。一致せず追加の`seekTo()`が発生しても、既に正しい位置から始まっているストリームなので、seekTo()がバグって現在位置を繰り返すだけの場合でも実害がない)。
+- `nativeProcessingEnabled = false`(tsreadexネイティブフィルタ不使用)。サムネイルにARIB字幕・音声処理は不要なため、オーバーヘッドを避ける。
+
+旧調査コード(`investigateTsreadexNormalizedThumbnail`等、MediaMetadataRetriever経由の検証一式)は削除済み。1周目のFrameExtractor実装(seekTo依存)も置き換え済み。
 
 ### 認証について
 
-このアプリの`buildOkHttpClient`はURLの`user:pass@host`を検出した場合のみBasic認証ヘッダーを付与するが、`FrameExtractor`はこのクライアントを経由できない。ユーザー確認により現状Basic認証は未使用のため、素のURLをそのまま`MediaItem.fromUri()`に渡す設計とした。将来Basic認証を使う場合は別途対応が必要(ローカル認証プロキシを立てる等)。
+このアプリの`buildOkHttpClient`はURLの`user:pass@host`を検出した場合のみBasic認証ヘッダーを付与する。`TsThumbnailGenerator`は自前で`OkHttpDataSource.Factory(httpClient)`を組み立てるため(`PlaybackVideoFragment`から渡された`httpClient`をそのまま使う)、1周目の設計(FrameExtractor標準パイプライン)と異なりこの認証機構の恩恵をそのまま受けられる。
 
 ## 実装済み
 
-- [x] `app/build.gradle`: `media3-inspector`依存追加
-- [x] `TsThumbnailGenerator.kt`(新規): FrameExtractorのライフサイクル管理、二分木BFS順での1-in-10点サムネイル事前生成、`Map<Int, Bitmap>`キャッシュ、`PlaybackSeekDataProvider.ResultCallback`への委譲
-- [x] `TsSeekDataProvider.kt`: `context`/`videoUrl`を受け取り`TsThumbnailGenerator`を保持。`getThumbnail()`/`reset()`をオーバーライドして委譲。`startThumbnailGeneration()`(メインスレッドから呼ぶ必要があるため`TsSeekDataProvider`構築とは分離)、`release()`を追加
-- [x] `PlaybackVideoFragment.kt`: `startTsProbing()`で`TsSeekDataProvider`にcontext/urlを渡すよう変更。`mainHandler.post`内(メインスレッド)で`startThumbnailGeneration()`を呼ぶ。`onDestroyView()`で`tsSeekDataProvider?.release()`を追加。旧調査コード一式を削除(未使用importの`MediaMetadataRetriever`/`okhttp3.Request`も削除)
-
-### スレッド安全性についての注記
-
-`FrameExtractor`は「単一スレッドからのみアクセスする」契約がある。`TsSeekDataProvider`自体はバックグラウンド(`tsProbeExecutor`)で構築されるが、`TsThumbnailGenerator.start()`（初回の`FrameExtractor`構築+`getFrame()`呼び出しを含む）は`PlaybackVideoFragment`側の`mainHandler.post`内で明示的に呼ぶことで、以降のコールバック(`ContextCompat.getMainExecutor`経由でメインスレッド固定)とスレッドを一貫させている。
+- [x] `app/build.gradle`: media3を1.10.1に、依存を`media3-inspector-frame`に変更
+- [x] `TsThumbnailGenerator.kt`: シーク点ごとに`TsReadexDataSource`(startByteOffset指定・ネイティブ処理オフ)を包む`MediaSource.Factory`を都度構築し、`FrameExtractor.setMediaSourceFactory()`で注入。`getThumbnail()`で取得。二分木BFS順で1-in-10点を背景生成、`Map<Int, Bitmap>`キャッシュ
+- [x] `TsSeekDataProvider.kt`: `httpClient`を追加受け取り、`estimateByteOffset`メソッド参照を`TsThumbnailGenerator`に渡す
+- [x] `PlaybackVideoFragment.kt`: `TsSeekDataProvider`構築時に`client`を渡すよう変更
 
 ## 残タスク
 
-- [ ] **ビルド・実機動作確認待ち**: サムネイルが実際に表示されるか、シーク中のパフォーマンスに問題がないか
-- [ ] UI側(シークバーのサムネイル表示)が期待通り動くかの確認 — Leanback側の表示自体はフレームワーク任せなので、`getThumbnail`が正しく呼ばれてBitmapが返っていれば自動的に表示されるはず
-- [ ] 動作確認が取れ次第、`feature/ts-seek-thumbnails`ブランチのコミットを整理(調査過程の`wip:`コミット群は残しても squash merge されるため問題ないが、必要なら整理を検討)し、PR作成
+- [ ] **ビルド・実機動作確認待ち**: 2周目の設計でサムネイルが実際に(異なる内容で)表示されるか確認
+- [ ] 動作確認が取れ次第、`feature/ts-seek-thumbnails`ブランチのコミットを整理し、PR作成
 
 ## 重要な決定事項
 
 - ビルドはAndroid Studioでユーザーが手動実行する(Claude Codeはgradleを叩かない)。
 - コルーチン未導入のプロジェクトのため、既存パターン(Handler + バックグラウンドThread、Guavaの`ListenableFuture`+`Futures.addCallback`)を踏襲する。
 - サムネイルは全シーク点ではなく1-in-10点のみ生成する。対象外の点は`getThumbnail`のコールバックを呼ばないことで「サムネイル無し」を表現する(Leanback側もコールバック未呼び出しを許容する設計、leanbackソースで契約確認済み)。
+- 実機での不具合調査はADB logcat経由で直接確認する(推測で進めない)。EPGStationサーバーへの直接curlでもContent-Length等のサーバー側挙動を確認できる。

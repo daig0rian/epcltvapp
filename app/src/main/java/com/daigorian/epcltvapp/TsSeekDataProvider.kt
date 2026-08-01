@@ -3,6 +3,7 @@ package com.daigorian.epcltvapp
 import android.content.Context
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import androidx.media3.common.util.UnstableApi
+import okhttp3.OkHttpClient
 
 private const val TS_PACKET_SIZE = 188
 
@@ -21,6 +22,7 @@ private const val TS_PACKET_SIZE = 188
 internal class TsSeekDataProvider(
     context: Context,
     videoUrl: String,
+    httpClient: OkHttpClient,
     val fileSize: Long,
     val pcrPid: Int,
     private val headPoint: TsProbe.TimePoint,
@@ -50,7 +52,9 @@ internal class TsSeekDataProvider(
     /** ログ表示等、副作用([getSeekPositions]参照)を発生させずに点数だけ知りたい場合用。 */
     val seekPositionCount: Int get() = positions.size
 
-    private val thumbnailGenerator = TsThumbnailGenerator(context, videoUrl, positions)
+    private val thumbnailGenerator = TsThumbnailGenerator(
+        context, videoUrl, httpClient, positions, ::estimateByteOffset
+    )
 
     /**
      * サムネイルの生成を開始する。FrameExtractorはアクセスするスレッドを1つに固定する

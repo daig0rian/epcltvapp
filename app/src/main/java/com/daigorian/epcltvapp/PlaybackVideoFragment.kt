@@ -399,7 +399,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             // 補正する(performTsSeek参照)。これにより起動時に必要なプロービングは
             // fetchFileSize+probeHead+probeTailの3リクエストのみで済む。
             val provider = TsSeekDataProvider(
-                appContext, url,
+                appContext, url, client,
                 fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
             ) {
                 // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。

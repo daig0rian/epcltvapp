@@ -7,9 +7,12 @@ import androidx.core.content.ContextCompat
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.inspector.FrameExtractor
+import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.inspector.frame.FrameExtractor
 import com.google.common.util.concurrent.FutureCallback
 import com.google.common.util.concurrent.Futures
+import okhttp3.OkHttpClient
 
 private const val TAG = "TsThumbnailGenerator"
 
@@ -17,16 +20,20 @@ private const val TAG = "TsThumbnailGenerator"
 private const val THUMBNAIL_DENSITY = 10
 
 /**
- * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.FrameExtractor]
+ * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]
  * (ExoPlayer自身のTsExtractorを使ってフレームをデコードするAPI)を使う。
  *
- * FrameExtractorはカスタムDataSourceを注入できず内部でMediaItemのURIを直接HTTPで開くため、
- * tsreadexは経由しない。ExoPlayer組み込みのTsExtractorはファイル先頭・末尾のPCRを
- * 軽量に読んで概算durationを求め、そこからPCRベースの二分探索でシークする機構
- * (TsDurationReader/TsBinarySearchSeeker)を元々持っており、TsReadexDataSourceが
- * 意図的に隠しているコンテンツ長がここでは素通しされるため、この機構がそのまま働く。
- * そのためTsSeekDataProviderが持つ相対時刻(ms)をそのまま渡せばよく、独自のバイト位置
- * 計算は不要。
+ * 実機検証により、FrameExtractorが内部で使うExoPlayerの`seekTo()`(既に開いたストリーム内での
+ * シーク)はこのアプリのARIB TSに対して機能しないことが判明した(要求位置に関わらず常に
+ * 準備直後の最初のフレームを返す——mediaのソースコード上のコメント
+ * 「If the seek resolves to the current position, ... No frames are rendered. Repeat the
+ * previously returned frame.」と一致する挙動)。
+ *
+ * そのため`seekTo()`には一切頼らず、Phase 1のシーク機構(TsSeekDataProvider.estimateByteOffset
+ * + TsReadexDataSource.startByteOffset)を流用する。シーク点ごとに、その概算バイト位置から
+ * 開始するMediaSourceを都度新規に構築し(FrameExtractor 1.10.0+のBuilder.setMediaSourceFactory
+ * で注入)、「そのストリームの先頭付近のフレーム」を取得する([FrameExtractor.getThumbnail]、
+ * 常にpositionMs=0相当を要求するため、機能しないseekTo()経路を通らない)。
  *
  * [PlaybackSeekDataProvider.getThumbnail]は生成が終わっていない点についてはコールバックを
  * 呼ばないことで「サムネイル無し」を表現する(全シーク点にサムネイルを敷き詰めるわけでは
@@ -36,12 +43,15 @@ private const val THUMBNAIL_DENSITY = 10
 internal class TsThumbnailGenerator(
     private val context: Context,
     private val videoUrl: String,
+    private val httpClient: OkHttpClient,
     private val positionsMs: LongArray,
+    private val estimateByteOffset: (relativeTimeMs: Long) -> Long,
 ) {
     private val mainExecutor = ContextCompat.getMainExecutor(context)
+    private val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
     private val cache = HashMap<Int, Bitmap>()
     private val pendingCallbacks = HashMap<Int, PlaybackSeekDataProvider.ResultCallback>()
-    private var frameExtractor: FrameExtractor? = null
+    private val openExtractors = ArrayList<FrameExtractor>()
     private var started = false
     private var released = false
 
@@ -51,34 +61,7 @@ internal class TsThumbnailGenerator(
         started = true
         val order = buildBfsOrder(positionsMs.size, THUMBNAIL_DENSITY)
         Log.d(TAG, "start: generating ${order.size}/${positionsMs.size} thumbnails")
-        logContentLengthDiagnostic()
         generateNext(order, 0)
-    }
-
-    /**
-     * [調査用一時コード] FrameExtractorが内部で使うのと同じ素のHttpURLConnection(OkHttp非経由)で
-     * videoUrlを開き、Content-Lengthが正しく取れるか確認する。全シーク点が同一フレーム(先頭付近)
-     * しか返さない不具合の原因調査用——TsExtractorは入力長が不明(C.LENGTH_UNSET)だとシーク不能な
-     * SeekMap.Unseekableにフォールバックするため、これが原因かどうかを切り分ける。
-     */
-    private fun logContentLengthDiagnostic() {
-        Thread {
-            try {
-                val connection = java.net.URL(videoUrl).openConnection() as java.net.HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connect()
-                Log.d(
-                    TAG,
-                    "[調査] plain GET responseCode=${connection.responseCode} " +
-                        "Content-Length=${connection.getHeaderField("Content-Length")} " +
-                        "Transfer-Encoding=${connection.getHeaderField("Transfer-Encoding")} " +
-                        "Accept-Ranges=${connection.getHeaderField("Accept-Ranges")}",
-                )
-                connection.disconnect()
-            } catch (e: Exception) {
-                Log.w(TAG, "[調査] plain GET診断で例外発生", e)
-            }
-        }.start()
     }
 
     /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。 */
@@ -99,17 +82,32 @@ internal class TsThumbnailGenerator(
     /** フラグメント破棄時に呼び、FrameExtractorのネイティブリソースを解放する。 */
     fun release() {
         released = true
-        frameExtractor?.close()
-        frameExtractor = null
+        openExtractors.forEach { it.close() }
+        openExtractors.clear()
     }
 
     private fun generateNext(order: List<Int>, cursor: Int) {
         if (released || cursor >= order.size) return
         val index = order[cursor]
-        val extractor = frameExtractor ?: FrameExtractor.Builder(context, MediaItem.fromUri(videoUrl))
+        val byteOffset = estimateByteOffset(positionsMs[index])
+
+        // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
+        // 単純なバイト位置オフセットの素通しだけを行う。
+        val tsFactory = TsReadexDataSource.Factory(dataSourceFactory).apply {
+            startByteOffset = byteOffset
+            nativeProcessingEnabled = false
+        }
+        val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
+        // mediaIdを点ごとに変えることで、FrameExtractor内部の「同一MediaItemなら再利用」
+        // 判定(needsPrepare)を確実に不成立にし、都度新しいMediaSource(=新しいバイト位置)で
+        // 再準備させる。
+        val mediaItem = MediaItem.Builder().setMediaId("thumb-$index").setUri(videoUrl).build()
+        val extractor = FrameExtractor.Builder(context, mediaItem)
+            .setMediaSourceFactory(mediaSourceFactory)
             .build()
-            .also { frameExtractor = it }
-        val future = extractor.getFrame(positionsMs[index])
+        openExtractors.add(extractor)
+
+        val future = extractor.getThumbnail()
         Futures.addCallback(
             future,
             object : FutureCallback<FrameExtractor.Frame> {
@@ -117,9 +115,8 @@ internal class TsThumbnailGenerator(
                     if (result != null) {
                         Log.d(
                             TAG,
-                            "[調査] index=$index requestedMs=${positionsMs[index]} " +
-                                "returnedPresentationTimeMs=${result.presentationTimeMs} " +
-                                "bitmapId=${System.identityHashCode(result.bitmap)} " +
+                            "[調査] index=$index requestedMs=${positionsMs[index]} byteOffset=$byteOffset " +
+                                "presentationTimeMs=${result.presentationTimeMs} " +
                                 "size=${result.bitmap.width}x${result.bitmap.height}",
                         )
                         cache[index] = result.bitmap
@@ -129,7 +126,7 @@ internal class TsThumbnailGenerator(
                 }
 
                 override fun onFailure(t: Throwable) {
-                    Log.w(TAG, "getFrame failed for index=$index positionMs=${positionsMs[index]}", t)
+                    Log.w(TAG, "getThumbnail failed for index=$index byteOffset=$byteOffset", t)
                     generateNext(order, cursor + 1)
                 }
             },
