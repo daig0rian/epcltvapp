@@ -16,9 +16,6 @@ import okhttp3.OkHttpClient
 
 private const val TAG = "TsThumbnailGenerator"
 
-/** シーク点10点に1点程度の割合でのみサムネイルを生成する(全点は生成コストに見合わないため)。 */
-private const val THUMBNAIL_DENSITY = 10
-
 /**
  * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]
  * (ExoPlayer自身のTsExtractorを使ってフレームをデコードするAPI)を使う。
@@ -35,9 +32,12 @@ private const val THUMBNAIL_DENSITY = 10
  * で注入)、「そのストリームの先頭付近のフレーム」を取得する([FrameExtractor.getThumbnail]、
  * 常にpositionMs=0相当を要求するため、機能しないseekTo()経路を通らない)。
  *
- * [PlaybackSeekDataProvider.getThumbnail]は生成が終わっていない点についてはコールバックを
- * 呼ばないことで「サムネイル無し」を表現する(全シーク点にサムネイルを敷き詰めるわけでは
- * ないため)。
+ * 生成は[getThumbnail]が実際に呼ばれた時点でのオンデマンドとする。Leanbackは表示中の
+ * シークステップ全部に対してgetThumbnail()を呼び、コールバックが来ていない間は直前に
+ * 届いたBitmapを表示し続ける(=間のステップは自動的に埋まる)ため、こちらで疎な
+ * 事前生成スケジュールを組む必要はない。[PlaybackSeekDataProvider.getThumbnail]は
+ * 「UIスレッドから呼ばれる」契約なので、FrameExtractorのスレッド固定要件もこれで自然に
+ * 満たされる(呼び出し元を別途mainスレッドに揃える必要がない)。
  */
 @UnstableApi
 internal class TsThumbnailGenerator(
@@ -51,20 +51,11 @@ internal class TsThumbnailGenerator(
     private val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
     private val cache = HashMap<Int, Bitmap>()
     private val pendingCallbacks = HashMap<Int, PlaybackSeekDataProvider.ResultCallback>()
+    private val inFlight = HashSet<Int>()
     private val openExtractors = ArrayList<FrameExtractor>()
-    private var started = false
     private var released = false
 
-    /** 二分木のBFS順(全体の中間点→前半/後半の中間点→…)で対象点を1回だけ順次生成する。 */
-    fun start() {
-        if (started || positionsMs.isEmpty()) return
-        started = true
-        val order = buildBfsOrder(positionsMs.size, THUMBNAIL_DENSITY)
-        Log.d(TAG, "start: generating ${order.size}/${positionsMs.size} thumbnails")
-        generateNext(order, 0)
-    }
-
-    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。 */
+    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。未生成ならその場で生成を開始する。 */
     fun getThumbnail(index: Int, callback: PlaybackSeekDataProvider.ResultCallback) {
         val cached = cache[index]
         if (cached != null) {
@@ -72,9 +63,12 @@ internal class TsThumbnailGenerator(
             return
         }
         pendingCallbacks[index] = callback
+        if (inFlight.add(index)) {
+            generate(index)
+        }
     }
 
-    /** [PlaybackSeekDataProvider.reset]からの委譲先。生成中のバックグラウンド処理自体は継続する。 */
+    /** [PlaybackSeekDataProvider.reset]からの委譲先。進行中の生成自体はキャッシュに残るため継続させる。 */
     fun reset() {
         pendingCallbacks.clear()
     }
@@ -86,9 +80,11 @@ internal class TsThumbnailGenerator(
         openExtractors.clear()
     }
 
-    private fun generateNext(order: List<Int>, cursor: Int) {
-        if (released || cursor >= order.size) return
-        val index = order[cursor]
+    private fun generate(index: Int) {
+        if (released || index !in positionsMs.indices) {
+            inFlight.remove(index)
+            return
+        }
         val byteOffset = estimateByteOffset(positionsMs[index])
 
         // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
@@ -112,41 +108,19 @@ internal class TsThumbnailGenerator(
             future,
             object : FutureCallback<FrameExtractor.Frame> {
                 override fun onSuccess(result: FrameExtractor.Frame?) {
+                    inFlight.remove(index)
                     if (result != null) {
-                        Log.d(
-                            TAG,
-                            "[調査] index=$index requestedMs=${positionsMs[index]} byteOffset=$byteOffset " +
-                                "presentationTimeMs=${result.presentationTimeMs} " +
-                                "size=${result.bitmap.width}x${result.bitmap.height}",
-                        )
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
                     }
-                    generateNext(order, cursor + 1)
                 }
 
                 override fun onFailure(t: Throwable) {
+                    inFlight.remove(index)
                     Log.w(TAG, "getThumbnail failed for index=$index byteOffset=$byteOffset", t)
-                    generateNext(order, cursor + 1)
                 }
             },
             mainExecutor,
         )
-    }
-
-    private fun buildBfsOrder(size: Int, density: Int): List<Int> {
-        val targetCount = (size / density).coerceAtLeast(1)
-        val result = ArrayList<Int>(targetCount)
-        val queue = ArrayDeque<IntRange>()
-        queue.addLast(0 until size)
-        while (result.size < targetCount && queue.isNotEmpty()) {
-            val range = queue.removeFirst()
-            if (range.isEmpty()) continue
-            val mid = (range.first + range.last) / 2
-            result.add(mid)
-            if (range.first <= mid - 1) queue.addLast(range.first until mid)
-            if (mid + 1 <= range.last) queue.addLast((mid + 1)..range.last)
-        }
-        return result
     }
 }

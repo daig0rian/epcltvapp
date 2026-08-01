@@ -56,17 +56,6 @@ internal class TsSeekDataProvider(
         context, videoUrl, httpClient, positions, ::estimateByteOffset
     )
 
-    /**
-     * サムネイルの生成を開始する。FrameExtractorはアクセスするスレッドを1つに固定する
-     * 必要があるため、必ずメインスレッドから呼ぶこと([TsThumbnailGenerator]のコールバックも
-     * メインスレッドで発火するため、初回呼び出しをメインスレッドに揃えて一貫させる)。
-     * このクラス自体の構築はバックグラウンドスレッド(tsProbeExecutor)で行われるため、
-     * コンストラクタでは呼ばず、呼び出し元(PlaybackVideoFragment)がmainHandler.post内で呼ぶ。
-     */
-    fun startThumbnailGeneration() {
-        thumbnailGenerator.start()
-    }
-
     override fun getThumbnail(index: Int, callback: ResultCallback) {
         thumbnailGenerator.getThumbnail(index, callback)
     }

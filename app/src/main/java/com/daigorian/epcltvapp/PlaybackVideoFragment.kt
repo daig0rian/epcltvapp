@@ -412,9 +412,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 tsSeekAdapter?.setKnownDuration(provider.durationMs)
                 mTransportControlGlue.setSeekProvider(provider)
                 mTransportControlGlue.isSeekEnabled = true
-                // FrameExtractorはアクセスするスレッドを1つに固定する必要があるため、
-                // メインスレッド(このHandlerのLooper)からのみ呼ぶ。
-                provider.startThumbnailGeneration()
                 Log.d(TAG, "startTsProbing: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
             }
         }
