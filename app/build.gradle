@@ -77,5 +77,9 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
     implementation "androidx.media3:media3-datasource-okhttp:$media3_version"
     implementation "androidx.media3:media3-ui-leanback:$media3_version"
+    //TSシーク点サムネイル生成用(androidx.media3.inspector.FrameExtractor)
+    //1.9.x系ではmedia3-inspectorモジュール単体に同梱。1.10.0でmedia3-inspector-frameへ
+    //分離されandroidx.media3.inspector.frame.FrameExtractorへパッケージが変わる破壊的変更あり。
+    implementation "androidx.media3:media3-inspector:$media3_version"
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }

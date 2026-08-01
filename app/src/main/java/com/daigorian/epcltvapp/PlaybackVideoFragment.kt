@@ -1,7 +1,6 @@
 package com.daigorian.epcltvapp
 
 import android.content.Context
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -49,7 +48,6 @@ import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Schedule
 import okhttp3.Credentials
 import okhttp3.OkHttpClient
-import okhttp3.Request
 import retrofit2.Call
 import retrofit2.Callback
 import retrofit2.Response
@@ -292,202 +290,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             tsSeekUrl = cleanUrl
             tsSeekHttpClient = okHttpClient
             startTsProbing(cleanUrl, okHttpClient)
-            investigateTsreadexNormalizedThumbnail(cleanUrl, okHttpClient)
         }
-    }
-
-    /**
-     * [Phase 2調査・一時コード] 生ARIB TSを直接MediaMetadataRetrieverに渡す案は、
-     * 実機検証(ATSParserが「スクランブルされたストリーム」と誤判定して解析を中断)により
-     * 不採用と判明済み。次の案として、tsreadexフィルタで正規化した後のバイト列を
-     * MediaDataSource(API23+)経由でMediaMetadataRetrieverに渡せるか検証する。
-     * ファイル先頭付近を数MB読み、tsreadexで正規化し、その結果をメモリ上のまま渡す。
-     * 検証結果が出たら本メソッドと呼び出しは削除するか、正式な実装に置き換える。
-     */
-    private fun investigateTsreadexNormalizedThumbnail(url: String, client: OkHttpClient) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            Log.w(TAG, "[Phase2調査] MediaDataSourceはAPI23未満で使えないため調査スキップ")
-            return
-        }
-        tsProbeExecutor.execute {
-            val rawBytes = try {
-                val request = Request.Builder().url(url)
-                    .header("Range", "bytes=0-${THUMBNAIL_PROBE_RAW_BYTES - 1}")
-                    .build()
-                client.newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) null else response.body?.bytes()
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "[Phase2調査] 生データ取得で例外発生", e)
-                null
-            }
-            if (rawBytes == null) {
-                Log.w(TAG, "[Phase2調査] 生データ取得失敗")
-                return@execute
-            }
-
-            val filterHandle = TsReadexFilter.create(
-                programNumberOrIndex = -1,
-                audio1Mode = 1 + 4 + 8,
-                audio2Mode = 1 + 4,
-                captionMode = 1,
-                superimposeMode = 1,
-            )
-            val normalized = try {
-                val output = java.io.ByteArrayOutputStream()
-                val usableBytes = (rawBytes.size / 188) * 188
-                var offset = 0
-                val batchSize = 188 * 64
-                while (offset < usableBytes) {
-                    val len = minOf(batchSize, usableBytes - offset)
-                    val alignedLen = (len / 188) * 188
-                    if (alignedLen <= 0) break
-                    val processed = TsReadexFilter.processPackets(filterHandle, rawBytes.copyOfRange(offset, offset + alignedLen), alignedLen)
-                    if (processed.isNotEmpty()) output.write(processed)
-                    offset += alignedLen
-                }
-                output.toByteArray()
-            } finally {
-                TsReadexFilter.destroy(filterHandle)
-            }
-            Log.i(TAG, "[Phase2調査] tsreadex正規化: raw=${rawBytes.size}bytes normalized=${normalized.size}bytes")
-            if (normalized.isEmpty()) {
-                Log.w(TAG, "[Phase2調査] 正規化後データが空のため中止")
-                return@execute
-            }
-
-            // [Phase2調査] 1回目の検証で判明: tsreadex正規化後もtransport_scrambling_control
-            // ビット(TSヘッダbyte3の上位2bit)が残っており、Android標準のATSParserが
-            // 「スクランブルされたストリーム」と誤判定して解析を中断していた……という仮説だったが、
-            // 2回目の検証でこのビットは既に0であることが判明(scrambledPacketCount=0)。
-            // それでも同じ誤判定が起きたため、ビットの問題ではないと分かった。
-            var scrambledPacketCount = 0
-            var i = 0
-            while (i + 188 <= normalized.size) {
-                if (normalized[i] == 0x47.toByte() && (normalized[i + 3].toInt() and 0xC0) != 0) {
-                    scrambledPacketCount++
-                    normalized[i + 3] = (normalized[i + 3].toInt() and 0x3F).toByte()
-                }
-                i += 188
-            }
-            Log.i(TAG, "[Phase2調査] transport_scrambling_controlをクリアしたパケット数=$scrambledPacketCount")
-
-            // [Phase2調査] 3回目の仮説: 個別ストリームではなく5ストリーム全部が一律で
-            // descrambling対象扱いされていたことから、CAT(PID=0x0001, tsreadexの-nフィルタは
-            // 0x0030未満のPIDをそのまま素通しするため残っている)がCA(限定受信)利用を宣言して
-            // おり、それをATSParserが見て番組全体をスクランブル扱いしている可能性を検証する。
-            val catOutput = java.io.ByteArrayOutputStream()
-            var catPacketCount = 0
-            var j = 0
-            while (j + 188 <= normalized.size) {
-                val isCat = normalized[j] == 0x47.toByte() &&
-                    (((normalized[j + 1].toInt() and 0x1F) shl 8) or (normalized[j + 2].toInt() and 0xFF)) == 0x0001
-                if (isCat) {
-                    catPacketCount++
-                } else {
-                    catOutput.write(normalized, j, 188)
-                }
-                j += 188
-            }
-            val catFiltered = catOutput.toByteArray()
-            Log.i(TAG, "[Phase2調査] CAT(PID=0x0001)パケットを${catPacketCount}個除去 filtered=${catFiltered.size}bytes")
-
-            // [Phase2調査] 2つの仮説が外れたため、推測ではなくPMTの生バイトを直接確認する。
-            // tsreadexの-nフィルタ通過後、PMTはPID=0x01f0に固定される(Readme.txt参照)。
-            dumpPmtHex(catFiltered, 0x01f0)
-
-            val retriever = MediaMetadataRetriever()
-            val startedAt = SystemClock.elapsedRealtime()
-            try {
-                retriever.setDataSource(ThumbnailInvestigationDataSource(catFiltered))
-                val frame = retriever.getFrameAtTime(1_000_000L, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-                if (frame != null) {
-                    Log.i(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: 成功 width=${frame.width} height=${frame.height} elapsedMs=$elapsedMs")
-                } else {
-                    Log.w(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: getFrameAtTimeがnullを返した elapsedMs=$elapsedMs")
-                }
-            } catch (e: Exception) {
-                val elapsedMs = SystemClock.elapsedRealtime() - startedAt
-                Log.w(TAG, "[Phase2調査] 正規化後MediaMetadataRetriever: 例外発生 elapsedMs=$elapsedMs", e)
-            } finally {
-                retriever.release()
-            }
-        }
-    }
-
-    /** [Phase2調査・一時コード] 指定PIDのPSIセクションを再構成してhexダンプする。 */
-    private fun dumpPmtHex(bytes: ByteArray, targetPid: Int) {
-        var pos = 0
-        var buf = ByteArray(0)
-        var expectedLen = -1
-        while (pos + 188 <= bytes.size) {
-            if (bytes[pos] != 0x47.toByte()) {
-                pos += 188
-                continue
-            }
-            val pid = ((bytes[pos + 1].toInt() and 0x1F) shl 8) or (bytes[pos + 2].toInt() and 0xFF)
-            if (pid != targetPid) {
-                pos += 188
-                continue
-            }
-            val pusi = (bytes[pos + 1].toInt() and 0x40) != 0
-            val afc = (bytes[pos + 3].toInt() shr 4) and 0x03
-            if ((afc and 0x01) == 0) {
-                pos += 188
-                continue
-            }
-            val afLen = if ((afc and 0x02) != 0) (bytes[pos + 4].toInt() and 0xFF) + 1 else 0
-            val payloadStart = pos + 4 + afLen
-            val payloadEnd = pos + 188
-            if (payloadStart >= payloadEnd) {
-                pos += 188
-                continue
-            }
-            if (pusi) {
-                var p = payloadStart
-                val pointerField = bytes[p].toInt() and 0xFF
-                p += 1 + pointerField
-                if (p >= payloadEnd) {
-                    pos += 188
-                    continue
-                }
-                buf = bytes.copyOfRange(p, payloadEnd)
-                if (buf.size < 3) {
-                    expectedLen = -1
-                    pos += 188
-                    continue
-                }
-                val sectionLength = ((buf[1].toInt() and 0x0F) shl 8) or (buf[2].toInt() and 0xFF)
-                expectedLen = 3 + sectionLength
-            } else {
-                if (expectedLen < 0) {
-                    pos += 188
-                    continue
-                }
-                buf += bytes.copyOfRange(payloadStart, payloadEnd)
-            }
-            if (expectedLen in 1..buf.size) {
-                val section = buf.copyOf(expectedLen)
-                Log.i(TAG, "[Phase2調査] PID=0x${targetPid.toString(16)} section(${section.size}bytes) hex=" +
-                    section.joinToString(" ") { "%02X".format(it.toInt() and 0xFF) })
-                return
-            }
-            pos += 188
-        }
-        Log.w(TAG, "[Phase2調査] PID=0x${targetPid.toString(16)}のセクションが見つからなかった")
-    }
-
-    @androidx.annotation.RequiresApi(Build.VERSION_CODES.M)
-    private class ThumbnailInvestigationDataSource(private val data: ByteArray) : android.media.MediaDataSource() {
-        override fun readAt(position: Long, buffer: ByteArray, offset: Int, size: Int): Int {
-            if (position >= data.size) return -1
-            val length = minOf(size, (data.size - position).toInt())
-            System.arraycopy(data, position.toInt(), buffer, offset, length)
-            return length
-        }
-        override fun getSize(): Long = data.size.toLong()
-        override fun close() {}
     }
 
     override fun onCreateView(
@@ -572,6 +375,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * ——録画がエラー等で途中終了し、メタデータと実データが乖離するケースがあるため。
      */
     private fun startTsProbing(url: String, client: OkHttpClient) {
+        // requireContext()はFragmentがアタッチされているスレッドから呼ぶ必要があるため、
+        // バックグラウンド実行(tsProbeExecutor)に入る前にメインスレッドで取得しておく。
+        val appContext = requireContext().applicationContext
         tsProbeExecutor.execute {
             val fileSize = TsProbe.fetchFileSize(url, client)
             val head = if (fileSize != null) TsProbe.probeHead(url, client) else null
@@ -593,6 +399,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             // 補正する(performTsSeek参照)。これにより起動時に必要なプロービングは
             // fetchFileSize+probeHead+probeTailの3リクエストのみで済む。
             val provider = TsSeekDataProvider(
+                appContext, url,
                 fileSize, head.pcrPid, head.firstPcr, tail, SEEK_POINT_INTERVAL_MS, SEEK_POINT_COUNT_MAX
             ) {
                 // Leanbackがシーク開始時に無条件でpause()する挙動を打ち消す(直前に再生中だった場合のみ再開)。
@@ -605,6 +412,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 tsSeekAdapter?.setKnownDuration(provider.durationMs)
                 mTransportControlGlue.setSeekProvider(provider)
                 mTransportControlGlue.isSeekEnabled = true
+                // FrameExtractorはアクセスするスレッドを1つに固定する必要があるため、
+                // メインスレッド(このHandlerのLooper)からのみ呼ぶ。
+                provider.startThumbnailGeneration()
                 Log.d(TAG, "startTsProbing: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
             }
         }
@@ -1026,6 +836,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
         destroyAribSessions()
+        tsSeekDataProvider?.release()
+        tsSeekDataProvider = null
         exoPlayer?.release()
         exoPlayer = null
         overlayView = null
@@ -1048,9 +860,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // コストを伴わないが、配列が際限なく肥大化しないための歯止め。
         // これを超える長さの録画は刻み間隔がSEEK_POINT_INTERVAL_MSより広がる。
         private const val SEEK_POINT_COUNT_MAX = 400
-        // [Phase2調査・一時定数] サムネイル向けtsreadex正規化テストで先頭から読む生バイト数。
-        // 高ビットレート録画でも数秒分(PAT/PMT複数回・キーフレーム含む)を確保できるよう余裕を持たせる。
-        private const val THUMBNAIL_PROBE_RAW_BYTES = 8L * 1024 * 1024
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L

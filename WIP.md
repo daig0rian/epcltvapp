@@ -2,55 +2,45 @@
 
 ## 目的
 
-Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済み）でTS再生のシーク機能を実装した。そのシーク点の一部にサムネイルを付与し、ユーザーがより意味のある位置へシークできるようにする。
+Phase 1（[#43](https://github.com/daig0rian/epcltvapp/pull/43)、マージ済み）でTS再生のシーク機能を実装した。そのシーク点の一部にサムネイルを付与する。
 
-## 前提となる決定事項（Phase 1完了時点の議論より）
+## 確定した設計
 
-- サムネイルは**シーク点全部ではなく10点に1点程度**（`target = max(1, positions.size / 10)`）
-- 選定順序は**二分木のBFS走査**（全体の中間点→前半/後半の中間点→…と疎から密に埋める）。中断されても常に「粗いが全体をカバーした状態」を保てる利点がある
-- **最大の不確定要素**: 生のARIB放送TSのバイト位置から実際に1枚のフレームをデコードする手段が未検証。候補は`MediaMetadataRetriever`（Android標準、実装は楽だが生ARIB TSを正しく扱えるか不明）。もし使えなければ`tsreadex`経由でMediaCodecを使う自前実装が必要になり、コストが大きく上がる
+media3を1.9.2にアップグレード済み([#44](https://github.com/daig0rian/epcltvapp/pull/44))なので、`androidx.media3.inspector.FrameExtractor`（ExoPlayer自身のTsExtractorでフレームをデコードするAPI）を使う。
 
-## Phase 1の設計変更を踏まえた再整理
+**重要な発見**: `FrameExtractor.Builder`はカスタム`DataSource.Factory`を注入できず(`Context`と`MediaItem`のみ)、内部で`DefaultMediaSourceFactory`+標準HTTPデータソースを直接使う。つまりtsreadexを一切経由しない。ExoPlayer組み込みの`TsExtractor`はファイル先頭・末尾のPCRを軽量に読んで概算durationを求める`TsDurationReader`と、そこからPCRベースの二分探索でシークする`TsBinarySearchSeeker`を元々持っている（media3 1.3.1時点から存在、ソース確認済み・今回のアップグレードで新規に得た能力ではない）。`TsReadexDataSource`が`C.LENGTH_UNSET`を返して意図的にこれを無効化しているのは、tsreadexがステートフルなフィルタでランダムシークに耐えられないため。`FrameExtractor`はtsreadexを経由しないのでこの制約自体が関係なく、組み込みの効率的なシーク機構がそのまま使える。
 
-Phase 1は当初「N点を事前プローブしたテーブル」方式(v2)だったが、起動待ち時間の問題で「head/tailの2点のみ保持し、シーク位置は線形補間で概算、確定時に1回だけ補正プローブ」方式(v3)に変更された（[TsSeekDataProvider.kt](app/src/main/java/com/daigorian/epcltvapp/TsSeekDataProvider.kt)）。サムネイル選定順序(BFS)の設計はv2時代の「事前プローブ済みテーブル」を前提にしていたため、以下の点をv3に合わせて再整理する必要がある:
+**→ 独自のバイト位置計算は不要。`TsSeekDataProvider`が既に持つ相対時刻(ms)をそのまま`FrameExtractor.getFrame(ms)`に渡すだけでよい。**
 
-- `getSeekPositions()`の各点は**時刻のみ**で、バイト位置は`estimateByteOffset()`による概算のみ（未検証）。サムネイル生成には実際のバイト位置が必要なため、選定された点ごとに`TsProbe.refineSeekPoint()`相当の軽量プローブで補正するか、概算のまま使うかは要検討
-  - サムネイルは元々「参考程度の見た目」なので概算のままでも実用上問題ない可能性がある。まず`MediaMetadataRetriever`自体が動くかどうかの検証を優先し、精度の話は後回しにする
+旧調査コード(`investigateTsreadexNormalizedThumbnail`, `dumpPmtHex`, `ThumbnailInvestigationDataSource`, `THUMBNAIL_PROBE_RAW_BYTES`)は削除済み。MediaMetadataRetrieverが生ARIB TSを扱えない件の調査結果(CA_descriptor起因、詳細は削除済み旧WIPおよびgit historyのdocsコミット参照)は、FrameExtractor採用によりそもそも無関係になった。
 
-## 検証結果: MediaMetadataRetrieverは生ARIB TSに使えない（確認済み）
+### API上の注意(1.9.2時点)
 
-Google TV Streamer実機(`adb logcat`で直接確認)で`investigateMediaMetadataRetriever()`(調査用一時コード)を実行した結果:
+`androidx.media3:media3-inspector:1.9.2`で`androidx.media3.inspector.FrameExtractor`。**1.10.0で`media3-inspector-frame`モジュールに分離され`androidx.media3.inspector.frame.FrameExtractor`にパッケージが変わる破壊的変更がある**(Web上の最新ドキュメントは1.10系向けなので鵜呑みにしないこと)。将来1.10以降へ上げる際はこの移行が必要。
 
-```
-ATSParser: stream PID 0x140 has invalid stream type 0x0d
-ATSParser: stream PID 0x160/0x161/0x162/0x170/0x171/0x172 has invalid stream type 0x0d
-ATSParser: Receiving scrambled streams without descrambler!
-MPEG2TSExtractor: stopped parsing scrambled content, haveAudio=1, haveVideo=1, elaspedTime=15858
-StagefrightMetadataRetriever: all codecs failed to extract frame.
-MetadataRetrieverClient: failed to capture a video frame
-MediaMetadataRetrieverJNI: getFrameAtTime: videoFrame is a NULL pointer
-```
+### 認証について
 
-**原因**: Android標準の`MPEG2TSExtractor`/`ATSParser`は、生ARIB TS中のstream_type=0x0d(DSM-CC、ARIBのデータ放送/字幕系PID)のPIDを認識できず、「スクランブルされたストリームだがデスクランブラが無い」と誤判定して解析を中断する。音声・映像自体は検出できている(`haveAudio=1, haveVideo=1`)が、この誤判定によりコーデックにデータが渡らずフレーム取得が失敗する。
+このアプリの`buildOkHttpClient`はURLの`user:pass@host`を検出した場合のみBasic認証ヘッダーを付与するが、`FrameExtractor`はこのクライアントを経由できない。ユーザー確認により現状Basic認証は未使用のため、素のURLをそのまま`MediaItem.fromUri()`に渡す設計とした。将来Basic認証を使う場合は別途対応が必要(ローカル認証プロキシを立てる等)。
 
-これはタイミングや取得位置に依存する問題ではなく、生ARIB TSの構造自体をAndroid標準パーサーが扱えないという構造的な問題。PAT/PMTでこれらのPIDは録画全体に存在するため、どの時刻を狙っても同じ結果になると考えられる（tsreadexが元々この種の非標準ARIB構造を標準デコーダ/プレーヤー向けに正規化するために存在することを踏まえると、想定内の結果）。
+## 実装済み
 
-**→ MediaMetadataRetrieverをそのまま使う案は不採用。**
+- [x] `app/build.gradle`: `media3-inspector`依存追加
+- [x] `TsThumbnailGenerator.kt`(新規): FrameExtractorのライフサイクル管理、二分木BFS順での1-in-10点サムネイル事前生成、`Map<Int, Bitmap>`キャッシュ、`PlaybackSeekDataProvider.ResultCallback`への委譲
+- [x] `TsSeekDataProvider.kt`: `context`/`videoUrl`を受け取り`TsThumbnailGenerator`を保持。`getThumbnail()`/`reset()`をオーバーライドして委譲。`startThumbnailGeneration()`(メインスレッドから呼ぶ必要があるため`TsSeekDataProvider`構築とは分離)、`release()`を追加
+- [x] `PlaybackVideoFragment.kt`: `startTsProbing()`で`TsSeekDataProvider`にcontext/urlを渡すよう変更。`mainHandler.post`内(メインスレッド)で`startThumbnailGeneration()`を呼ぶ。`onDestroyView()`で`tsSeekDataProvider?.release()`を追加。旧調査コード一式を削除(未使用importの`MediaMetadataRetriever`/`okhttp3.Request`も削除)
 
-## 検証中: (a) tsreadex正規化後のバイト列をMediaDataSource経由で渡す案
+### スレッド安全性についての注記
 
-`investigateTsreadexNormalizedThumbnail()`（[PlaybackVideoFragment.kt](app/src/main/java/com/daigorian/epcltvapp/PlaybackVideoFragment.kt)、調査用一時コード）を実装済み。ファイル先頭から`THUMBNAIL_PROBE_RAW_BYTES`(8MB)を読み、`TsReadexFilter`(tsreadexネイティブ、実再生と同じもの)で正規化した後、`ThumbnailInvestigationDataSource`(`android.media.MediaDataSource`実装、API23+)経由でメモリ上のまま`MediaMetadataRetriever`に渡す。ログタグは同じく`[Phase2調査]`。実機での結果待ち。
+`FrameExtractor`は「単一スレッドからのみアクセスする」契約がある。`TsSeekDataProvider`自体はバックグラウンド(`tsProbeExecutor`)で構築されるが、`TsThumbnailGenerator.start()`（初回の`FrameExtractor`構築+`getFrame()`呼び出しを含む）は`PlaybackVideoFragment`側の`mainHandler.post`内で明示的に呼ぶことで、以降のコールバック(`ContextCompat.getMainExecutor`経由でメインスレッド固定)とスレッドを一貫させている。
 
 ## 残タスク
 
-- [ ] **実機検証待ち**: (a)案(tsreadex正規化+MediaDataSource)でフレーム取得が成功するか確認
-- [ ] （検証がOKなら）サムネイル生成のタイミング・キャッシュ方針の設計。NGなら(b)自前MediaCodec実装を検討
-- [ ] BFS選定順序の実装（v3のgetSeekPositions()配列に対して）
-- [ ] `TsSeekDataProvider.getThumbnail(index, callback)`の実装（現在は基底クラスのデフォルト実装＝何もしない）
-- [ ] UI側の表示確認
-- [ ] 調査用一時コード(`investigateTsreadexNormalizedThumbnail`等)を削除するか、正式な検証コードに置き換える
+- [ ] **ビルド・実機動作確認待ち**: サムネイルが実際に表示されるか、シーク中のパフォーマンスに問題がないか
+- [ ] UI側(シークバーのサムネイル表示)が期待通り動くかの確認 — Leanback側の表示自体はフレームワーク任せなので、`getThumbnail`が正しく呼ばれてBitmapが返っていれば自動的に表示されるはず
+- [ ] 動作確認が取れ次第、`feature/ts-seek-thumbnails`ブランチのコミットを整理(調査過程の`wip:`コミット群は残しても squash merge されるため問題ないが、必要なら整理を検討)し、PR作成
 
 ## 重要な決定事項
 
-- ビルドはAndroid Studioでユーザーが手動実行する（Claude Codeはgradleを叩かない）。`MediaMetadataRetriever`はAndroid実機/エミュレータでしか検証できないため、実機動作確認が必須。
-- コルーチン未導入のプロジェクトのため、既存パターン（Handler + バックグラウンドThread）を踏襲する。
+- ビルドはAndroid Studioでユーザーが手動実行する(Claude Codeはgradleを叩かない)。
+- コルーチン未導入のプロジェクトのため、既存パターン(Handler + バックグラウンドThread、Guavaの`ListenableFuture`+`Futures.addCallback`)を踏襲する。
+- サムネイルは全シーク点ではなく1-in-10点のみ生成する。対象外の点は`getThumbnail`のコールバックを呼ばないことで「サムネイル無し」を表現する(Leanback側もコールバック未呼び出しを許容する設計、leanbackソースで契約確認済み)。

@@ -1,6 +1,8 @@
 package com.daigorian.epcltvapp
 
+import android.content.Context
 import androidx.leanback.widget.PlaybackSeekDataProvider
+import androidx.media3.common.util.UnstableApi
 
 private const val TS_PACKET_SIZE = 188
 
@@ -12,8 +14,13 @@ private const val TS_PACKET_SIZE = 188
  * head/tailの線形補間による概算([estimateByteOffset])のみで、実際の値は
  * シーク確定時に [TsProbe.refineSeekPoint] で1回だけ軽量プローブして補正する
  * (PlaybackVideoFragment.performTsSeek参照)。
+ *
+ * サムネイル([getThumbnail])は[TsThumbnailGenerator]に委譲する。
  */
+@UnstableApi
 internal class TsSeekDataProvider(
+    context: Context,
+    videoUrl: String,
     val fileSize: Long,
     val pcrPid: Int,
     private val headPoint: TsProbe.TimePoint,
@@ -42,6 +49,32 @@ internal class TsSeekDataProvider(
 
     /** ログ表示等、副作用([getSeekPositions]参照)を発生させずに点数だけ知りたい場合用。 */
     val seekPositionCount: Int get() = positions.size
+
+    private val thumbnailGenerator = TsThumbnailGenerator(context, videoUrl, positions)
+
+    /**
+     * サムネイルの生成を開始する。FrameExtractorはアクセスするスレッドを1つに固定する
+     * 必要があるため、必ずメインスレッドから呼ぶこと([TsThumbnailGenerator]のコールバックも
+     * メインスレッドで発火するため、初回呼び出しをメインスレッドに揃えて一貫させる)。
+     * このクラス自体の構築はバックグラウンドスレッド(tsProbeExecutor)で行われるため、
+     * コンストラクタでは呼ばず、呼び出し元(PlaybackVideoFragment)がmainHandler.post内で呼ぶ。
+     */
+    fun startThumbnailGeneration() {
+        thumbnailGenerator.start()
+    }
+
+    override fun getThumbnail(index: Int, callback: ResultCallback) {
+        thumbnailGenerator.getThumbnail(index, callback)
+    }
+
+    override fun reset() {
+        thumbnailGenerator.reset()
+    }
+
+    /** フラグメント破棄時に呼び、FrameExtractorのネイティブリソースを解放する。 */
+    fun release() {
+        thumbnailGenerator.release()
+    }
 
     /**
      * Leanback(PlaybackTransportRowPresenter.startSeek())は、この呼び出し1つ手前で
