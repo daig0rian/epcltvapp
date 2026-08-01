@@ -196,7 +196,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
             }
             override fun onPlayerError(error: PlaybackException) {
-                Log.e(TAG, "onPlayerError: $error")
+                Log.e(TAG, "onPlayerError", error)
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
