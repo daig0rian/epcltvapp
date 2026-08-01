@@ -28,10 +28,11 @@ private const val TAG = "TsThumbnailGenerator"
  */
 private const val REAL_THUMBNAIL_STRIDE = 2
 
-/** プレースホルダーの表示サイズ。正方形だと実サムネイルの列の中で浮いて見えるため、
- *  Leanbackのシークバー上での見た目を確認した上で2:1に調整した。 */
+/** プレースホルダーのBitmap自体のサイズ。実サムネイルと同じ16:9にしておく
+ *  (表示上の枠はThumbsBarのdimenリソース側で決まるため実際は透過で見えないが、
+ *  fitCenterで収める際の余白の出方を実サムネイルと揃えるため)。 */
 private const val PLACEHOLDER_WIDTH = 320
-private const val PLACEHOLDER_HEIGHT = 160
+private const val PLACEHOLDER_HEIGHT = 180
 
 /**
  * TSシーク点の一部にサムネイルを付与する。[androidx.media3.inspector.frame.FrameExtractor]
