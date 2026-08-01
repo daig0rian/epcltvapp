@@ -205,12 +205,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
                 if (playbackState == Player.STATE_ENDED && tsCatchUpActive) {
-                    // 通常のシーク(performTsSeek)と全く同じ経路を使い、EOF手前の安全マージン分だけ
-                    // 戻した位置へ「今と同時刻へのシーク」を行う。これがrestartTsPlaybackAt()を
-                    // 経由して開き直しになり、その末尾で収録状況の再確認とシークバー更新が再度走る。
-                    tsSeekDataProvider?.let { provider ->
-                        performTsSeek((provider.durationMs - TS_CATCHUP_SAFETY_MARGIN_MS).coerceAtLeast(0))
-                    }
+                    // EOF手前の安全マージン分だけ戻した位置へ「今と同時刻へのシーク」を行う。
+                    // これがrestartTsPlaybackAt()を経由して開き直しになり、その末尾で
+                    // 収録状況の再確認とシークバー更新が再度走る。
+                    performTsCatchUpSeek()
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -492,11 +490,34 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      */
     private fun performTsSeek(targetPositionMs: Long) {
         val provider = tsSeekDataProvider ?: return
-        val url = tsSeekUrl ?: return
-        val client = tsSeekHttpClient ?: return
         val clampedTarget = targetPositionMs.coerceIn(0, provider.durationMs)
         val guessByteOffset = provider.estimateByteOffset(clampedTarget)
-        tsSeekAdapter?.notifySeekPending(clampedTarget)
+        seekToByteOffsetGuess(guessByteOffset, clampedTarget)
+    }
+
+    /**
+     * 収録中TS追いかけ再生（Issue #42）: STATE_ENDED検知時に「今の終端」へ疑似シークする。
+     * [performTsSeek]とは異なり、シークバー用の安全マージン(maxSeekableMs、15秒)ではなく
+     * [TS_CATCHUP_SAFETY_MARGIN_MS](2秒、日本の放送のキーフレーム間隔目安)だけ手前を狙う
+     * ([TsSeekDataProvider.estimateByteOffsetNearTail]参照)。
+     */
+    private fun performTsCatchUpSeek() {
+        val provider = tsSeekDataProvider ?: return
+        val targetPositionMs = (provider.durationMs - TS_CATCHUP_SAFETY_MARGIN_MS).coerceAtLeast(0)
+        val guessByteOffset = provider.estimateByteOffsetNearTail(TS_CATCHUP_SAFETY_MARGIN_MS)
+        seekToByteOffsetGuess(guessByteOffset, targetPositionMs)
+    }
+
+    /**
+     * 概算バイト位置を1回だけ軽量プローブして実際の位置に補正し、MediaSourceを開き直す。
+     * [performTsSeek]（通常のシーク確定）・[performTsCatchUpSeek]（追いかけ再生の再オープン）の
+     * 共通の後段処理。
+     */
+    private fun seekToByteOffsetGuess(guessByteOffset: Long, targetPositionMs: Long) {
+        val provider = tsSeekDataProvider ?: return
+        val url = tsSeekUrl ?: return
+        val client = tsSeekHttpClient ?: return
+        tsSeekAdapter?.notifySeekPending(targetPositionMs)
         tsProbeExecutor.execute {
             val refined = TsProbe.refineSeekPoint(url, client, provider.fileSize, provider.pcrPid, guessByteOffset)
             mainHandler.post {
@@ -505,8 +526,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     restartTsPlaybackAt(refined.byteOffset, provider.toRelativeMs(refined.timeMs))
                 } else {
                     // 補正プローブに失敗した場合は概算値のまま着地する(何もしないよりまし)
-                    Log.w(TAG, "performTsSeek: refine probe failed, falling back to estimate")
-                    restartTsPlaybackAt(guessByteOffset, clampedTarget)
+                    Log.w(TAG, "seekToByteOffsetGuess: refine probe failed, falling back to estimate")
+                    restartTsPlaybackAt(guessByteOffset, targetPositionMs)
                 }
             }
         }
