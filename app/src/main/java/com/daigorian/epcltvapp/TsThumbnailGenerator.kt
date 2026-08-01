@@ -2,12 +2,14 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import androidx.media3.common.MediaItem
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
+import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.inspector.frame.FrameExtractor
 import com.google.common.util.concurrent.FutureCallback
@@ -98,17 +100,23 @@ internal class TsThumbnailGenerator(
         // 判定(needsPrepare)を確実に不成立にし、都度新しいMediaSource(=新しいバイト位置)で
         // 再準備させる。
         val mediaItem = MediaItem.Builder().setMediaId("thumb-$index").setUri(videoUrl).build()
+        // [調査] デフォルトはPREFER_SOFTWARE(ソフトウェアデコード優先)。1080i/1080pの
+        // ソフトウェアデコードが遅さの主因という仮説を検証するため、ハードウェアデコード優先を試す。
         val extractor = FrameExtractor.Builder(context, mediaItem)
             .setMediaSourceFactory(mediaSourceFactory)
+            .setMediaCodecSelector(MediaCodecSelector.DEFAULT)
             .build()
         openExtractors.add(extractor)
 
+        val startedAtMs = SystemClock.elapsedRealtime()
         val future = extractor.getThumbnail()
         Futures.addCallback(
             future,
             object : FutureCallback<FrameExtractor.Frame> {
                 override fun onSuccess(result: FrameExtractor.Frame?) {
                     inFlight.remove(index)
+                    val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                    Log.d(TAG, "[調査] index=$index byteOffset=$byteOffset elapsedMs=$elapsedMs 成功")
                     if (result != null) {
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
@@ -117,7 +125,8 @@ internal class TsThumbnailGenerator(
 
                 override fun onFailure(t: Throwable) {
                     inFlight.remove(index)
-                    Log.w(TAG, "getThumbnail failed for index=$index byteOffset=$byteOffset", t)
+                    val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
+                    Log.w(TAG, "[調査] index=$index byteOffset=$byteOffset elapsedMs=$elapsedMs 失敗", t)
                 }
             },
             mainExecutor,
