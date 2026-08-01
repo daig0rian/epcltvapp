@@ -42,25 +42,43 @@ private const val TAG = "TsThumbnailGenerator"
  *
  * 生成は要求された生インデックスごとに行う(隣接点をバケットにまとめて使い回す案は、
  * 「未取得なのか同じ絵柄なのか区別がつかずグリッチに見える」というUXフィードバックにより
- * 不採用)。1回あたり約1.3秒かかる生成コスト自体を下げる方向で改善を続けている。
+ * 不採用)。
+ *
+ * 【重要】media3 1.10.1のFrameExtractorInternalソース確認により判明: `needsNewPlayer`判定に
+ * `request.mediaSourceFactory != currentMediaSourceFactory`という「参照の比較」が含まれる。
+ * リクエストのたびに新しい[MediaSource.Factory]インスタンスを作ると、その都度ExoPlayer
+ * インスタンス自体が一から作り直される(MediaSourceの再準備どころではない重いコスト)。
+ * そのため[tsFactory]/[mediaSourceFactory]は使い回し、`startByteOffset`はその可変プロパティを
+ * 書き換えることでシーク点ごとの違いを表現する。書き換えと実際の`open()`呼び出しの間で
+ * 競合しないよう、生成リクエストは[queue]で1件ずつ順番に処理する。
  */
 @UnstableApi
 internal class TsThumbnailGenerator(
     private val context: Context,
     private val videoUrl: String,
-    private val httpClient: OkHttpClient,
+    httpClient: OkHttpClient,
     private val positionsMs: LongArray,
     private val estimateByteOffset: (relativeTimeMs: Long) -> Long,
 ) {
     private val mainExecutor = ContextCompat.getMainExecutor(context)
-    private val dataSourceFactory = OkHttpDataSource.Factory(httpClient)
+
+    // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
+    // 単純なバイト位置オフセットの素通しだけを行う。ExoPlayer自体の使い回しのため
+    // インスタンスは1つだけ保持し、startByteOffsetをリクエストごとに書き換える。
+    private val tsFactory = TsReadexDataSource.Factory(OkHttpDataSource.Factory(httpClient)).apply {
+        nativeProcessingEnabled = false
+    }
+    private val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
+
     private val cache = HashMap<Int, Bitmap>()
     private val pendingCallbacks = HashMap<Int, PlaybackSeekDataProvider.ResultCallback>()
-    private val inFlight = HashSet<Int>()
+    private val queue = ArrayDeque<Int>()
+    private val queued = HashSet<Int>()
+    private var generating = false
     private val openExtractors = ArrayList<FrameExtractor>()
     private var released = false
 
-    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。未生成ならその場で生成を開始する。 */
+    /** [PlaybackSeekDataProvider.getThumbnail]からの委譲先。未生成ならキューに積む。 */
     fun getThumbnail(index: Int, callback: PlaybackSeekDataProvider.ResultCallback) {
         val cached = cache[index]
         if (cached != null) {
@@ -68,8 +86,9 @@ internal class TsThumbnailGenerator(
             return
         }
         pendingCallbacks[index] = callback
-        if (inFlight.add(index)) {
-            generate(index)
+        if (queued.add(index)) {
+            queue.addLast(index)
+            processQueueIfIdle()
         }
     }
 
@@ -81,27 +100,33 @@ internal class TsThumbnailGenerator(
     /** フラグメント破棄時に呼び、FrameExtractorのネイティブリソースを解放する。 */
     fun release() {
         released = true
+        queue.clear()
+        queued.clear()
         openExtractors.forEach { it.close() }
         openExtractors.clear()
     }
 
+    private fun processQueueIfIdle() {
+        if (generating || released) return
+        val index = queue.removeFirstOrNull() ?: return
+        queued.remove(index)
+        generating = true
+        generate(index)
+    }
+
     private fun generate(index: Int) {
         if (released || index !in positionsMs.indices) {
-            inFlight.remove(index)
+            generating = false
+            processQueueIfIdle()
             return
         }
-        val byteOffset = estimateByteOffset(positionsMs[index])
-
-        // ネイティブtsreadex処理(ARIB字幕等)はサムネイル用途では不要なため無効化し、
-        // 単純なバイト位置オフセットの素通しだけを行う。
-        val tsFactory = TsReadexDataSource.Factory(dataSourceFactory).apply {
-            startByteOffset = byteOffset
-            nativeProcessingEnabled = false
-        }
-        val mediaSourceFactory = ProgressiveMediaSource.Factory(tsFactory)
+        // 使い回すmediaSourceFactoryに次の位置をセットしてから、直後にgetThumbnail()するまでの
+        // 間に別のリクエストが割り込まないよう、キューによる直列化で保証している。
+        tsFactory.startByteOffset = estimateByteOffset(positionsMs[index])
         // mediaIdを点ごとに変えることで、FrameExtractor内部の「同一MediaItemなら再利用」
         // 判定(needsPrepare)を確実に不成立にし、都度新しいMediaSource(=新しいバイト位置)で
-        // 再準備させる。
+        // 再準備させる。mediaSourceFactory自体は使い回すため、ExoPlayerインスタンスは
+        // 再生成されない。
         val mediaItem = MediaItem.Builder().setMediaId("thumb-$index").setUri(videoUrl).build()
         val extractor = FrameExtractor.Builder(context, mediaItem)
             .setMediaSourceFactory(mediaSourceFactory)
@@ -114,19 +139,21 @@ internal class TsThumbnailGenerator(
             future,
             object : FutureCallback<FrameExtractor.Frame> {
                 override fun onSuccess(result: FrameExtractor.Frame?) {
-                    inFlight.remove(index)
                     val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                    Log.d(TAG, "[調査] index=$index byteOffset=$byteOffset elapsedMs=$elapsedMs 成功")
+                    Log.d(TAG, "[調査] index=$index elapsedMs=$elapsedMs 成功")
                     if (result != null) {
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
                     }
+                    generating = false
+                    processQueueIfIdle()
                 }
 
                 override fun onFailure(t: Throwable) {
-                    inFlight.remove(index)
                     val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
-                    Log.w(TAG, "[調査] index=$index byteOffset=$byteOffset elapsedMs=$elapsedMs 失敗", t)
+                    Log.w(TAG, "[調査] index=$index elapsedMs=$elapsedMs 失敗", t)
+                    generating = false
+                    processQueueIfIdle()
                 }
             },
             mainExecutor,
