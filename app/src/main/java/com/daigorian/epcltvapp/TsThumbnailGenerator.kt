@@ -88,6 +88,13 @@ internal class TsThumbnailGenerator(
             object : FutureCallback<FrameExtractor.Frame> {
                 override fun onSuccess(result: FrameExtractor.Frame?) {
                     if (result != null) {
+                        Log.d(
+                            TAG,
+                            "[調査] index=$index requestedMs=${positionsMs[index]} " +
+                                "returnedPresentationTimeMs=${result.presentationTimeMs} " +
+                                "bitmapId=${System.identityHashCode(result.bitmap)} " +
+                                "size=${result.bitmap.width}x${result.bitmap.height}",
+                        )
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
                     }
