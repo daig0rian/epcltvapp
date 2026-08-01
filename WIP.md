@@ -39,10 +39,22 @@ SDK にも 3.22.1 しか入っていないため)。
 
 対応として以下を実施:
 - `app/build.gradle` の `externalNativeBuild.cmake.version` を
-  `3.22.1` → `3.28.1` に変更(Google の SDK cmake パッケージに
-  `cmake;3.28.1` が存在することを確認済み)。
+  `3.22.1` → `3.30.5` に変更。
+  - 当初 `3.28.1` を指定したが、Android Studio の SDK Manager (SDK Tools タブ)
+    に表示される実際のパッケージ一覧には `3.28.1`/`3.27.x` が存在せず、
+    ビルド時に `CXX1300`/`CXX1301` (CMake 3.28.1 が見つからない) で失敗した。
+    一覧に存在するバージョンの中から要件 (3.28 以上) を満たす `3.30.5` を
+    採用。
 - `app/src/main/cpp/CMakeLists.txt` の `cmake_minimum_required` も
-  `3.22` → `3.28` に変更(実態に合わせる)。
+  `3.22` → `3.28` に変更(実態に合わせる。3.30.5 が要求する最低要件ではなく
+  libaribcaption 側の要件に合わせて 3.28 のままでよい)。
+
+**注意:** SDK Manager で表示可能な CMake バージョンは Google 側の配布状況で
+変動する。事前に `dl.google.com/android/repository/repository2-3.xml` を
+WebFetch で確認したが、そのレスポンスは実際に配布されている最新バージョン群
+(3.30.x, 3.31.x, 4.0.x, 4.1.0 など)を反映しておらず古い/不完全な情報だった。
+以後この手のバージョン確認は SDK Manager の実際の一覧(スクリーンショット等)
+で行うほうが確実。
 
 ## 完了済み
 
