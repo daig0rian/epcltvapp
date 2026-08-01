@@ -108,14 +108,16 @@ internal class TsThumbnailGenerator(
 
     private fun processQueueIfIdle() {
         if (generating || released) return
+        // queuedからはgenerate()の完了時に取り除く(ここで取り除くと、生成中に同じindexへの
+        // getThumbnail()が来た際に「未キュー」と誤判定し重複生成してしまうため)。
         val index = queue.removeFirstOrNull() ?: return
-        queued.remove(index)
         generating = true
         generate(index)
     }
 
     private fun generate(index: Int) {
         if (released || index !in positionsMs.indices) {
+            queued.remove(index)
             generating = false
             processQueueIfIdle()
             return
@@ -145,6 +147,7 @@ internal class TsThumbnailGenerator(
                         cache[index] = result.bitmap
                         pendingCallbacks.remove(index)?.onThumbnailLoaded(result.bitmap, index)
                     }
+                    queued.remove(index)
                     generating = false
                     processQueueIfIdle()
                 }
@@ -152,6 +155,7 @@ internal class TsThumbnailGenerator(
                 override fun onFailure(t: Throwable) {
                     val elapsedMs = SystemClock.elapsedRealtime() - startedAtMs
                     Log.w(TAG, "[調査] index=$index elapsedMs=$elapsedMs 失敗", t)
+                    queued.remove(index)
                     generating = false
                     processQueueIfIdle()
                 }
