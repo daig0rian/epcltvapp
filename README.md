@@ -10,12 +10,17 @@
 - MX Player や VLC といった外部動画プレーヤーに対応
 - 内蔵プレーヤーで ARIB STD-B24 字幕に対応（v1.28〜）
 
+## 使い方
+画面ごとの操作方法は **[操作マニュアル](MANUAL.md)** を参照してください。
+
 ## 必要な環境
 - EPGStation Version 1.x.x または 2.x.x（Version 1.x.x については動作確認が限定的です）
 - Android 5.1 以上の Android TV / Fire TV
 
 ## テスト環境
 - SONY ブラビア KJ-43X8000H（ Android TV / Android 10 / 4K )
+- Google TV Streamer (4K)
+- Fire TV Stick 第3世代
 - EPGStation Version 2.10.0
 
 ## インストール方法

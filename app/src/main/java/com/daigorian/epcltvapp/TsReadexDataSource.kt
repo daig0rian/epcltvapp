@@ -62,6 +62,12 @@ internal class TsReadexDataSource(
 
     override fun open(dataSpec: DataSpec): Long {
         if (nativeProcessingEnabled) {
+            // audio2Mode の 1 (第2音声が無ければ無音AACストリームを挿入) は意図的な選択。
+            // 番組途中で副音声の有無が変わるとプレーヤーがトラック構成の変化に正しく追従
+            // できないため、常に2トラックある状態へ固定している。
+            // 副作用として、副音声のない番組でSubに切り替えると無音になる(第2音声が常に
+            // 存在するので hasSubAudio も常に true となり「副音声なし」の案内は出ない)が、
+            // トラック構成の安定性を優先して受け入れている。
             filterHandle = TsReadexFilter.create(
                 programNumberOrIndex = -1,
                 audio1Mode = 1 + 4 + 8,
