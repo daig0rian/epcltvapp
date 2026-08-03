@@ -19,3 +19,6 @@
 local.properties
 keystore/
 .claude/
+
+# ローカル用モックEPGStation(スクリーンショット撮影用)
+/mock-epgstation/

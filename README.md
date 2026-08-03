@@ -3,6 +3,8 @@
 
 リモコンの↑↓←→キー操作が基本となる Android TV から EPGStation の録画を見るために開発されました。
 
+![メイン画面](screenshots/hero.png)
+
 ## 特徴
 - Android TV 向け標準 UI の Leanback テーマを使用
 - Android TV のリモコンだけで操作が完結
@@ -25,16 +27,16 @@
 
 ## インストール方法
 
-### Downloader by AFTVnews を使う（推奨）
+### Downloader by AFTVnews を使う
 
 1. Fire TV / Android TV の App Store から **[Downloader by AFTVnews](https://www.aftvnews.com/downloader/)** をインストールする。
 2. [Releases](https://github.com/daig0rian/epcltvapp/releases) の最新リリースノートに記載された **ショートコード（数字6桁）** を確認する。
 3. Downloader を起動し、ショートコードを入力すると APK が自動的にダウンロードされる。
 4. ダウンロード完了後、画面の案内に従ってインストールする。
 
-### APK を直接転送する（代替手段）
+### APK を直接転送する
 
-[Releases](https://github.com/daig0rian/epcltvapp/releases) の最新 `app-release.apk` を「Send Files To TV」などのアプリで TV に送信しインストール。
+[Releases](https://github.com/daig0rian/epcltvapp/releases) の最新 `app-release.apk` をadbコマンドなどで TV に送信しインストール。
 
 ## ストアへの公開状況
 - 2021/06/10 Google Play Store での公開審査完了（3日間・審査1回目でパス）
