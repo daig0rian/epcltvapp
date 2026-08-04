@@ -75,6 +75,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var overlayView: SubtitleOverlayView? = null
     // ExoPlayerのtextトラック(Cue)描画先。ARIB字幕用のoverlayViewとは供給元が異なるため別ビュー。
     private var subtitleView: SubtitleView? = null
+    // 実際に描画する字幕の文字サイズ(画面高に対する比)。applySubtitleStyle()で決めadjustCue()で使う。
+    private var subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
 
     // ARIB caption handles
     private var captionHandle: Long = 0
@@ -924,7 +926,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
         if (captioningManager?.isEnabled == true) {
             view.setUserDefaultStyle()
+            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION * captioningManager.fontScale
         } else {
+            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
             view.setStyle(
                 CaptionStyleCompat(
                     Color.WHITE,
@@ -942,7 +946,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 )
             )
         }
-        view.setUserDefaultTextSize()
+        // 下地の左右の余白(SubtitlePainter.textPaddingX)は
+        // 「SubtitleViewの既定文字サイズ × INNER_PADDING_RATIO(0.125, private定数)」で決まり、
+        // 比率そのものは変更できない。そこで既定文字サイズを水増しして余白だけを稼ぎ、
+        // 実際に描画する文字サイズはCue側の指定で本来の値に戻す(adjustCue参照。
+        // SubtitlePainterは余白を既定サイズから、文字サイズをCueの指定から別々に取るため
+        // このように分離できる)。
+        //
+        // この2箇所は必ずセットで扱うこと。Cue側の指定が外れると文字が
+        // SUBTITLE_PADDING_SCALE 倍の大きさで描画される。
+        view.setFractionalTextSize(subtitleTextSizeFraction * SUBTITLE_PADDING_SCALE)
     }
 
     /**
@@ -977,6 +990,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         return builder
             .setLine(SUBTITLE_LINE_FRACTION, Cue.LINE_TYPE_FRACTION)
             .setLineAnchor(Cue.ANCHOR_TYPE_END)
+            // applySubtitleStyle() で水増しした既定文字サイズを本来の値に戻す。
+            .setTextSize(subtitleTextSizeFraction, Cue.TEXT_SIZE_TYPE_FRACTIONAL)
             .build()
     }
 
@@ -1267,6 +1282,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
         // tx3gパーサの既定0.85はTVだと下に寄りすぎる。adjustCue()参照。
         private const val SUBTITLE_LINE_FRACTION = 0.80f
+        // 実際に描画する文字サイズ(画面高に対する比)。SubtitleViewの既定と同値。
+        private const val SUBTITLE_TEXT_SIZE_FRACTION = 0.0533f
+        // 下地の左右の余白を稼ぐために既定文字サイズを水増しする倍率。
+        // 余白は既定文字サイズの12.5%なので、3倍にすると実際に描画される文字サイズに対して
+        // 37.5%相当の余白になる。applySubtitleStyle() / adjustCue() 参照。
+        private const val SUBTITLE_PADDING_SCALE = 3f
         private const val SYSTEM_FONT_DIR = "/system/fonts"
         // 日本語ゴシック体のシステムフォント候補(存在する最初のものを使う)。
         // 前半はNoto Sans CJK系(現行のAndroid)、後半はDroid系(古い端末)。
