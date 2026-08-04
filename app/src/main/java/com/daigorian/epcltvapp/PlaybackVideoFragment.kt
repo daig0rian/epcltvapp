@@ -312,7 +312,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 performTsSeek(targetMs)
             }.also { tsSeekAdapter = it }
         } else {
-            SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS).also { seekableAdapter = it }
+            SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS) {
+                // シーク中ずっと再生中だった場合のみ、確定後にコントロールオーバーレイを閉じる
+                // (TSのrestartTsPlaybackAtと同じ方針。一時停止中にシークしていた場合は
+                // ブラウズ中とみなしオーバーレイを表示したままにする)
+                if (exoPlayer?.playWhenReady == true) hideControlsOverlay(true)
+            }.also { seekableAdapter = it }
         }
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
