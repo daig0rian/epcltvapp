@@ -285,6 +285,18 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             }
             override fun onCues(cueGroup: CueGroup) {
+                // TODO: 字幕の「詰まり」調査用の一時ログ。原因特定後に削除する。
+                // logcatの時刻(=Cueが届いた実時間)とposの進み方を突き合わせると、
+                // ・posは進むのにonCuesが来ない → TextRendererへの供給が止まっている
+                // ・bufferedも止まっている     → ローダー側で止まっている
+                // ・両方進んでいるのにまとめて来る → 描画側
+                // のどれかに切り分けられる。
+                val p = exoPlayer
+                Log.d(
+                    TAG,
+                    "onCues: n=${cueGroup.cues.size} pos=${p?.currentPosition}" +
+                        " buffered=${p?.bufferedPosition} text=${cueGroup.cues.firstOrNull()?.text}"
+                )
                 subtitleView?.setCues(cueGroup.cues.map { adjustCue(it) })
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
