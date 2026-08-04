@@ -927,12 +927,44 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     Color.TRANSPARENT,
                     CaptionStyleCompat.EDGE_TYPE_OUTLINE,
                     Color.BLACK,
-                    Typeface.SANS_SERIF
+                    resolveGothicTypeface()
                 )
             )
         }
         view.setUserDefaultTextSize()
         view.setBottomPaddingFraction(SUBTITLE_BOTTOM_PADDING_FRACTION)
+    }
+
+    /**
+     * 日本語をゴシック体で描画する [Typeface] を解決する。
+     *
+     * [Typeface.SANS_SERIF](Roboto)にはCJKグリフが無いため、日本語の字形は端末の
+     * フォントフォールバックチェーンが決める。このチェーンが明朝体を返す端末があり、
+     * ファミリ名の指定だけではゴシック体にできない。
+     *
+     * libaribcaptionも同じ問題に対処しており、fonts.xmlの `lang="ja"` かつ
+     * `fallbackFor="sans-serif"` のファミリを解決するか、既知のフォントファイルを
+     * 直接探している(`font_provider_android.cpp`)。ここでも同様にファイルを直接読む。
+     * 見つからなければ sans-serif にフォールバックする(端末にゴシック体のCJKフォントが
+     * 無い場合は打つ手がない)。
+     */
+    private fun resolveGothicTypeface(): Typeface {
+        for (name in GOTHIC_FONT_FILE_CANDIDATES) {
+            val file = java.io.File(SYSTEM_FONT_DIR, name)
+            if (!file.exists()) continue
+            val typeface = try {
+                Typeface.createFromFile(file)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "resolveGothicTypeface: failed to load $name", e)
+                null
+            }
+            if (typeface != null) {
+                Log.d(TAG, "resolveGothicTypeface: using $name")
+                return typeface
+            }
+        }
+        Log.w(TAG, "resolveGothicTypeface: no CJK gothic font found, falling back to sans-serif")
+        return Typeface.SANS_SERIF
     }
 
     /**
@@ -1188,9 +1220,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
         private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
         // 位置情報を持たないCueを画面下端からどれだけ上に置くか(画面高に対する比)。
-        // SubtitleViewの既定0.08はTVだと下に寄りすぎるため少し上げる。
+        // SubtitleViewの既定0.08はTVだと下に寄りすぎる。
         // 位置情報を持つCue(DVB字幕等)には適用されない。
-        private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.12f
+        private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.20f
+        private const val SYSTEM_FONT_DIR = "/system/fonts"
+        // 日本語ゴシック体のシステムフォント候補(存在する最初のものを使う)。
+        // 前半はNoto Sans CJK系(現行のAndroid)、後半はDroid系(古い端末)。
+        private val GOTHIC_FONT_FILE_CANDIDATES = listOf(
+            "NotoSansCJK-Regular.ttc",
+            "NotoSansCJKjp-Regular.otf",
+            "NotoSansJP-Regular.otf",
+            "NotoSansJP-Regular.ttf",
+            "DroidSansJapanese.ttf",
+            "DroidSansFallback.ttf",
+        )
         // 字幕の表示/消去判定を行う間隔。Leanbackのシークバー更新(UPDATE_PERIOD_MS)と
         // 同程度の粒度があれば字幕の出し入れとしては十分。
         private const val CAPTION_TICK_MS = 100L
