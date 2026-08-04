@@ -325,10 +325,19 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }.also { tsSeekAdapter = it }
         } else {
             SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS) {
-                // シーク中ずっと再生中だった場合のみ、確定後にコントロールオーバーレイを閉じる
-                // (TSのrestartTsPlaybackAtと同じ方針。一時停止中にシークしていた場合は
-                // ブラウズ中とみなしオーバーレイを表示したままにする)
-                if (exoPlayer?.playWhenReady == true) hideControlsOverlay(true)
+                // ここで同期的に閉じてはいけない。Leanbackは同じメッセージ内で
+                // このseekTo()の直後に setSeekMode(false) → showControlsOverlay(true) を
+                // 実行するため即座に開き直される。しかも hideControlsOverlay() は
+                // stopFadeTimer() を伴うので、tickle()が仕掛けたフェードタイマーごと
+                // 打ち消してしまい、かえって開きっぱなしに固定される。
+                // そのため post して、Leanback側の一連の処理が終わった後に閉じる
+                // (TS経路が非同期プローブを挟むことで結果的にこうなっているのと同じ。
+                //  restartTsPlaybackAt参照)。
+                mainHandler.post {
+                    // シーク中ずっと再生中だった場合のみ閉じる(一時停止中のシークは
+                    // ブラウズ中とみなしオーバーレイを表示したままにする)
+                    if (isAdded && exoPlayer?.playWhenReady == true) hideControlsOverlay(true)
+                }
             }.also { seekableAdapter = it }
         }
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
