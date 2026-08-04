@@ -239,8 +239,19 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         // Build ExoPlayer
         trackSelector = DefaultTrackSelector(requireContext())
+        // TS・ライブは素早い再生開始と低遅延のためバッファを小さく保つ。
+        //
+        // 一方、録画済みのエンコード済み動画/HLSでは大きめに取る必要がある。EPGStationが
+        // ffmpegで出力するMP4は字幕トラックの多重化位置が映像から大きくずれることがあり
+        // (sparseなストリームはmax_interleave_deltaの影響で数十秒ぶんずれた位置に書かれる)、
+        // 先読みが小さいと字幕サンプルの到着だけが遅れて「字幕が止まった後に一気に流れて
+        // 追いつく」挙動になる。実測ログでは映像・音声は正常に進みバッファも健全なまま、
+        // 字幕だけ34秒間途切れてから0.5秒で15件まとめて届いていた。
+        // ここはmedia3のDefaultLoadControlの既定値(50秒)に任せる。
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+            .apply {
+                if (isTsContent || isAnyLive) setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+            }
             .build()
 
         exoPlayer = ExoPlayer.Builder(requireContext(), DefaultRenderersFactory(requireContext()))

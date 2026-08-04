@@ -69,11 +69,37 @@ useNativeTsProcessing = isTsContent && nativeTsProcessingPref
 - [x] `onCreatePrimaryActions` のゲート解除と動的なボタン出し入れ
       （`trackActionIndex` で挿入位置を予約し `refreshTrackActions()` で入れ直す）
 
+## 動作確認で出た問題と対応
+
+- [x] 字幕の下地が不透明な黒 → `windowColor` に移して半透明化（`33936db` / `c83844e` / `36fb0c0`）
+- [x] フォントが明朝体 → tx3g が font name "Serif" を `TypefaceSpan` として本文に付けており、
+      `CaptionStyleCompat` の typeface を上書きしていた。`adjustCue()` で除去（`20d3ded`）
+- [x] 表示位置が低い → tx3g パーサが必ず `line=0.85` を設定するため
+      `bottomPaddingFraction` が効かない。`adjustCue()` で 0.80 に統一（`20d3ded`）
+- [x] 下地の左右に余白がない → `backgroundColor` は `BackgroundColorSpan` として適用される
+      ため。`windowColor` へ移し、既定文字サイズの水増しで余白量を確保（`36fb0c0` / `23766a6`）
+- [x] シーク確定後にコントロールオーバーレイが閉じない（`f2e3eae`）
+      - Leanback は `seekTo()` の直後に同じメッセージ内で
+        `setSeekMode(false)` → `showControlsOverlay(true)` を実行し、
+        フェードタイマーは再開しない（`startFadeTimer` の呼び出し元は
+        `tickle()` / `onResume()` / `setControlsOverlayAutoHideEnabled()` のみ）。
+        同期的に閉じると開き直されるうえ `stopFadeTimer()` でタイマーごと消えるため、
+        `mainHandler.post` して Leanback の処理後に閉じる。
+- [ ] **字幕がたまに「詰まる」（再現待ち）**
+      - 症状: 字幕が止まりセリフに追従しなくなった後、読めない速さで一気に流れて追いつく
+      - 動画によらず発生。内容由来（長時間保持のキュー）ではないとユーザー確認済み
+      - ExoPlayer 側の単純な枯渇は否定的: videoId=722 では字幕サンプル全399個が先頭78MB以内に
+        あり、映像が t≈400s に達する時点で全て読み込み済みになる
+      - 調査用に `onCues` へ一時ログを入れてある（`71c1453`）。
+        logcat の時刻・`pos`・`buffered` の進み方で
+        ローダー / TextRenderer への供給 / 描画側 のどれかに切り分ける
+
 ## 残タスク
 
-- [ ] **ビルド確認**（Android Studio。`media3-ui` 追加のため Gradle sync が必要）
-- [ ] ユーザーによる実機動作確認（下表）
+- [ ] 字幕の「詰まり」の原因特定と対応
+- [ ] `onCues` の調査用一時ログを削除（`71c1453` で追加、コードに TODO 記載あり）
 - [ ] MANUAL.md 4.2 の制約記述を更新（Issue #54 に記載あり）
+- [ ] `WIP.md` を削除してからコミットし、PR 作成
 
 ## 実装メモ
 
