@@ -1,6 +1,7 @@
 package com.daigorian.epcltvapp
 
 import android.content.Context
+import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -11,6 +12,7 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.CaptioningManager
 import android.widget.Toast
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
@@ -38,6 +40,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.preference.PreferenceManager
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
@@ -398,9 +401,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             )
-            // 端末のユーザー補助設定(字幕スタイル・文字サイズ)に従わせる
-            setUserDefaultStyle()
-            setUserDefaultTextSize()
+            applySubtitleStyle(this)
         }
         root?.addView(subtitleView, if (overlayView != null) 2 else 1)
         return root
@@ -896,6 +897,38 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .setOverrideForType(TrackSelectionOverride(targetGroup, listOf(0)))
             .build()
         Log.d(TAG, "selectAudioTrack: groupIndex=$groupIndex")
+    }
+
+    /**
+     * [SubtitleView] の字幕スタイルを決める。
+     *
+     * `setUserDefaultStyle()` は端末のユーザー補助で字幕が有効化されていないとき
+     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な黒背景**）にフォールバックする。
+     * TVでは通常無効なため、そのままでは背景の黒帯で映像が隠れてしまう。
+     *
+     * ARIB字幕(libaribcaption)は背景色の初期値にB24 CLUTのindex 8 = 完全透明を使い、
+     * 縁取りで可読性を確保している。一般的なプレーヤーの見た目もこれに近いので、
+     * Cue側の既定も「背景透明＋黒の縁取り」に合わせる。
+     * ユーザーが明示的にユーザー補助で字幕スタイルを設定している場合はそちらを優先する。
+     */
+    private fun applySubtitleStyle(view: SubtitleView) {
+        val captioningManager =
+            requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+        if (captioningManager?.isEnabled == true) {
+            view.setUserDefaultStyle()
+        } else {
+            view.setStyle(
+                CaptionStyleCompat(
+                    Color.WHITE,
+                    Color.TRANSPARENT,
+                    Color.TRANSPARENT,
+                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                    Color.BLACK,
+                    null
+                )
+            )
+        }
+        view.setUserDefaultTextSize()
     }
 
     /**
