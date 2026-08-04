@@ -1,16 +1,22 @@
 package com.daigorian.epcltvapp
 
 import android.content.Context
+import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.TypefaceSpan
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.accessibility.CaptioningManager
 import android.widget.Toast
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
@@ -23,8 +29,11 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.Cue
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -36,6 +45,8 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.ui.CaptionStyleCompat
+import androidx.media3.ui.SubtitleView
 import androidx.preference.PreferenceManager
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
@@ -62,6 +73,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var exoPlayer: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var overlayView: SubtitleOverlayView? = null
+    // ExoPlayerのtextトラック(Cue)描画先。ARIB字幕用のoverlayViewとは供給元が異なるため別ビュー。
+    private var subtitleView: SubtitleView? = null
+    // 実際に描画する字幕の文字サイズ(画面高に対する比)。applySubtitleStyle()で決めadjustCue()で使う。
+    private var subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
 
     // ARIB caption handles
     private var captionHandle: Long = 0
@@ -92,10 +107,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private val audioGroups = mutableListOf<Tracks.Group>()
     private var hasSubAudio = false
 
+    // Text track state (加工済みTS/エンコード済み動画に埋め込まれた字幕)。
+    // ARIB字幕は自前デコード(libaribcaption)なのでここには現れない——tsreadexを通す入力では
+    // そもそもARIB字幕以外が存在せず、通さない入力ではARIB字幕をExoPlayerが認識しないため、
+    // 両者が同時に埋まることはない。
+    private val textGroups = mutableListOf<Tracks.Group>()
+    private var hasTextTrack = false
+
     // Content type
     private var isTsContent = false
     // ARIB字幕/デュアルモノ副音声を扱うtsreadexネイティブフィルタを使うかどうか。
-    // isTsContentのサブセット(TSでなければ常にfalse)。
+    // 生TS(isRawTs)のサブセット。判定はonCreate参照。
     private var useNativeTsProcessing = false
 
     // TS seek support (録画オリジナルTSのみ)
@@ -175,18 +197,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         superimposeEnabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
         preferSubAudio = prefs.getBoolean(PREF_SUB_AUDIO, false)
 
-        // isTsContent は「TSファイルかどうか」のみを表すフラグ。
-        // ネイティブ処理(tsreadex/ARIB字幕/デュアルモノ副音声)を使うかどうかは
-        // useNativeTsProcessing として別管理する——TS向けシーク機能はネイティブ処理を
-        // 使わなくても(生バイトを直接読むだけなので)動作するため、両者は独立している。
-        //
-        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
-        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
-        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
-        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
-        isTsContent = (activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false) || isLiveMpegTs
-        useNativeTsProcessing = isTsContent && nativeTsProcessingPref
-
         // ストリームプロファイル選択（Issue #34）: config.ymlの並び順ではなくプロファイル名で
         // ユーザーの選択を永続化してあるので、都度最新のstreamConfigから該当indexを解決する。
         val recordedHlsMode = EpgStationV2.resolveHlsProfileIndex(
@@ -197,15 +207,51 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             prefs.getString(getString(R.string.pref_key_live_hls_profile), ""),
             EpgStationV2.streamConfig?.live?.ts?.hls.orEmpty()
         )
+        val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
         val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
             prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
-            EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
+            liveM2tsProfiles
         )
+
+        // isTsContent は「TSコンテナかどうか」のみを表すフラグで、TsReadexDataSourceでのラップと
+        // シーク方式の判定に使う。ネイティブ処理(tsreadex/ARIB字幕/デュアルモノ副音声)を使うかは
+        // useNativeTsProcessing として別管理する——TS向けシーク機能はネイティブ処理を使わなくても
+        // (生バイトを直接読むだけなので)動作するため、両者は独立している。
+        val isRecordedTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
+        isTsContent = isRecordedTs || isLiveMpegTs
+
+        // 生TS = 放送波そのもの。tsreadexのservicefilterはPMTを作り直し、
+        // video/audio1/audio2/ARIB字幕/ARIB文字スーパーの5本以外のストリームを捨てるため、
+        // 通してよいのは「ARIB字幕以外が付く余地のない」入力に限られる。
+        //   生TS  : 録画オリジナルTS(追いかけ再生含む)・ライブTSの無変換プロファイル
+        //   加工済: エンコード済み動画・ライブTSの変換ありプロファイル
+        //           (音声が最適化されていたりARIB字幕が他形式へ変換されている可能性があり、
+        //            tsreadexを通すとそれらが消えてしまう)
+        // streamConfig未取得時はisUnconvertedを判定できないため、通さない側に倒す。
+        val isRawTs = isRecordedTs ||
+                (isLiveMpegTs && liveM2tsProfiles.getOrNull(liveMpegTsMode)?.isUnconverted == true)
+
+        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
+        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
+        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
+        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
+        useNativeTsProcessing = isRawTs && nativeTsProcessingPref
 
         // Build ExoPlayer
         trackSelector = DefaultTrackSelector(requireContext())
+        // TS・ライブは素早い再生開始と低遅延のためバッファを小さく保つ。
+        //
+        // 一方、録画済みのエンコード済み動画/HLSでは大きめに取る必要がある。EPGStationが
+        // ffmpegで出力するMP4は字幕トラックの多重化位置が映像から大きくずれることがあり
+        // (sparseなストリームはmax_interleave_deltaの影響で数十秒ぶんずれた位置に書かれる)、
+        // 先読みが小さいと字幕サンプルの到着だけが遅れて「字幕が止まった後に一気に流れて
+        // 追いつく」挙動になる。実測ログでは映像・音声は正常に進みバッファも健全なまま、
+        // 字幕だけ34秒間途切れてから0.5秒で15件まとめて届いていた。
+        // ここはmedia3のDefaultLoadControlの既定値(50秒)に任せる。
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+            .apply {
+                if (isTsContent || isAnyLive) setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+            }
             .build()
 
         exoPlayer = ExoPlayer.Builder(requireContext(), DefaultRenderersFactory(requireContext()))
@@ -228,17 +274,29 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                Log.d(TAG, "onTracksChanged: ${newAudioGroups.size} audio group(s)")
+                val newTextGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                Log.d(TAG, "onTracksChanged: ${newAudioGroups.size} audio group(s), ${newTextGroups.size} text group(s)")
                 audioGroups.clear()
                 audioGroups.addAll(newAudioGroups)
+                textGroups.clear()
+                textGroups.addAll(newTextGroups)
                 val hadSubAudio = hasSubAudio
+                val hadTextTrack = hasTextTrack
                 hasSubAudio = newAudioGroups.size >= 2
-                if (hasSubAudio != hadSubAudio) {
-                    mTransportControlGlue.updateAudioActionState(hasSubAudio)
+                hasTextTrack = newTextGroups.isNotEmpty()
+                if (hasSubAudio != hadSubAudio || hasTextTrack != hadTextTrack) {
+                    mTransportControlGlue.updateTrackActions(hasSubtitleSource(), hasSubAudio)
                 }
                 if (hasSubAudio && preferSubAudio) {
                     selectAudioTrack(1)
                 }
+                // 永続化された字幕ON/OFFの状態を、トラックが見え始めたこの時点で反映する。
+                if (hasTextTrack != hadTextTrack) {
+                    applyTextTrackSelection()
+                }
+            }
+            override fun onCues(cueGroup: CueGroup) {
+                subtitleView?.setCues(cueGroup.cues.map { adjustCue(it) })
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -252,6 +310,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
         })
 
+        // textトラックが見つかった瞬間にDefaultTrackSelectorが既定で選んでしまい、字幕OFFのはずが
+        // 一瞬表示されるのを防ぐため、再生開始前に現在の設定を一度反映しておく。
+        applyTextTrackSelection()
+
         // Leanback glue
         // 録画オリジナルTS再生時は、TsReadexDataSource が duration を C.TIME_UNSET として
         // 隠しているため、TsProbe の実測値とシーク時のオフセットを自前管理できる
@@ -261,12 +323,28 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 performTsSeek(targetMs)
             }.also { tsSeekAdapter = it }
         } else {
-            SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS).also { seekableAdapter = it }
+            SeekableLeanbackPlayerAdapter(requireContext(), exoPlayer!!, UPDATE_PERIOD_MS) {
+                // ここで同期的に閉じてはいけない。Leanbackは同じメッセージ内で
+                // このseekTo()の直後に setSeekMode(false) → showControlsOverlay(true) を
+                // 実行するため即座に開き直される。しかも hideControlsOverlay() は
+                // stopFadeTimer() を伴うので、tickle()が仕掛けたフェードタイマーごと
+                // 打ち消してしまい、かえって開きっぱなしに固定される。
+                // そのため post して、Leanback側の一連の処理が終わった後に閉じる
+                // (TS経路が非同期プローブを挟むことで結果的にこうなっているのと同じ。
+                //  restartTsPlaybackAt参照)。
+                mainHandler.post {
+                    // シーク中ずっと再生中だった場合のみ閉じる(一時停止中のシークは
+                    // ブラウズ中とみなしオーバーレイを表示したままにする)
+                    if (isAdded && exoPlayer?.playWhenReady == true) hideControlsOverlay(true)
+                }
+            }.also { seekableAdapter = it }
         }
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, useNativeTsProcessing, isAnyLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
+            activity, playerAdapter, useNativeTsProcessing, isAnyLive,
+            captionEnabled, superimposeEnabled, preferSubAudio,
+            hasSubtitleSource(), hasSubAudio
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
@@ -348,6 +426,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             root?.addView(overlayView, 1)
         }
+        // ExoPlayerのtextトラック描画先。ネイティブTS処理中はtextトラック自体が現れないので
+        // 実質使われないが、条件分岐を増やさないため常に置く(Cueが来なければ何も描画しない)。
+        subtitleView = SubtitleView(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            applySubtitleStyle(this)
+        }
+        root?.addView(subtitleView, if (overlayView != null) 2 else 1)
         return root
     }
 
@@ -838,11 +926,159 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (groupIndex >= audioGroups.size) return
         val targetGroup = audioGroups[groupIndex].mediaTrackGroup
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(
-                androidx.media3.common.TrackSelectionOverride(targetGroup, listOf(0))
-            )
+            .setOverrideForType(TrackSelectionOverride(targetGroup, listOf(0)))
             .build()
         Log.d(TAG, "selectAudioTrack: groupIndex=$groupIndex")
+    }
+
+    /**
+     * [SubtitleView] の字幕スタイルと表示位置を決める。
+     *
+     * `setUserDefaultStyle()` は端末のユーザー補助で字幕が有効化されていないとき
+     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な黒背景**・縁取りなし・既定フォント）に
+     * フォールバックする。TVでは通常無効なため、そのままでは黒帯で映像が隠れる。
+     *
+     * 見た目はARIB字幕(libaribcaption)に揃える:
+     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレット(アルファ128)を使うので同じ値にする。
+     *    ただし background ではなく window に指定する(理由は下のコメント参照)
+     *  - フォントはゴシック体。既定フォントだと端末によっては明朝体になり視認性が落ちる
+     *  - 縁取りは残す(半透明下地と併用しても破綻せず、明るい映像で効く)
+     *
+     * ユーザーが明示的にユーザー補助で字幕スタイルを設定している場合はそちらを優先する。
+     */
+    private fun applySubtitleStyle(view: SubtitleView) {
+        val captioningManager =
+            requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+        if (captioningManager?.isEnabled == true) {
+            view.setUserDefaultStyle()
+            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION * captioningManager.fontScale
+        } else {
+            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
+            view.setStyle(
+                CaptionStyleCompat(
+                    Color.WHITE,
+                    // background は使わない。SubtitlePainterがこれをBackgroundColorSpanとして
+                    // 本文に適用するため、グリフの送り幅ちょうど×行ボックス高が塗られてしまい、
+                    // 左右に余白が出ず、折り返し時は行同士が隙間なく連続してしまう。
+                    Color.TRANSPARENT,
+                    // window は drawTextLayout がブロック全体を1つの矩形で塗る経路。
+                    // 左右に textPaddingX(文字サイズの12.5%)の余白がつき、レイアウト幅も
+                    // 実測値でシュリンクラップされるため、下地としてはこちらが正しい。
+                    SUBTITLE_WINDOW_COLOR,
+                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
+                    Color.BLACK,
+                    resolveGothicTypeface()
+                )
+            )
+        }
+        // 下地の左右の余白(SubtitlePainter.textPaddingX)は
+        // 「SubtitleViewの既定文字サイズ × INNER_PADDING_RATIO(0.125, private定数)」で決まり、
+        // 比率そのものは変更できない。そこで既定文字サイズを水増しして余白だけを稼ぎ、
+        // 実際に描画する文字サイズはCue側の指定で本来の値に戻す(adjustCue参照。
+        // SubtitlePainterは余白を既定サイズから、文字サイズをCueの指定から別々に取るため
+        // このように分離できる)。
+        //
+        // この2箇所は必ずセットで扱うこと。Cue側の指定が外れると文字が
+        // SUBTITLE_PADDING_SCALE 倍の大きさで描画される。
+        view.setFractionalTextSize(subtitleTextSizeFraction * SUBTITLE_PADDING_SCALE)
+    }
+
+    /**
+     * 字幕トラックが持ち込むスタイル・位置指定のうち、こちらの見た目指定を無効化して
+     * しまうものを取り除く。
+     *
+     * EPGStationがffmpegで生成するMP4の字幕はtx3g(mov_text)で、`Tx3gParser` は
+     *  - フォント名(ffmpegの既定は "Serif")を [TypefaceSpan] として本文に付ける。
+     *    スパンはPaintのTypefaceより優先されるため、[CaptionStyleCompat] に
+     *    ゴシック体を指定しても明朝体で描画されてしまう
+     *  - 縦位置を必ずCueに設定する(既定 0.85)。このため [SubtitleView] の
+     *    bottomPaddingFraction は一切効かない
+     *
+     * どちらも「字幕の内容」ではなくパーサの既定値なので上書きしてよい。
+     * 縦位置は [SUBTITLE_LINE_FRACTION] に統一する。
+     *
+     * bitmapのCue(DVB字幕等)はそのまま通す——本文テキストを持たず、位置もストリームが
+     * 意味を持って指定しているため。
+     */
+    private fun adjustCue(cue: Cue): Cue {
+        if (cue.bitmap != null) return cue
+        val builder = cue.buildUpon()
+        val text = cue.text
+        if (text is Spanned) {
+            val typefaceSpans = text.getSpans(0, text.length, TypefaceSpan::class.java)
+            if (typefaceSpans.isNotEmpty()) {
+                val stripped = SpannableStringBuilder(text)
+                for (span in typefaceSpans) stripped.removeSpan(span)
+                builder.setText(stripped)
+            }
+        }
+        return builder
+            .setLine(SUBTITLE_LINE_FRACTION, Cue.LINE_TYPE_FRACTION)
+            .setLineAnchor(Cue.ANCHOR_TYPE_END)
+            // applySubtitleStyle() で水増しした既定文字サイズを本来の値に戻す。
+            .setTextSize(subtitleTextSizeFraction, Cue.TEXT_SIZE_TYPE_FRACTIONAL)
+            .build()
+    }
+
+    /**
+     * 日本語をゴシック体で描画する [Typeface] を解決する。
+     *
+     * [Typeface.SANS_SERIF](Roboto)にはCJKグリフが無いため、日本語の字形は端末の
+     * フォントフォールバックチェーンが決める。このチェーンが明朝体を返す端末があり、
+     * ファミリ名の指定だけではゴシック体にできない。
+     *
+     * libaribcaptionも同じ問題に対処しており、fonts.xmlの `lang="ja"` かつ
+     * `fallbackFor="sans-serif"` のファミリを解決するか、既知のフォントファイルを
+     * 直接探している(`font_provider_android.cpp`)。ここでも同様にファイルを直接読む。
+     * 見つからなければ sans-serif にフォールバックする(端末にゴシック体のCJKフォントが
+     * 無い場合は打つ手がない)。
+     */
+    private fun resolveGothicTypeface(): Typeface {
+        for (name in GOTHIC_FONT_FILE_CANDIDATES) {
+            val file = java.io.File(SYSTEM_FONT_DIR, name)
+            if (!file.exists()) continue
+            val typeface = try {
+                Typeface.createFromFile(file)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "resolveGothicTypeface: failed to load $name", e)
+                null
+            }
+            if (typeface != null) {
+                Log.d(TAG, "resolveGothicTypeface: using $name")
+                return typeface
+            }
+        }
+        Log.w(TAG, "resolveGothicTypeface: no CJK gothic font found, falling back to sans-serif")
+        return Typeface.SANS_SERIF
+    }
+
+    /**
+     * 字幕を出せる供給元があるか。CCボタンを出すかどうかの判定に使う。
+     * 供給元は2つあるが、[useNativeTsProcessing] が true なのは生TS(=ARIB字幕以外が
+     * 存在しない入力)のときだけなので、実際には排他になる。
+     */
+    private fun hasSubtitleSource(): Boolean = useNativeTsProcessing || hasTextTrack
+
+    /**
+     * ExoPlayerのtextトラックを字幕ON/OFFに追従させる。
+     *
+     * DefaultTrackSelectorは既定では優先言語やforcedフラグを見てtextトラックを選ぶため、
+     * 「ONなら必ず出る」状態にするには先頭グループを明示的にオーバーライドする必要がある。
+     * OFFのときはトラック種別ごと無効化して、デコード自体を止める。
+     */
+    private fun applyTextTrackSelection() {
+        val player = exoPlayer ?: return
+        val builder = player.trackSelectionParameters.buildUpon()
+        if (captionEnabled && textGroups.isNotEmpty()) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(textGroups[0].mediaTrackGroup, listOf(0)))
+        } else {
+            builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
+        player.trackSelectionParameters = builder.build()
+        if (!captionEnabled) subtitleView?.setCues(null)
+        Log.d(TAG, "applyTextTrackSelection: enabled=$captionEnabled groups=${textGroups.size}")
     }
 
     fun toggleCaption() {
@@ -854,6 +1090,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             captionExpiryPositionMs = C.TIME_UNSET
             overlayView?.clearCaptions()
         }
+        applyTextTrackSelection()
         val msg = if (captionEnabled) R.string.caption_on else R.string.caption_off
         showQuickToast(getString(msg))
     }
@@ -1028,10 +1265,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         resetCaptionScheduling()
         tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
+        subtitleView?.setCues(null)
         destroyAribSessions()
         exoPlayer?.release()
         exoPlayer = null
         overlayView = null
+        subtitleView = null
     }
 
     override fun onPause() {
@@ -1063,6 +1302,28 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
+        private val SUBTITLE_WINDOW_COLOR = Color.argb(128, 0, 0, 0)
+        // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
+        // tx3gパーサの既定0.85はTVだと下に寄りすぎる。adjustCue()参照。
+        private const val SUBTITLE_LINE_FRACTION = 0.80f
+        // 実際に描画する文字サイズ(画面高に対する比)。SubtitleViewの既定と同値。
+        private const val SUBTITLE_TEXT_SIZE_FRACTION = 0.0533f
+        // 下地の左右の余白を稼ぐために既定文字サイズを水増しする倍率。
+        // 余白は既定文字サイズの12.5%なので、3倍にすると実際に描画される文字サイズに対して
+        // 37.5%相当の余白になる。applySubtitleStyle() / adjustCue() 参照。
+        private const val SUBTITLE_PADDING_SCALE = 3f
+        private const val SYSTEM_FONT_DIR = "/system/fonts"
+        // 日本語ゴシック体のシステムフォント候補(存在する最初のものを使う)。
+        // 前半はNoto Sans CJK系(現行のAndroid)、後半はDroid系(古い端末)。
+        private val GOTHIC_FONT_FILE_CANDIDATES = listOf(
+            "NotoSansCJK-Regular.ttc",
+            "NotoSansCJKjp-Regular.otf",
+            "NotoSansJP-Regular.otf",
+            "NotoSansJP-Regular.ttf",
+            "DroidSansJapanese.ttf",
+            "DroidSansFallback.ttf",
+        )
         // 字幕の表示/消去判定を行う間隔。Leanbackのシークバー更新(UPDATE_PERIOD_MS)と
         // 同程度の粒度があれば字幕の出し入れとしては十分。
         private const val CAPTION_TICK_MS = 100L
@@ -1125,14 +1386,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
-        // ARIB字幕/デュアルモノ副音声のUI(CC/SI/音声切替ボタン)を出すかどうか。
-        // TSかどうかではなく、tsreadexネイティブ処理を実際に使っているかで決める。
-        private val useNativeTsProcessing: Boolean,
+        // 文字スーパー(SI)はARIB固有機能のため、tsreadexネイティブ処理を使っている
+        // ときだけ扱える。CC/音声と違い再生中に増減しないので固定値で持つ。
+        private val hasSuperimpose: Boolean,
         private val isLive: Boolean,
         captionEnabled: Boolean,
         superimposeEnabled: Boolean,
         preferSubAudio: Boolean,
-        hasSubAudio: Boolean,
+        private var hasSubtitle: Boolean,
+        private var hasSubAudio: Boolean,
     ) : PlaybackTransportControlGlue<PlayerAdapter>(context, impl) {
 
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
@@ -1161,7 +1423,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         ).apply {
             index = if (preferSubAudio) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
-        private var audioActionEnabled = hasSubAudio
 
         private val recordAction = Action(
             ACTION_ID_RECORD,
@@ -1179,34 +1440,40 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         private var primaryActions: ArrayObjectAdapter? = null
 
+        // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
+        // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
+        // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
+        private var trackActionIndex = 0
+
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
-            if (useNativeTsProcessing) {
-                primaryActionsAdapter.add(ccAction)
-                primaryActionsAdapter.add(superimposeAction)
-                primaryActionsAdapter.add(audioAction)
-            }
+            primaryActions = primaryActionsAdapter
+            trackActionIndex = primaryActionsAdapter.size()
             if (isLive) {
                 primaryActionsAdapter.add(recordAction)
                 primaryActionsAdapter.add(infoAction)
             }
-            if (useNativeTsProcessing || isLive) {
-                primaryActions = primaryActionsAdapter
-            }
+            refreshTrackActions()
         }
 
-        fun updateAudioActionState(enabled: Boolean) {
-            audioActionEnabled = enabled
-            if (enabled) {
-                // Re-apply the current index to restore the icon/label overwritten by the disabled state below.
-                audioAction.index = audioAction.index
-            } else {
-                audioAction.label1 = "---"
+        /** 検出したトラック構成に合わせてCC/音声ボタンを出し入れする。 */
+        fun updateTrackActions(hasSubtitle: Boolean, hasSubAudio: Boolean) {
+            this.hasSubtitle = hasSubtitle
+            this.hasSubAudio = hasSubAudio
+            refreshTrackActions()
+        }
+
+        private fun refreshTrackActions() {
+            val adapter = primaryActions ?: return
+            // 部分的に足し引きすると順序が崩れるため、いったん全て外してから入れ直す。
+            for (action in listOf(ccAction, superimposeAction, audioAction)) {
+                val idx = adapter.indexOf(action)
+                if (idx >= 0) adapter.removeItems(idx, 1)
             }
-            primaryActions?.let { adapter ->
-                val idx = adapter.indexOf(audioAction)
-                if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-            }
+            var idx = trackActionIndex
+            if (hasSubtitle) adapter.add(idx++, ccAction)
+            if (hasSuperimpose) adapter.add(idx++, superimposeAction)
+            if (hasSubAudio) adapter.add(idx, audioAction)
         }
 
         override fun onActionClicked(action: Action?) {
@@ -1243,10 +1510,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     }
                 }
                 audioAction -> {
-                    if (!audioActionEnabled) {
-                        playbackFragment?.showQuickToast(context?.getString(R.string.no_sub_audio) ?: "")
-                        return
-                    }
                     playbackFragment?.toggleAudioTrack()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val isSub = prefs.getBoolean(PREF_SUB_AUDIO, false)

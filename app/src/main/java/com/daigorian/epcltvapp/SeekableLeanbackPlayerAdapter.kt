@@ -30,6 +30,13 @@ internal class SeekableLeanbackPlayerAdapter(
     private val context: Context,
     private val player: ExoPlayer,
     private val updatePeriodMs: Int,
+    // シーク確定時のフック。Leanbackはシーク確定時に
+    // PlaybackSupportFragment.setSeekMode(false) から showControlsOverlay() を呼ぶだけで
+    // フェードタイマーを再開しない(leanback-1.0.0のstartFadeTimer()の呼び出し元は
+    // tickle()/onResume()/setControlsOverlayAutoHideEnabled()の3つのみで、
+    // showControlsOverlay()からは呼ばれない)。そのため確定後は次の入力があるまで
+    // オーバーレイが開きっぱなしになり、呼び出し側で明示的に閉じる必要がある。
+    private val onSeekApplied: () -> Unit = {},
 ) : PlayerAdapter(), Runnable {
 
     private val handler = Handler(Looper.getMainLooper())
@@ -97,6 +104,7 @@ internal class SeekableLeanbackPlayerAdapter(
 
     override fun seekTo(positionInMs: Long) {
         player.seekTo(player.currentMediaItemIndex, positionInMs)
+        onSeekApplied()
     }
 
     override fun getBufferedPosition(): Long = player.bufferedPosition

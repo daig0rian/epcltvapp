@@ -77,5 +77,8 @@ dependencies {
     implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
     implementation "androidx.media3:media3-datasource-okhttp:$media3_version"
     implementation "androidx.media3:media3-ui-leanback:$media3_version"
+    // SubtitleView(Cue描画)のみ利用する。media3-ui-leanback は media3-ui を
+    // 推移的に持たないため個別に追加が必要。
+    implementation "androidx.media3:media3-ui:$media3_version"
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 }
