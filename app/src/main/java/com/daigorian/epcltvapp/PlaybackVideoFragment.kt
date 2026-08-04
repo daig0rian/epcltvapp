@@ -912,7 +912,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * フォールバックする。TVでは通常無効なため、そのままでは黒帯で映像が隠れる。
      *
      * 見た目はARIB字幕(libaribcaption)に揃える:
-     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレット(アルファ128)を使うので同じ値にする
+     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレット(アルファ128)を使うので同じ値にする。
+     *    ただし background ではなく window に指定する(理由は下のコメント参照)
      *  - フォントはゴシック体。既定フォントだと端末によっては明朝体になり視認性が落ちる
      *  - 縁取りは残す(半透明下地と併用しても破綻せず、明るい映像で効く)
      *
@@ -927,8 +928,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             view.setStyle(
                 CaptionStyleCompat(
                     Color.WHITE,
-                    SUBTITLE_BACKGROUND_COLOR,
+                    // background は使わない。SubtitlePainterがこれをBackgroundColorSpanとして
+                    // 本文に適用するため、グリフの送り幅ちょうど×行ボックス高が塗られてしまい、
+                    // 左右に余白が出ず、折り返し時は行同士が隙間なく連続してしまう。
                     Color.TRANSPARENT,
+                    // window は drawTextLayout がブロック全体を1つの矩形で塗る経路。
+                    // 左右に textPaddingX(文字サイズの12.5%)の余白がつき、レイアウト幅も
+                    // 実測値でシュリンクラップされるため、下地としてはこちらが正しい。
+                    SUBTITLE_WINDOW_COLOR,
                     CaptionStyleCompat.EDGE_TYPE_OUTLINE,
                     Color.BLACK,
                     resolveGothicTypeface()
@@ -1256,7 +1263,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
-        private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
+        private val SUBTITLE_WINDOW_COLOR = Color.argb(128, 0, 0, 0)
         // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
         // tx3gパーサの既定0.85はTVだと下に寄りすぎる。adjustCue()参照。
         private const val SUBTITLE_LINE_FRACTION = 0.80f
