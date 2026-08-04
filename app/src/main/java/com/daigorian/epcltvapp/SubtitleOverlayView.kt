@@ -4,15 +4,19 @@ import android.content.Context
 import android.graphics.Canvas
 import android.view.View
 
+/**
+ * ARIB字幕/文字スーパーを動画の上に重ねて描画するだけのビュー。
+ *
+ * 「いつ出していつ消すか」の時間管理は持たない——表示時間は壁時計ではなく再生位置で
+ * 数える必要があり(一時停止中に字幕が勝手に進んでしまうため)、再生位置を知っている
+ * [PlaybackVideoFragment] 側が [showCaptions]/[clearCaptions] の呼び出しで制御する。
+ */
 internal class SubtitleOverlayView(ctx: Context) : View(ctx) {
 
     private var captionImages: Array<CaptionImage> = emptyArray()
     private var superimposeImages: Array<CaptionImage> = emptyArray()
     private var videoWidth = 1920
     private var videoHeight = 1080
-
-    private val clearCaptionRunnable = Runnable { clearCaptions() }
-    private val clearSuperimposeRunnable = Runnable { clearSuperimpose() }
 
     init {
         setLayerType(LAYER_TYPE_SOFTWARE, null)
@@ -29,33 +33,23 @@ internal class SubtitleOverlayView(ctx: Context) : View(ctx) {
     }
 
     fun showCaptions(images: Array<CaptionImage>) {
-        removeCallbacks(clearCaptionRunnable)
         captionImages = images
         invalidate()
-        if (images.isNotEmpty()) {
-            val durationMs = images[0].durationMs.coerceIn(500, 10_000)
-            postDelayed(clearCaptionRunnable, durationMs)
-        }
     }
 
     fun clearCaptions() {
-        removeCallbacks(clearCaptionRunnable)
+        if (captionImages.isEmpty()) return
         captionImages = emptyArray()
         invalidate()
     }
 
     fun showSuperimpose(images: Array<CaptionImage>) {
-        removeCallbacks(clearSuperimposeRunnable)
         superimposeImages = images
         invalidate()
-        if (images.isNotEmpty()) {
-            val durationMs = images[0].durationMs.coerceIn(500, 30_000)
-            postDelayed(clearSuperimposeRunnable, durationMs)
-        }
     }
 
     fun clearSuperimpose() {
-        removeCallbacks(clearSuperimposeRunnable)
+        if (superimposeImages.isEmpty()) return
         superimposeImages = emptyArray()
         invalidate()
     }
