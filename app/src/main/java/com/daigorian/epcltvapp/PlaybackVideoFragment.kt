@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -900,15 +901,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * [SubtitleView] の字幕スタイルを決める。
+     * [SubtitleView] の字幕スタイルと表示位置を決める。
      *
      * `setUserDefaultStyle()` は端末のユーザー補助で字幕が有効化されていないとき
-     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な黒背景**）にフォールバックする。
-     * TVでは通常無効なため、そのままでは背景の黒帯で映像が隠れてしまう。
+     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な黒背景**・縁取りなし・既定フォント）に
+     * フォールバックする。TVでは通常無効なため、そのままでは黒帯で映像が隠れる。
      *
-     * ARIB字幕(libaribcaption)は背景色の初期値にB24 CLUTのindex 8 = 完全透明を使い、
-     * 縁取りで可読性を確保している。一般的なプレーヤーの見た目もこれに近いので、
-     * Cue側の既定も「背景透明＋黒の縁取り」に合わせる。
+     * 見た目はARIB字幕(libaribcaption)に揃える:
+     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレット(アルファ128)を使うので同じ値にする
+     *  - フォントはゴシック体。既定フォントだと端末によっては明朝体になり視認性が落ちる
+     *  - 縁取りは残す(半透明下地と併用しても破綻せず、明るい映像で効く)
+     *
      * ユーザーが明示的にユーザー補助で字幕スタイルを設定している場合はそちらを優先する。
      */
     private fun applySubtitleStyle(view: SubtitleView) {
@@ -920,15 +923,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             view.setStyle(
                 CaptionStyleCompat(
                     Color.WHITE,
-                    Color.TRANSPARENT,
+                    SUBTITLE_BACKGROUND_COLOR,
                     Color.TRANSPARENT,
                     CaptionStyleCompat.EDGE_TYPE_OUTLINE,
                     Color.BLACK,
-                    null
+                    Typeface.SANS_SERIF
                 )
             )
         }
         view.setUserDefaultTextSize()
+        view.setBottomPaddingFraction(SUBTITLE_BOTTOM_PADDING_FRACTION)
     }
 
     /**
@@ -1181,6 +1185,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
+        private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
+        // 位置情報を持たないCueを画面下端からどれだけ上に置くか(画面高に対する比)。
+        // SubtitleViewの既定0.08はTVだと下に寄りすぎるため少し上げる。
+        // 位置情報を持つCue(DVB字幕等)には適用されない。
+        private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.12f
         // 字幕の表示/消去判定を行う間隔。Leanbackのシークバー更新(UPDATE_PERIOD_MS)と
         // 同程度の粒度があれば字幕の出し入れとしては十分。
         private const val CAPTION_TICK_MS = 100L
