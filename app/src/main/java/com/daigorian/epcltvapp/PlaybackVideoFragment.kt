@@ -23,8 +23,10 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -36,6 +38,7 @@ import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+import androidx.media3.ui.SubtitleView
 import androidx.preference.PreferenceManager
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
@@ -62,6 +65,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var exoPlayer: ExoPlayer? = null
     private var trackSelector: DefaultTrackSelector? = null
     private var overlayView: SubtitleOverlayView? = null
+    // ExoPlayerのtextトラック(Cue)描画先。ARIB字幕用のoverlayViewとは供給元が異なるため別ビュー。
+    private var subtitleView: SubtitleView? = null
 
     // ARIB caption handles
     private var captionHandle: Long = 0
@@ -92,10 +97,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private val audioGroups = mutableListOf<Tracks.Group>()
     private var hasSubAudio = false
 
+    // Text track state (加工済みTS/エンコード済み動画に埋め込まれた字幕)。
+    // ARIB字幕は自前デコード(libaribcaption)なのでここには現れない——tsreadexを通す入力では
+    // そもそもARIB字幕以外が存在せず、通さない入力ではARIB字幕をExoPlayerが認識しないため、
+    // 両者が同時に埋まることはない。
+    private val textGroups = mutableListOf<Tracks.Group>()
+    private var hasTextTrack = false
+
     // Content type
     private var isTsContent = false
     // ARIB字幕/デュアルモノ副音声を扱うtsreadexネイティブフィルタを使うかどうか。
-    // isTsContentのサブセット(TSでなければ常にfalse)。
+    // 生TS(isRawTs)のサブセット。判定はonCreate参照。
     private var useNativeTsProcessing = false
 
     // TS seek support (録画オリジナルTSのみ)
@@ -175,18 +187,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         superimposeEnabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
         preferSubAudio = prefs.getBoolean(PREF_SUB_AUDIO, false)
 
-        // isTsContent は「TSファイルかどうか」のみを表すフラグ。
-        // ネイティブ処理(tsreadex/ARIB字幕/デュアルモノ副音声)を使うかどうかは
-        // useNativeTsProcessing として別管理する——TS向けシーク機能はネイティブ処理を
-        // 使わなくても(生バイトを直接読むだけなので)動作するため、両者は独立している。
-        //
-        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
-        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
-        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
-        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
-        isTsContent = (activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false) || isLiveMpegTs
-        useNativeTsProcessing = isTsContent && nativeTsProcessingPref
-
         // ストリームプロファイル選択（Issue #34）: config.ymlの並び順ではなくプロファイル名で
         // ユーザーの選択を永続化してあるので、都度最新のstreamConfigから該当indexを解決する。
         val recordedHlsMode = EpgStationV2.resolveHlsProfileIndex(
@@ -197,10 +197,35 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             prefs.getString(getString(R.string.pref_key_live_hls_profile), ""),
             EpgStationV2.streamConfig?.live?.ts?.hls.orEmpty()
         )
+        val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
         val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
             prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
-            EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
+            liveM2tsProfiles
         )
+
+        // isTsContent は「TSコンテナかどうか」のみを表すフラグで、TsReadexDataSourceでのラップと
+        // シーク方式の判定に使う。ネイティブ処理(tsreadex/ARIB字幕/デュアルモノ副音声)を使うかは
+        // useNativeTsProcessing として別管理する——TS向けシーク機能はネイティブ処理を使わなくても
+        // (生バイトを直接読むだけなので)動作するため、両者は独立している。
+        val isRecordedTs = activity?.intent?.getBooleanExtra(DetailsActivity.IS_TS_CONTENT, false) ?: false
+        isTsContent = isRecordedTs || isLiveMpegTs
+
+        // 生TS = 放送波そのもの。tsreadexのservicefilterはPMTを作り直し、
+        // video/audio1/audio2/ARIB字幕/ARIB文字スーパーの5本以外のストリームを捨てるため、
+        // 通してよいのは「ARIB字幕以外が付く余地のない」入力に限られる。
+        //   生TS  : 録画オリジナルTS(追いかけ再生含む)・ライブTSの無変換プロファイル
+        //   加工済: エンコード済み動画・ライブTSの変換ありプロファイル
+        //           (音声が最適化されていたりARIB字幕が他形式へ変換されている可能性があり、
+        //            tsreadexを通すとそれらが消えてしまう)
+        // streamConfig未取得時はisUnconvertedを判定できないため、通さない側に倒す。
+        val isRawTs = isRecordedTs ||
+                (isLiveMpegTs && liveM2tsProfiles.getOrNull(liveMpegTsMode)?.isUnconverted == true)
+
+        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
+        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
+        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
+        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
+        useNativeTsProcessing = isRawTs && nativeTsProcessingPref
 
         // Build ExoPlayer
         trackSelector = DefaultTrackSelector(requireContext())
@@ -228,17 +253,29 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
-                Log.d(TAG, "onTracksChanged: ${newAudioGroups.size} audio group(s)")
+                val newTextGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+                Log.d(TAG, "onTracksChanged: ${newAudioGroups.size} audio group(s), ${newTextGroups.size} text group(s)")
                 audioGroups.clear()
                 audioGroups.addAll(newAudioGroups)
+                textGroups.clear()
+                textGroups.addAll(newTextGroups)
                 val hadSubAudio = hasSubAudio
+                val hadTextTrack = hasTextTrack
                 hasSubAudio = newAudioGroups.size >= 2
-                if (hasSubAudio != hadSubAudio) {
-                    mTransportControlGlue.updateAudioActionState(hasSubAudio)
+                hasTextTrack = newTextGroups.isNotEmpty()
+                if (hasSubAudio != hadSubAudio || hasTextTrack != hadTextTrack) {
+                    mTransportControlGlue.updateTrackActions(hasSubtitleSource(), hasSubAudio)
                 }
                 if (hasSubAudio && preferSubAudio) {
                     selectAudioTrack(1)
                 }
+                // 永続化された字幕ON/OFFの状態を、トラックが見え始めたこの時点で反映する。
+                if (hasTextTrack != hadTextTrack) {
+                    applyTextTrackSelection()
+                }
+            }
+            override fun onCues(cueGroup: CueGroup) {
+                subtitleView?.setCues(cueGroup.cues)
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -251,6 +288,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             }
         })
+
+        // textトラックが見つかった瞬間にDefaultTrackSelectorが既定で選んでしまい、字幕OFFのはずが
+        // 一瞬表示されるのを防ぐため、再生開始前に現在の設定を一度反映しておく。
+        applyTextTrackSelection()
 
         // Leanback glue
         // 録画オリジナルTS再生時は、TsReadexDataSource が duration を C.TIME_UNSET として
@@ -266,7 +307,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, useNativeTsProcessing, isAnyLive, captionEnabled, superimposeEnabled, preferSubAudio, hasSubAudio
+            activity, playerAdapter, useNativeTsProcessing, isAnyLive,
+            captionEnabled, superimposeEnabled, preferSubAudio,
+            hasSubtitleSource(), hasSubAudio
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
@@ -348,6 +391,18 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             root?.addView(overlayView, 1)
         }
+        // ExoPlayerのtextトラック描画先。ネイティブTS処理中はtextトラック自体が現れないので
+        // 実質使われないが、条件分岐を増やさないため常に置く(Cueが来なければ何も描画しない)。
+        subtitleView = SubtitleView(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            // 端末のユーザー補助設定(字幕スタイル・文字サイズ)に従わせる
+            setUserDefaultStyle()
+            setUserDefaultTextSize()
+        }
+        root?.addView(subtitleView, if (overlayView != null) 2 else 1)
         return root
     }
 
@@ -838,11 +893,38 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (groupIndex >= audioGroups.size) return
         val targetGroup = audioGroups[groupIndex].mediaTrackGroup
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-            .setOverrideForType(
-                androidx.media3.common.TrackSelectionOverride(targetGroup, listOf(0))
-            )
+            .setOverrideForType(TrackSelectionOverride(targetGroup, listOf(0)))
             .build()
         Log.d(TAG, "selectAudioTrack: groupIndex=$groupIndex")
+    }
+
+    /**
+     * 字幕を出せる供給元があるか。CCボタンを出すかどうかの判定に使う。
+     * 供給元は2つあるが、[useNativeTsProcessing] が true なのは生TS(=ARIB字幕以外が
+     * 存在しない入力)のときだけなので、実際には排他になる。
+     */
+    private fun hasSubtitleSource(): Boolean = useNativeTsProcessing || hasTextTrack
+
+    /**
+     * ExoPlayerのtextトラックを字幕ON/OFFに追従させる。
+     *
+     * DefaultTrackSelectorは既定では優先言語やforcedフラグを見てtextトラックを選ぶため、
+     * 「ONなら必ず出る」状態にするには先頭グループを明示的にオーバーライドする必要がある。
+     * OFFのときはトラック種別ごと無効化して、デコード自体を止める。
+     */
+    private fun applyTextTrackSelection() {
+        val player = exoPlayer ?: return
+        val builder = player.trackSelectionParameters.buildUpon()
+        if (captionEnabled && textGroups.isNotEmpty()) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(textGroups[0].mediaTrackGroup, listOf(0)))
+        } else {
+            builder.clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+        }
+        player.trackSelectionParameters = builder.build()
+        if (!captionEnabled) subtitleView?.setCues(null)
+        Log.d(TAG, "applyTextTrackSelection: enabled=$captionEnabled groups=${textGroups.size}")
     }
 
     fun toggleCaption() {
@@ -854,6 +936,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             captionExpiryPositionMs = C.TIME_UNSET
             overlayView?.clearCaptions()
         }
+        applyTextTrackSelection()
         val msg = if (captionEnabled) R.string.caption_on else R.string.caption_off
         showQuickToast(getString(msg))
     }
@@ -1028,10 +1111,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         resetCaptionScheduling()
         tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
+        subtitleView?.setCues(null)
         destroyAribSessions()
         exoPlayer?.release()
         exoPlayer = null
         overlayView = null
+        subtitleView = null
     }
 
     override fun onPause() {
@@ -1125,14 +1210,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
-        // ARIB字幕/デュアルモノ副音声のUI(CC/SI/音声切替ボタン)を出すかどうか。
-        // TSかどうかではなく、tsreadexネイティブ処理を実際に使っているかで決める。
-        private val useNativeTsProcessing: Boolean,
+        // 文字スーパー(SI)はARIB固有機能のため、tsreadexネイティブ処理を使っている
+        // ときだけ扱える。CC/音声と違い再生中に増減しないので固定値で持つ。
+        private val hasSuperimpose: Boolean,
         private val isLive: Boolean,
         captionEnabled: Boolean,
         superimposeEnabled: Boolean,
         preferSubAudio: Boolean,
-        hasSubAudio: Boolean,
+        private var hasSubtitle: Boolean,
+        private var hasSubAudio: Boolean,
     ) : PlaybackTransportControlGlue<PlayerAdapter>(context, impl) {
 
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
@@ -1161,7 +1247,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         ).apply {
             index = if (preferSubAudio) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
-        private var audioActionEnabled = hasSubAudio
 
         private val recordAction = Action(
             ACTION_ID_RECORD,
@@ -1179,34 +1264,40 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         private var primaryActions: ArrayObjectAdapter? = null
 
+        // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
+        // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
+        // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
+        private var trackActionIndex = 0
+
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
-            if (useNativeTsProcessing) {
-                primaryActionsAdapter.add(ccAction)
-                primaryActionsAdapter.add(superimposeAction)
-                primaryActionsAdapter.add(audioAction)
-            }
+            primaryActions = primaryActionsAdapter
+            trackActionIndex = primaryActionsAdapter.size()
             if (isLive) {
                 primaryActionsAdapter.add(recordAction)
                 primaryActionsAdapter.add(infoAction)
             }
-            if (useNativeTsProcessing || isLive) {
-                primaryActions = primaryActionsAdapter
-            }
+            refreshTrackActions()
         }
 
-        fun updateAudioActionState(enabled: Boolean) {
-            audioActionEnabled = enabled
-            if (enabled) {
-                // Re-apply the current index to restore the icon/label overwritten by the disabled state below.
-                audioAction.index = audioAction.index
-            } else {
-                audioAction.label1 = "---"
+        /** 検出したトラック構成に合わせてCC/音声ボタンを出し入れする。 */
+        fun updateTrackActions(hasSubtitle: Boolean, hasSubAudio: Boolean) {
+            this.hasSubtitle = hasSubtitle
+            this.hasSubAudio = hasSubAudio
+            refreshTrackActions()
+        }
+
+        private fun refreshTrackActions() {
+            val adapter = primaryActions ?: return
+            // 部分的に足し引きすると順序が崩れるため、いったん全て外してから入れ直す。
+            for (action in listOf(ccAction, superimposeAction, audioAction)) {
+                val idx = adapter.indexOf(action)
+                if (idx >= 0) adapter.removeItems(idx, 1)
             }
-            primaryActions?.let { adapter ->
-                val idx = adapter.indexOf(audioAction)
-                if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-            }
+            var idx = trackActionIndex
+            if (hasSubtitle) adapter.add(idx++, ccAction)
+            if (hasSuperimpose) adapter.add(idx++, superimposeAction)
+            if (hasSubAudio) adapter.add(idx, audioAction)
         }
 
         override fun onActionClicked(action: Action?) {
@@ -1243,10 +1334,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     }
                 }
                 audioAction -> {
-                    if (!audioActionEnabled) {
-                        playbackFragment?.showQuickToast(context?.getString(R.string.no_sub_audio) ?: "")
-                        return
-                    }
                     playbackFragment?.toggleAudioTrack()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val isSub = prefs.getBoolean(PREF_SUB_AUDIO, false)
