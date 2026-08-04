@@ -72,6 +72,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // (mainHandlerは他の目的にも使い回している共有インスタンスのため)。
     private val captionCallbackToken = Any()
 
+    // デコード済みだがまだ表示位置に達していない字幕/文字スーパー。
+    private val pendingCaptions = ArrayDeque<PendingCaption>()
+    private val pendingSuperimposes = ArrayDeque<PendingCaption>()
+    // 表示中の字幕/文字スーパーを消去する再生位置(表示していなければ C.TIME_UNSET)。
+    private var captionExpiryPositionMs = C.TIME_UNSET
+    private var superimposeExpiryPositionMs = C.TIME_UNSET
+    private var captionTickerScheduled = false
+
+    /** デコード済み字幕1件と、それを表示すべき再生位置。 */
+    private class PendingCaption(val targetPositionMs: Long, val ptsMs: Long)
+
     // Persisted toggle states
     private var captionEnabled = false
     private var superimposeEnabled = false
@@ -553,6 +564,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // 古い字幕がしばらく表示され続けてしまうため、キャンセルした上でオーバーレイと
         // デコーダ内部状態(表示継続時間等)の両方をクリアする。
         mainHandler.removeCallbacksAndMessages(captionCallbackToken)
+        captionTickerScheduled = false
+        resetCaptionScheduling()
         overlayView?.clearCaptions()
         overlayView?.clearSuperimpose()
         if (captionHandle != 0L) AribCaptionFilter.flush(captionHandle)
@@ -697,7 +710,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 val h = captionHandle
                 if (h == 0L || !captionEnabled) return@postCaptionCallback
                 if (AribCaptionFilter.decode(h, ptsMs, pesPayload, 0, pesPayload.size)) {
-                    scheduleWithBufferDelay { scheduleCaptionRender(ptsMs) }
+                    enqueuePendingCaption(pendingCaptions, ptsMs)
                 }
             }
         }
@@ -707,7 +720,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 val h = superimposeHandle
                 if (h == 0L || !superimposeEnabled) return@postCaptionCallback
                 if (AribCaptionFilter.decode(h, ptsMs, pesPayload, 0, pesPayload.size)) {
-                    scheduleWithBufferDelay { scheduleSuperimposeRender(ptsMs) }
+                    enqueuePendingCaption(pendingSuperimposes, ptsMs)
                 }
             }
         }
@@ -718,34 +731,106 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mainHandler.postAtTime(action, captionCallbackToken, SystemClock.uptimeMillis() + delayMs)
     }
 
-    private fun scheduleWithBufferDelay(action: () -> Unit) {
-        val p = exoPlayer
-        val delayMs = if (p != null) {
-            (p.bufferedPosition - p.currentPosition).coerceAtLeast(0)
-        } else 0L
-        if (delayMs > 50) {
-            postCaptionCallback(delayMs, action)
-        } else {
-            action()
+    /**
+     * デコード済み字幕を「表示すべき再生位置」付きで待ち行列に積む。
+     *
+     * 字幕PESはExoPlayerがデータをロードした時点(=再生位置より先)で解析されるため、
+     * その字幕が実際に表示されるべき再生位置は解析時点のバッファ末尾とみなせる。
+     */
+    private fun enqueuePendingCaption(queue: ArrayDeque<PendingCaption>, ptsMs: Long) {
+        val p = exoPlayer ?: return
+        val targetPositionMs = maxOf(p.bufferedPosition, p.currentPosition)
+        queue.addLast(PendingCaption(targetPositionMs, ptsMs))
+        ensureCaptionTicker()
+    }
+
+    /**
+     * 字幕の表示/消去は壁時計ではなく再生位置で判定するため、定期的に再生位置を見て
+     * 期限が来たものを処理する。一時停止中は再生位置が進まないので、待機中の字幕が
+     * 先走って表示されることも、表示中の字幕が勝手に消えることもない。
+     */
+    private fun ensureCaptionTicker() {
+        if (captionTickerScheduled) return
+        captionTickerScheduled = true
+        postCaptionCallback(CAPTION_TICK_MS) { onCaptionTick() }
+    }
+
+    private fun onCaptionTick() {
+        captionTickerScheduled = false
+        val positionMs = exoPlayer?.currentPosition ?: return
+
+        captionExpiryPositionMs = updateCaptionLayer(
+            queue = pendingCaptions,
+            positionMs = positionMs,
+            handle = captionHandle,
+            enabled = captionEnabled,
+            expiryPositionMs = captionExpiryPositionMs,
+            maxDurationMs = CAPTION_MAX_DURATION_MS,
+            show = { images -> overlayView?.showCaptions(images) },
+            clear = { overlayView?.clearCaptions() },
+        )
+
+        superimposeExpiryPositionMs = updateCaptionLayer(
+            queue = pendingSuperimposes,
+            positionMs = positionMs,
+            handle = superimposeHandle,
+            enabled = superimposeEnabled,
+            expiryPositionMs = superimposeExpiryPositionMs,
+            maxDurationMs = SUPERIMPOSE_MAX_DURATION_MS,
+            show = { images -> overlayView?.showSuperimpose(images) },
+            clear = { overlayView?.clearSuperimpose() },
+        )
+
+        if (pendingCaptions.isNotEmpty() || pendingSuperimposes.isNotEmpty() ||
+            captionExpiryPositionMs != C.TIME_UNSET || superimposeExpiryPositionMs != C.TIME_UNSET
+        ) {
+            ensureCaptionTicker()
         }
     }
 
-    private fun scheduleCaptionRender(ptsMs: Long) {
-        val h = captionHandle
-        if (h == 0L || !captionEnabled) return
-        val images = AribCaptionFilter.render(h, ptsMs)
-        if (images.isNotEmpty()) {
-            overlayView?.showCaptions(images)
+    /**
+     * 字幕・文字スーパーの1レイヤ分の表示状態を現在の再生位置に合わせて更新し、
+     * 更新後の消去予定位置(表示中でなければ [C.TIME_UNSET])を返す。
+     */
+    private fun updateCaptionLayer(
+        queue: ArrayDeque<PendingCaption>,
+        positionMs: Long,
+        handle: Long,
+        enabled: Boolean,
+        expiryPositionMs: Long,
+        maxDurationMs: Long,
+        show: (Array<CaptionImage>) -> Unit,
+        clear: () -> Unit,
+    ): Long {
+        // 表示位置に達したものだけを取り出す。複数溜まっている場合(長時間のスタール後など)は
+        // 途中のものを一瞬ずつ描画しても意味がないので最後の1つだけを表示する。
+        var due: PendingCaption? = null
+        while (queue.isNotEmpty() && queue.first().targetPositionMs <= positionMs) {
+            due = queue.removeFirst()
         }
+
+        if (due != null && handle != 0L && enabled) {
+            val images = AribCaptionFilter.render(handle, due.ptsMs)
+            if (images.isNotEmpty()) {
+                show(images)
+                val durationMs = images[0].durationMs.coerceIn(CAPTION_MIN_DURATION_MS, maxDurationMs)
+                return positionMs + durationMs
+            }
+        }
+
+        if (expiryPositionMs != C.TIME_UNSET && positionMs >= expiryPositionMs) {
+            clear()
+            return C.TIME_UNSET
+        }
+        return expiryPositionMs
     }
 
-    private fun scheduleSuperimposeRender(ptsMs: Long) {
-        val h = superimposeHandle
-        if (h == 0L || !superimposeEnabled) return
-        val images = AribCaptionFilter.render(h, ptsMs)
-        if (images.isNotEmpty()) {
-            overlayView?.showSuperimpose(images)
-        }
+    /** 待機中・表示中の字幕をすべて破棄する(シーク時・字幕オフ時)。 */
+    private fun resetCaptionScheduling() {
+        pendingCaptions.clear()
+        pendingSuperimposes.clear()
+        captionExpiryPositionMs = C.TIME_UNSET
+        superimposeExpiryPositionMs = C.TIME_UNSET
     }
 
     private fun selectAudioTrack(groupIndex: Int) {
@@ -764,7 +849,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         captionEnabled = !captionEnabled
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .edit().putBoolean(PREF_CAPTION_ENABLED, captionEnabled).apply()
-        if (!captionEnabled) overlayView?.clearCaptions()
+        if (!captionEnabled) {
+            pendingCaptions.clear()
+            captionExpiryPositionMs = C.TIME_UNSET
+            overlayView?.clearCaptions()
+        }
         val msg = if (captionEnabled) R.string.caption_on else R.string.caption_off
         showQuickToast(getString(msg))
     }
@@ -773,7 +862,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         superimposeEnabled = !superimposeEnabled
         PreferenceManager.getDefaultSharedPreferences(requireContext())
             .edit().putBoolean(PREF_SUPERIMPOSE_ENABLED, superimposeEnabled).apply()
-        if (!superimposeEnabled) overlayView?.clearSuperimpose()
+        if (!superimposeEnabled) {
+            pendingSuperimposes.clear()
+            superimposeExpiryPositionMs = C.TIME_UNSET
+            overlayView?.clearSuperimpose()
+        }
         val msg = if (superimposeEnabled) R.string.superimpose_on else R.string.superimpose_off
         showQuickToast(getString(msg))
     }
@@ -931,6 +1024,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             hlsStreamId = null
         }
         mainHandler.removeCallbacksAndMessages(null)
+        captionTickerScheduled = false
+        resetCaptionScheduling()
         tsProbeExecutor.shutdownNow()
         overlayView?.clearAll()
         destroyAribSessions()
@@ -968,6 +1063,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // 字幕の表示/消去判定を行う間隔。Leanbackのシークバー更新(UPDATE_PERIOD_MS)と
+        // 同程度の粒度があれば字幕の出し入れとしては十分。
+        private const val CAPTION_TICK_MS = 100L
+        // ARIB字幕の表示継続時間として採用する範囲。デコーダが返す値が極端な場合の歯止め。
+        private const val CAPTION_MIN_DURATION_MS = 500L
+        private const val CAPTION_MAX_DURATION_MS = 10_000L
+        private const val SUPERIMPOSE_MAX_DURATION_MS = 30_000L
 
         private fun buildOkHttpClient(sampleUrl: String): OkHttpClient {
             val builder = OkHttpClient.Builder()
