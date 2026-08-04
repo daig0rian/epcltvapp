@@ -9,6 +9,9 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import android.text.SpannableStringBuilder
+import android.text.Spanned
+import android.text.style.TypefaceSpan
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
@@ -29,6 +32,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
+import androidx.media3.common.text.Cue
 import androidx.media3.common.text.CueGroup
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.HttpDataSource
@@ -279,7 +283,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             }
             override fun onCues(cueGroup: CueGroup) {
-                subtitleView?.setCues(cueGroup.cues)
+                subtitleView?.setCues(cueGroup.cues.map { adjustCue(it) })
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -932,7 +936,41 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             )
         }
         view.setUserDefaultTextSize()
-        view.setBottomPaddingFraction(SUBTITLE_BOTTOM_PADDING_FRACTION)
+    }
+
+    /**
+     * 字幕トラックが持ち込むスタイル・位置指定のうち、こちらの見た目指定を無効化して
+     * しまうものを取り除く。
+     *
+     * EPGStationがffmpegで生成するMP4の字幕はtx3g(mov_text)で、`Tx3gParser` は
+     *  - フォント名(ffmpegの既定は "Serif")を [TypefaceSpan] として本文に付ける。
+     *    スパンはPaintのTypefaceより優先されるため、[CaptionStyleCompat] に
+     *    ゴシック体を指定しても明朝体で描画されてしまう
+     *  - 縦位置を必ずCueに設定する(既定 0.85)。このため [SubtitleView] の
+     *    bottomPaddingFraction は一切効かない
+     *
+     * どちらも「字幕の内容」ではなくパーサの既定値なので上書きしてよい。
+     * 縦位置は [SUBTITLE_LINE_FRACTION] に統一する。
+     *
+     * bitmapのCue(DVB字幕等)はそのまま通す——本文テキストを持たず、位置もストリームが
+     * 意味を持って指定しているため。
+     */
+    private fun adjustCue(cue: Cue): Cue {
+        if (cue.bitmap != null) return cue
+        val builder = cue.buildUpon()
+        val text = cue.text
+        if (text is Spanned) {
+            val typefaceSpans = text.getSpans(0, text.length, TypefaceSpan::class.java)
+            if (typefaceSpans.isNotEmpty()) {
+                val stripped = SpannableStringBuilder(text)
+                for (span in typefaceSpans) stripped.removeSpan(span)
+                builder.setText(stripped)
+            }
+        }
+        return builder
+            .setLine(SUBTITLE_LINE_FRACTION, Cue.LINE_TYPE_FRACTION)
+            .setLineAnchor(Cue.ANCHOR_TYPE_END)
+            .build()
     }
 
     /**
@@ -1219,10 +1257,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val QUICK_TOAST_DURATION_MS = 1000L
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
         private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
-        // 位置情報を持たないCueを画面下端からどれだけ上に置くか(画面高に対する比)。
-        // SubtitleViewの既定0.08はTVだと下に寄りすぎる。
-        // 位置情報を持つCue(DVB字幕等)には適用されない。
-        private const val SUBTITLE_BOTTOM_PADDING_FRACTION = 0.20f
+        // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
+        // tx3gパーサの既定0.85はTVだと下に寄りすぎる。adjustCue()参照。
+        private const val SUBTITLE_LINE_FRACTION = 0.80f
         private const val SYSTEM_FONT_DIR = "/system/fonts"
         // 日本語ゴシック体のシステムフォント候補(存在する最初のものを使う)。
         // 前半はNoto Sans CJK系(現行のAndroid)、後半はDroid系(古い端末)。
