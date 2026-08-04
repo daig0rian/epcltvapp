@@ -85,6 +85,13 @@ useNativeTsProcessing = isTsContent && nativeTsProcessingPref
   （`DefaultTrackSelector` の既定は優先言語/forcedフラグ依存で「ONなら必ず出る」にならないため）。
 - 再生開始前に `applyTextTrackSelection()` を1回呼び、字幕OFFのはずのtextトラックが
   検出直後に一瞬表示されるのを防いでいる。
+- 字幕スタイル: `SubtitleView.setUserDefaultStyle()` は端末のユーザー補助で字幕が
+  有効化されていないと `CaptionStyleCompat.DEFAULT`（白文字・**不透明な黒背景**）に
+  フォールバックする。TVでは通常無効なので黒帯が出てしまうため、`applySubtitleStyle()` で
+  「背景透明＋黒の縁取り」を既定にした（ARIB字幕は背景色の初期値がB24 CLUT index 8 =
+  完全透明で、縁取りで可読性を確保している）。ユーザー補助で明示設定されている場合は
+  そちらを優先する。
+  - 明るい映像の上で読みにくいようなら、半透明の黒背景（例: `0x80000000`）に変える案もある。
 
 ## 動作確認したい組み合わせ
 
