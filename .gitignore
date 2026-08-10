@@ -1,16 +1,17 @@
 *.iml
 .gradle
 /local.properties
-/.idea/caches
-/.idea/libraries
-/.idea/modules.xml
-/.idea/workspace.xml
-/.idea/navEditor.xml
-/.idea/assetWizardSettings.xml
-/.idea/AndroidProjectSystem.xml
-/.idea/deploymentTargetSelector.xml
-/.idea/deviceManager.xml
-/.idea/runConfigurations.xml
+
+# .idea は原則すべて無視し、チームで共有する設定だけを明示的に許可する。
+# IDE のバージョンアップで新しい設定ファイルが増えても既定で無視されるため、
+# 都度の仕分けが不要になる。共有したいものが増えたときだけ許可行を追加する。
+/.idea/*
+!/.idea/.gitignore
+!/.idea/codeStyles/
+!/.idea/vcs.xml
+!/.idea/gradle.xml
+!/.idea/compiler.xml
+
 .DS_Store
 /build
 /captures
