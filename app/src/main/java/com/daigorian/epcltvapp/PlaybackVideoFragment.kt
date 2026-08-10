@@ -2,7 +2,6 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.graphics.Color
-import android.graphics.Typeface
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -16,7 +15,6 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.view.accessibility.CaptioningManager
 import android.widget.Toast
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
@@ -75,8 +73,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var overlayView: SubtitleOverlayView? = null
     // ExoPlayerのtextトラック(Cue)描画先。ARIB字幕用のoverlayViewとは供給元が異なるため別ビュー。
     private var subtitleView: SubtitleView? = null
-    // 実際に描画する字幕の文字サイズ(画面高に対する比)。applySubtitleStyle()で決めadjustCue()で使う。
-    private var subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
 
     // ARIB caption handles
     private var captionHandle: Long = 0
@@ -932,55 +928,56 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * [SubtitleView] の字幕スタイルと表示位置を決める。
+     * [SubtitleView] の字幕スタイルを決める。
      *
-     * `setUserDefaultStyle()` は端末のユーザー補助で字幕が有効化されていないとき
-     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な黒背景**・縁取りなし・既定フォント）に
-     * フォールバックする。TVでは通常無効なため、そのままでは黒帯で映像が隠れる。
+     * OSのユーザー補助の字幕設定は参照せず、常に同じ見た目にする。
+     * `setUserDefaultStyle()` を使うと、OS側で字幕が有効化されていないときに
+     * [CaptionStyleCompat.DEFAULT]（白文字・**不透明な**黒背景・縁取りなし・既定フォント）へ
+     * フォールバックして黒帯で映像が隠れる。TVでは無効なのが通常なので、そもそも見た目を
+     * OS設定に委ねること自体をやめている(OS側の fontScale も効かなくなる)。
      *
      * 見た目はARIB字幕(libaribcaption)に揃える:
-     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレット(アルファ128)を使うので同じ値にする。
-     *    ただし background ではなく window に指定する(理由は下のコメント参照)
-     *  - フォントはゴシック体。既定フォントだと端末によっては明朝体になり視認性が落ちる
-     *  - 縁取りは残す(半透明下地と併用しても破綻せず、明るい映像で効く)
+     *  - 下地は半透明の黒。ARIBはB24 CLUTの半透明パレットを使い、そのアルファは128で確定して
+     *    いる(`b24_colors.cpp`。CLUTは不透明セットとアルファ128セットの二択で中間値がない)。
+     *    libaribcaption側も `Canvas::ClearRect` → `alphablend::FillLine` が単純な上書きで、
+     *    画面への合成までアルファが変わらないため、同じ128を指定すれば数値上は一致する。
+     *  - 下地は window ではなく **background** に指定する。backgroundは
+     *    `BackgroundColorSpan` として字面に密着して塗られ、ARIBが文字セル矩形をベタ塗りする
+     *    のに近い。windowはブロック全体を1つの矩形で塗り、`SubtitlePainter.textPaddingX`
+     *    (既定文字サイズの12.5%)の余白が左右につくため離れる。
+     *  - 縁取りなし。ARIB字幕も縁取りを持たない(`force_stroke_text_` は既定false)。
      *
-     * ユーザーが明示的にユーザー補助で字幕スタイルを設定している場合はそちらを優先する。
+     * **Typefaceは指定しない(null)。** ここを日本語フォントで明示すると縦の下地が伸びる。
+     * `SubtitlePainter` は `StaticLayout(..., includepad = true)` で行ボックスを組み、
+     * `BackgroundColorSpan` はその行ボックス全体を塗る。行ボックスの高さは
+     * **Paintの主フォントの縦メトリクス**で決まるため、実測でこれだけ差が出る:
+     *
+     * |                       | upem | hhea(asc/desc) | 行高      |
+     * |-----------------------|------|----------------|-----------|
+     * | Roboto(既定)          | 2048 | 1900 / -500    | 1.1719 em |
+     * | NotoSansCJK-Regular   | 1000 | 1160 / -288    | 1.4480 em |
+     *
+     * 日本語のグリフはTypefaceを指定しなくてもフォールバックチェーンがCJKフォントから
+     * 供給するので字形は変わらない。変わるのは行ボックスの高さ=下地の縦幅だけなので、
+     * 指定しないのが正しい。
+     *
+     * なお `Tx3gParser` が付ける [TypefaceSpan] ("Serif") は明朝体かつセリフ体の
+     * メトリクスを持ち込むため、[adjustCue] で必ず剥がすこと。
      */
     private fun applySubtitleStyle(view: SubtitleView) {
-        val captioningManager =
-            requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
-        if (captioningManager?.isEnabled == true) {
-            view.setUserDefaultStyle()
-            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION * captioningManager.fontScale
-        } else {
-            subtitleTextSizeFraction = SUBTITLE_TEXT_SIZE_FRACTION
-            view.setStyle(
-                CaptionStyleCompat(
-                    Color.WHITE,
-                    // background は使わない。SubtitlePainterがこれをBackgroundColorSpanとして
-                    // 本文に適用するため、グリフの送り幅ちょうど×行ボックス高が塗られてしまい、
-                    // 左右に余白が出ず、折り返し時は行同士が隙間なく連続してしまう。
-                    Color.TRANSPARENT,
-                    // window は drawTextLayout がブロック全体を1つの矩形で塗る経路。
-                    // 左右に textPaddingX(文字サイズの12.5%)の余白がつき、レイアウト幅も
-                    // 実測値でシュリンクラップされるため、下地としてはこちらが正しい。
-                    SUBTITLE_WINDOW_COLOR,
-                    CaptionStyleCompat.EDGE_TYPE_OUTLINE,
-                    Color.BLACK,
-                    resolveGothicTypeface()
-                )
+        view.setStyle(
+            CaptionStyleCompat(
+                Color.WHITE,
+                SUBTITLE_BACKGROUND_COLOR,
+                // window は使わない(下地は background 側で塗る)
+                Color.TRANSPARENT,
+                CaptionStyleCompat.EDGE_TYPE_NONE,
+                // EDGE_TYPE_NONE では参照されないが、コンストラクタが要求するので埋める
+                Color.BLACK,
+                null
             )
-        }
-        // 下地の左右の余白(SubtitlePainter.textPaddingX)は
-        // 「SubtitleViewの既定文字サイズ × INNER_PADDING_RATIO(0.125, private定数)」で決まり、
-        // 比率そのものは変更できない。そこで既定文字サイズを水増しして余白だけを稼ぎ、
-        // 実際に描画する文字サイズはCue側の指定で本来の値に戻す(adjustCue参照。
-        // SubtitlePainterは余白を既定サイズから、文字サイズをCueの指定から別々に取るため
-        // このように分離できる)。
-        //
-        // この2箇所は必ずセットで扱うこと。Cue側の指定が外れると文字が
-        // SUBTITLE_PADDING_SCALE 倍の大きさで描画される。
-        view.setFractionalTextSize(subtitleTextSizeFraction * SUBTITLE_PADDING_SCALE)
+        )
+        view.setFractionalTextSize(SUBTITLE_TEXT_SIZE_FRACTION)
     }
 
     /**
@@ -989,8 +986,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      *
      * EPGStationがffmpegで生成するMP4の字幕はtx3g(mov_text)で、`Tx3gParser` は
      *  - フォント名(ffmpegの既定は "Serif")を [TypefaceSpan] として本文に付ける。
-     *    スパンはPaintのTypefaceより優先されるため、[CaptionStyleCompat] に
-     *    ゴシック体を指定しても明朝体で描画されてしまう
+     *    スパンはPaintのTypefaceより優先されるため、明朝体で描画されてしまう。
+     *    さらにセリフ体の縦メトリクスが行ボックスに効くので下地の縦幅も変わる
      *  - 縦位置を必ずCueに設定する(既定 0.85)。このため [SubtitleView] の
      *    bottomPaddingFraction は一切効かない
      *
@@ -1012,44 +1009,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 builder.setText(stripped)
             }
         }
+        // 文字サイズはCue側に指定しない。`Tx3gParser` はCueにtextSizeを設定しないため、
+        // 未設定のままなら SubtitlePainter は SubtitleView の既定文字サイズをそのまま使う。
         return builder
             .setLine(SUBTITLE_LINE_FRACTION, Cue.LINE_TYPE_FRACTION)
             .setLineAnchor(Cue.ANCHOR_TYPE_END)
-            // applySubtitleStyle() で水増しした既定文字サイズを本来の値に戻す。
-            .setTextSize(subtitleTextSizeFraction, Cue.TEXT_SIZE_TYPE_FRACTIONAL)
             .build()
-    }
-
-    /**
-     * 日本語をゴシック体で描画する [Typeface] を解決する。
-     *
-     * [Typeface.SANS_SERIF](Roboto)にはCJKグリフが無いため、日本語の字形は端末の
-     * フォントフォールバックチェーンが決める。このチェーンが明朝体を返す端末があり、
-     * ファミリ名の指定だけではゴシック体にできない。
-     *
-     * libaribcaptionも同じ問題に対処しており、fonts.xmlの `lang="ja"` かつ
-     * `fallbackFor="sans-serif"` のファミリを解決するか、既知のフォントファイルを
-     * 直接探している(`font_provider_android.cpp`)。ここでも同様にファイルを直接読む。
-     * 見つからなければ sans-serif にフォールバックする(端末にゴシック体のCJKフォントが
-     * 無い場合は打つ手がない)。
-     */
-    private fun resolveGothicTypeface(): Typeface {
-        for (name in GOTHIC_FONT_FILE_CANDIDATES) {
-            val file = java.io.File(SYSTEM_FONT_DIR, name)
-            if (!file.exists()) continue
-            val typeface = try {
-                Typeface.createFromFile(file)
-            } catch (e: RuntimeException) {
-                Log.w(TAG, "resolveGothicTypeface: failed to load $name", e)
-                null
-            }
-            if (typeface != null) {
-                Log.d(TAG, "resolveGothicTypeface: using $name")
-                return typeface
-            }
-        }
-        Log.w(TAG, "resolveGothicTypeface: no CJK gothic font found, falling back to sans-serif")
-        return Typeface.SANS_SERIF
     }
 
     /**
@@ -1303,27 +1268,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
-        private val SUBTITLE_WINDOW_COLOR = Color.argb(128, 0, 0, 0)
+        private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
         // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
         // tx3gパーサの既定0.85はTVだと下に寄りすぎる。adjustCue()参照。
         private const val SUBTITLE_LINE_FRACTION = 0.80f
-        // 実際に描画する文字サイズ(画面高に対する比)。SubtitleViewの既定と同値。
+        // 字幕の文字サイズ(画面高に対する比)。SubtitleViewの既定と同値。
         private const val SUBTITLE_TEXT_SIZE_FRACTION = 0.0533f
-        // 下地の左右の余白を稼ぐために既定文字サイズを水増しする倍率。
-        // 余白は既定文字サイズの12.5%なので、3倍にすると実際に描画される文字サイズに対して
-        // 37.5%相当の余白になる。applySubtitleStyle() / adjustCue() 参照。
-        private const val SUBTITLE_PADDING_SCALE = 3f
-        private const val SYSTEM_FONT_DIR = "/system/fonts"
-        // 日本語ゴシック体のシステムフォント候補(存在する最初のものを使う)。
-        // 前半はNoto Sans CJK系(現行のAndroid)、後半はDroid系(古い端末)。
-        private val GOTHIC_FONT_FILE_CANDIDATES = listOf(
-            "NotoSansCJK-Regular.ttc",
-            "NotoSansCJKjp-Regular.otf",
-            "NotoSansJP-Regular.otf",
-            "NotoSansJP-Regular.ttf",
-            "DroidSansJapanese.ttf",
-            "DroidSansFallback.ttf",
-        )
         // 字幕の表示/消去判定を行う間隔。Leanbackのシークバー更新(UPDATE_PERIOD_MS)と
         // 同程度の粒度があれば字幕の出し入れとしては十分。
         private const val CAPTION_TICK_MS = 100L
