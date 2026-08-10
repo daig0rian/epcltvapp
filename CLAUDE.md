@@ -17,7 +17,11 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 - **UI:** Leanback (Android TV) ※将来的に Compose for TV への移行を計画
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
-- **動画再生:** ExoPlayer (media3) + Leanback (`androidx.media3:media3-ui-leanback`) による内蔵プレーヤー + 外部プレーヤー対応 (MX Player / VLC)
+- **動画再生:** ExoPlayer (media3 1.3.1) + Leanback (`androidx.media3:media3-ui-leanback`) による内蔵プレーヤー + 外部プレーヤー対応 (MX Player / VLC)
+- **ネイティブ (C++/JNI):** CMake でビルド。git submodule として同梱
+  - [`tsreadex`](https://github.com/xtne6f/tsreadex) — MPEG-TS の整形 (音声補正・サービスフィルタ・ARIB 字幕の ID3 変換)
+  - [`libaribcaption`](https://github.com/xqq/libaribcaption) — ARIB STD-B24 字幕のデコード・描画
+  - clone 後は `git submodule update --init --recursive` が必要
 - **最小 SDK:** API 22 (Android 5.1)
 - **コンパイル SDK:** API 34 (Android 14)
 - **ターゲット SDK:** API 34 (Android 14)
@@ -25,13 +29,17 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 ## 開発環境
 
 - **OS:** Windows 11
-- **Android Studio:** Panda 4 (2025.3.4)
+- **Android Studio:** Quail 1 (2026.1.1 Patch 2 / build `AI-261.23567.138`)
 - **VS Code:** インストール済み (Claude Code 拡張で主に使用)
 - **JDK:** OpenJDK 21.0.10 (Android Studio バンドル)
   - パス: `C:\Program Files\Android\Android Studio\jbr`
+  - Gradle JDK はマシン固有の `.gradle/config.properties` が保持する (Git 管理外)
+  - ビルド成果物のターゲットは Java 17 (`sourceCompatibility` / `jvmTarget`)
 - **Android SDK:** `C:\Users\<ユーザー名>\AppData\Local\Android\Sdk`
-  - API 30 + Build-Tools 30.0.3 インストール済み
-  - API 36.1 + Build-Tools 36.1.0 / 37.0.0 インストール済み (Standard セットアップ)
+  - Platforms: API 34 / 35 / 36 / 36.1
+  - Build-Tools: 34.0.0 / 36.0.0 / 36.1.0 / 37.0.0
+  - NDK: 27.0.12077973 / 28.2.13676358
+  - CMake: 3.22.1 / 3.30.5 (ビルドが要求するのは **3.30.5**)
 
 ## 依存関係バージョン
 
@@ -50,33 +58,6 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | 項目 | 状況 | 理由 |
 |------|------|------|
 | `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在しない。Leanback 自体が deprecated のため今後は Compose for TV への移行で解消予定 |
-
-## 過去の既知バグ（libVLC内蔵プレーヤー時代・現在は非該当）
-
-> **注記:** 以下は内蔵プレーヤーが libVLC ベースだった当時の記録。その後 ExoPlayer (media3) +
-> Leanback ベースの内蔵プレーヤーに移行しており、libVLC 関連の依存関係・クラスは現在の
-> コードベースに存在しない。この問題が現行の内蔵プレーヤーにも当てはまるかは未検証。
-> 経緯の記録として残す。
-
-### H.264 エンコード済み動画が1:1描画される（緑フチ問題）
-
-**現象:** Google Streamer を PC モニター (1920×1080) に接続した環境で、H.264 エンコード済み動画（例: 1280×720）を内蔵 VLC プレーヤーで再生すると、動画がネイティブ解像度 (1:1) で描画され、右・下に未初期化バッファ由来の緑色のフチが表示される。TS コンテンツ（1920×1080）は問題なし。HLS も同様に緑フチが発生する。
-
-**原因の推定:** libVLC 4.0.0-eap24 のネイティブ描画層の問題。`VideoHelper.updateVideoSurfaces()` が H.264 HW デコード (MediaCodec) 時に内部 SurfaceView を動画のネイティブ解像度に縮小し、FitMode.Smaller の適用が効かない模様。Java API レイヤーから完全に制御できない。
-
-**試みて失敗したアプローチ（すべて効果なし）:**
-
-1. **`setWindowSize(1920, 1080)` を明示的に呼ぶ** — `doAttachViews()` と `Event.Vout` の両方で呼んでも変化なし。
-2. **`attachViews()` を VLCVideoLayout のレイアウト確定後に遅延実行** — `OnLayoutChangeListener` で 1920×1080 確定後に呼んでも変化なし。
-3. **`subtitles=false` で android-display vout を回避** — `attachViews(layout, null, false, false)` に変更しても変化なし。
-4. **`Event.Vout` で `setVideoScale(SURFACE_BEST_FIT)` を再適用** — ログ上は呼ばれているが変化なし。
-5. **`IVLCVout.Callback` 経由で `onNewVideoLayout` 後に再適用** — `onNewVideoLayout` は `IVLCVout.Callback` ではなく `IVLCVout.OnNewVideoLayoutListener` に属し、VideoHelper が唯一のリスナーとして占有しているため割り込み不可。
-6. **`Event.Vout` 後に `Handler.post()` で SurfaceView を `MATCH_PARENT` に強制** — VLCVideoLayout 内の子ビューを強制的に `MATCH_PARENT` に設定しても変化なし。
-7. **`textureView=true`** — `attachViews(layout, null, true, true)` に変更しても変化なし。
-
-**将来の対応候補:**
-- libVLC のより新しい EAP バージョンへの更新（EAP なので今後修正される可能性あり）
-- 外部プレーヤー（MX Player / VLC アプリ）への誘導（既存機能として実装済み）
 
 ## 検討して撤回した機能
 
@@ -122,17 +103,6 @@ MediaCodecを直接叩く実装に置き換えても同じ壁にぶつかる。�
 - 移行戦略：既存 Leanback Fragment に `ComposeView` を埋め込む段階的移行を計画。
   - 最初のターゲット：Settings 画面（`PreferenceFragment` 問題も同時解消）
 - minSdkVersion は Compose 移行まで 22 を維持。移行時も Compose の最低要件 (API 21) を満たしており変更不要。
-
-## セットアップ進捗
-
-- [x] リポジトリのクローン
-- [x] Android Studio Panda 4 インストール
-- [x] Android SDK API 30 + Build-Tools 30.0.3 インストール
-- [x] Gradle sync
-- [x] ビルド確認 (assembleDebug BUILD SUCCESSFUL)
-- [x] エミュレーター (Android TV API 30) での動作確認
-- [x] deprecated API 対応 (nonTransitiveRClass / Display.getMetrics / getSerializableExtra)
-- [x] compileSdk / targetSdk 34 への引き上げ・API 31〜34 行動変更対応
 
 ## 開発フロー (GitHub Flow)
 
