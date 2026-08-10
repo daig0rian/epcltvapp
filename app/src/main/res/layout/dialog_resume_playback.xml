@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="32dp"
+    android:background="@drawable/bg_resume_dialog">
+
+    <TextView
+        android:id="@+id/resume_message"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/resume_playback_message"
+        android:textColor="@android:color/white"
+        android:textSize="18sp"
+        android:paddingBottom="24dp"
+        android:focusable="false" />
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/resume_from_beginning"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="16dp"
+            android:text="@string/resume_from_beginning"
+            android:focusable="true"
+            android:nextFocusRight="@id/resume_playback" />
+
+        <Button
+            android:id="@+id/resume_playback"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/resume_playback"
+            android:focusable="true"
+            android:nextFocusLeft="@id/resume_from_beginning" />
+
+    </LinearLayout>
+
+</LinearLayout>

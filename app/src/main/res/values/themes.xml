@@ -17,6 +17,14 @@
         <item name="android:windowNoTitle">true</item>
     </style>
 
+    <!-- レジューム再生の確認ダイアログ。裏で再生が始まっている映像を見せるため、
+         ウィンドウ背景を透明にした上で背景の減光(dim)も切る。 -->
+    <style name="ResumePlaybackDialogTheme" parent="@style/Theme.AppCompat.Dialog">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
     <style name="CustomizedSearch" parent="@style/Theme.Epcltvapp">
         <item name="android:windowBackground">@color/background_epgstation</item>
     </style>

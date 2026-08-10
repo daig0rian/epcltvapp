@@ -188,6 +188,14 @@
     <string name="stream_profile_auto_first">Auto (server\'s first profile)</string>
     <string name="stream_profile_auto_unconverted">Auto (prefer unconverted)</string>
 
+    <!-- Resume playback -->
+    <string name="pref_key_resume_playback" translatable="false">KEY_RESUME_PLAYBACK</string>
+    <string name="resume_playback_setting">Resume Playback</string>
+    <string name="resume_playback_setting_summary">Ask whether to resume from where you stopped last time</string>
+    <string name="resume_playback_message">Resume from where you stopped last time?</string>
+    <string name="resume_from_beginning">From the beginning</string>
+    <string name="resume_playback">Resume</string>
+
 
 
 </resources>

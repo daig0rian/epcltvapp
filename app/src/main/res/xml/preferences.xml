@@ -50,6 +50,13 @@
             app:useSimpleSummaryProvider="true"
             />
 
+        <!-- 内蔵プレーヤー選択時のみ表示する (SettingsFragment.updateInternalPlayerOnlyUI) -->
+        <SwitchPreference
+            app:key=         "@string/pref_key_resume_playback"
+            app:defaultValue="true"
+            app:title=       "@string/resume_playback_setting"
+            app:summary=     "@string/resume_playback_setting_summary" />
+
         <PreferenceCategory
             app:title="@string/pref_category_stream_profile">
 
