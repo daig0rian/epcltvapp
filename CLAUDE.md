@@ -14,7 +14,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 ## 技術スタック
 
 - **言語:** Kotlin 2.0.21
-- **UI:** Leanback (Android TV) ※将来的に Compose for TV への移行を計画
+- **UI:** Leanback (Android TV) ※Google により deprecated (2026年3月)
 - **ネットワーク:** Retrofit2 + Gson
 - **画像:** Glide
 - **動画再生:** ExoPlayer (media3 1.3.1) + Leanback (`androidx.media3:media3-ui-leanback`) による内蔵プレーヤー + 外部プレーヤー対応 (MX Player / VLC)
@@ -48,7 +48,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | Gradle | 7.0.2 | **8.9** | JDK 21 非対応のため |
 | AGP | 7.0.3 | **8.7.3** | JDK 21 非対応のため |
 | Kotlin | 1.5.31 | **2.0.21** | JDK 21 対応 |
-| compileSdk | 30 | **34** | Compose for TV 移行準備 |
+| compileSdk | 30 | **34** | Compose for TV 移行準備（当時の判断。移行自体は未実施） |
 | targetSdk | 30 | **34** | compileSdk に合わせて更新 |
 | minSdk | 22 | **22 (変更なし)** | Fire TV 全世代サポート維持 |
 | leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
@@ -57,7 +57,7 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 
 | 項目 | 状況 | 理由 |
 |------|------|------|
-| `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在しない。Leanback 自体が deprecated のため今後は Compose for TV への移行で解消予定 |
+| `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在せず、Leanback 側での解消手段がない。抜本的な解消には UI フレームワークの移行が必要だが、その方針は未定 |
 
 ## 検討して撤回した機能
 
@@ -96,13 +96,20 @@ MediaCodecを直接叩く実装に置き換えても同じ壁にぶつかる。�
 (サーバー) 側での事前サムネイル生成など、クライアント端末上でのオンデマンドデコードに
 依存しない方式を検討すること。
 
-## 将来の方針
+## UI フレームワークの現状
+
+事実の記録のみ。**移行方針は白紙。**
 
 - **Leanback は deprecated**（Google 公式、2026年3月）。新機能追加なし・メンテナンスのみ。
-- **Compose for TV (`androidx.tv:tv-material`)** が Google 推奨の新方向。
-- 移行戦略：既存 Leanback Fragment に `ComposeView` を埋め込む段階的移行を計画。
-  - 最初のターゲット：Settings 画面（`PreferenceFragment` 問題も同時解消）
-- minSdkVersion は Compose 移行まで 22 を維持。移行時も Compose の最低要件 (API 21) を満たしており変更不要。
+- **Compose for TV (`androidx.tv:tv-material`)** が Google 推奨の後継。
+- 現在の master に Compose 関連のコード・依存関係は**一切存在しない**。全画面が Leanback 構成。
+- 過去に 2 回移行に着手したが、いずれも完了せず破棄した。成果物は残っていない。
+  - 2026-05: Settings / Playback 画面を対象（`feature/compose-tv` ブランチ、2026-08 に削除）
+  - 2026-07: Details 画面を対象（コミットされず消失）
+- minSdk 22 は Compose の最低要件 (API 21) を満たすため、移行時も変更は不要。
+
+移行を再開する場合は、過去の経緯に引きずられず改めて戦略から設計すること。
+着手前に必ずユーザーと方針を合意する。
 
 ## 開発フロー (GitHub Flow)
 
@@ -113,7 +120,7 @@ MediaCodecを直接叩く実装に置き換えても同じ壁にぶつかる。�
 - `master` が常にデプロイ可能な状態を保つ唯一のメインブランチ。
 - 作業を始める前に必ず `master` から **フィーチャーブランチ** を切る。
   - 命名: `feature/<概要>` / `fix/<概要>` / `chore/<概要>` など (kebab-case・英語)
-  - 例: `feature/compose-settings-screen`, `fix/subtitle-crash`
+  - 例: `feature/program-info-dialog`, `fix/subtitle-crash`, `chore/gitignore-idea-allowlist`
 - ブランチは作業単位ごとに切る。複数の無関係な変更を 1 ブランチにまとめない。
 
 ### コミット・PR
