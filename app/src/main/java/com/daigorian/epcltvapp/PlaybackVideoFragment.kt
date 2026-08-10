@@ -947,6 +947,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * ユーザーが明示的にユーザー補助で字幕スタイルを設定している場合はそちらを優先する。
      */
     private fun applySubtitleStyle(view: SubtitleView) {
+        logUserCaptionStyle()
         val captioningManager =
             requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
         if (captioningManager?.isEnabled == true) {
@@ -981,6 +982,55 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // この2箇所は必ずセットで扱うこと。Cue側の指定が外れると文字が
         // SUBTITLE_PADDING_SCALE 倍の大きさで描画される。
         view.setFractionalTextSize(subtitleTextSizeFraction * SUBTITLE_PADDING_SCALE)
+    }
+
+    /**
+     * OSのユーザー補助の字幕設定が [CaptionStyleCompat] としてどう解決されるかをログに出す。
+     *
+     * OS設定に依存しない固定スタイルへ移行するにあたり、ハードコードすべき6つの値
+     * (前景色・背景色・window色・縁取り種別・縁取り色・Typeface)を実測するための調査コード。
+     * 移行が終わったら削除する。
+     *
+     * `hasXxx()` が false のフィールドは、ユーザーが設定していないため
+     * [CaptionStyleCompat.DEFAULT] の値で埋められたことを意味する
+     * (`CaptionStyleCompat.createFromCaptionStyle` 参照)。
+     * `getUserStyle()` は `isEnabled()` が false でも設定値を返すので、OS側の字幕が
+     * オフの状態でも読み出せる。
+     */
+    private fun logUserCaptionStyle() {
+        val cm = requireContext().getSystemService(Context.CAPTIONING_SERVICE) as? CaptioningManager
+        if (cm == null) {
+            Log.d(TAG, "userCaptionStyle: CaptioningManager unavailable")
+            return
+        }
+        val raw = cm.userStyle
+        val style = CaptionStyleCompat.createFromCaptionStyle(raw)
+        Log.d(TAG, "userCaptionStyle: enabled=${cm.isEnabled} fontScale=${cm.fontScale} locale=${cm.locale}")
+        Log.d(
+            TAG,
+            "userCaptionStyle: foreground=%08X(set=%b) background=%08X(set=%b) window=%08X(set=%b)".format(
+                style.foregroundColor, raw.hasForegroundColor(),
+                style.backgroundColor, raw.hasBackgroundColor(),
+                style.windowColor, raw.hasWindowColor()
+            )
+        )
+        Log.d(
+            TAG,
+            "userCaptionStyle: edgeType=%s(set=%b) edgeColor=%08X(set=%b) typeface=%s".format(
+                edgeTypeName(style.edgeType), raw.hasEdgeType(),
+                style.edgeColor, raw.hasEdgeColor(),
+                style.typeface
+            )
+        )
+    }
+
+    private fun edgeTypeName(edgeType: Int): String = when (edgeType) {
+        CaptionStyleCompat.EDGE_TYPE_NONE -> "NONE"
+        CaptionStyleCompat.EDGE_TYPE_OUTLINE -> "OUTLINE"
+        CaptionStyleCompat.EDGE_TYPE_DROP_SHADOW -> "DROP_SHADOW"
+        CaptionStyleCompat.EDGE_TYPE_RAISED -> "RAISED"
+        CaptionStyleCompat.EDGE_TYPE_DEPRESSED -> "DEPRESSED"
+        else -> "UNKNOWN($edgeType)"
     }
 
     /**
