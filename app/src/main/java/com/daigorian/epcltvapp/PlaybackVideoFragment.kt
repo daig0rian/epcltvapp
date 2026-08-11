@@ -533,6 +533,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * - 見始めてすぐ(=[RESUME_MIN_POSITION_MS]未満)は何もしない。**前回の記録も消さない**
      *   ——確認ダイアログを見て何も選ばずに戻っただけ、というケースで記録を失わないため。
      * - 終端付近まで見ていたら記録を消す(最後まで見た動画に次回また確認が出るのは煩わしい)。
+     *   ただし収録中TSの追いかけ再生([tsCatchUpActive])は例外。この場合の「終端」は
+     *   その時点の収録済み位置に追いついただけで番組はまだ続いており、見終わったことを
+     *   意味しない。除外しないと、追いついた状態で視聴をやめるたびに記録が消えてしまう
+     *   ——[TsSeekPlayerAdapter.getCurrentPosition] は既知のdurationで頭打ちにするため、
+     *   追いついて見続けているときは position == duration になりやすい。
      */
     private fun savePlaybackPosition() {
         val key = resumePositionKey ?: return
@@ -540,7 +545,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val positionMs = adapter.currentPosition
         if (positionMs < RESUME_MIN_POSITION_MS) return
         val durationMs = adapter.duration
-        if (durationMs > 0 && positionMs >= durationMs - RESUME_END_MARGIN_MS) {
+        if (!tsCatchUpActive && durationMs > 0 && positionMs >= durationMs - RESUME_END_MARGIN_MS) {
             PlaybackPositionStore.remove(requireContext(), key)
             return
         }
