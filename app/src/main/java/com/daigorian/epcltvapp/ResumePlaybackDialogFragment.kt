@@ -18,9 +18,13 @@ import androidx.fragment.app.DialogFragment
  * 再生は選択によらず先頭から始まっているため、このダイアログは
  *  - 半透明にして裏の映像を見せる([R.style.ResumePlaybackDialogTheme] で背景の減光も切っている)
  *  - 画面の右下に小さく置く(視聴の邪魔をしない)
- *  - [AUTO_DISMISS_SEC] 秒間なにも操作されなければ「このまま」を選んだのと同じ扱いで消える
+ *  - 一度も操作されなければ [AUTO_DISMISS_SEC] 秒後に「このまま」を選んだのと同じ扱いで消える
  * という「放っておいても正しく終わる」作りにしてある。リモコンを持ち直すのが面倒な状況でも
  * 視聴を妨げないのが狙いなので、カウントダウンは残り秒数を出して予告する。
+ *
+ * ただし**リモコンが一度でも操作されたらカウントダウンは解除**し、以降は時間切れで消えない。
+ * 操作のたびにタイマーを振り出しに戻す作りだと、選ぼうとしている最中に消える可能性が残り、
+ * 「操作を始めたらもう急かされない」という一般的な自動クローズUIの振る舞いから外れるため。
  */
 class ResumePlaybackDialogFragment : DialogFragment() {
 
@@ -28,6 +32,8 @@ class ResumePlaybackDialogFragment : DialogFragment() {
     private var remainingSec = AUTO_DISMISS_SEC
     private var countdownView: TextView? = null
     private var dontAskAgainCheckBox: CheckBox? = null
+    // 一度でも操作されたか。解除後は画面復帰(onStart)でもカウントダウンを再開しない。
+    private var userInteracted = false
 
     private val countdownTick = object : Runnable {
         override fun run() {
@@ -94,10 +100,10 @@ class ResumePlaybackDialogFragment : DialogFragment() {
         // フォーカスがどのボタンにあってもすべてのキー操作をここで拾える。
         // falseを返して通常のキー処理はそのまま続けさせる。
         dialog?.setOnKeyListener { _, _, _ ->
-            restartCountdown()
+            cancelCountdown()
             false
         }
-        restartCountdown()
+        if (!userInteracted) startCountdown()
     }
 
     override fun onStop() {
@@ -111,12 +117,25 @@ class ResumePlaybackDialogFragment : DialogFragment() {
         dontAskAgainCheckBox = null
     }
 
-    /** 無操作タイマーを振り出しに戻す(操作があるたびに呼ぶ)。 */
-    private fun restartCountdown() {
+    private fun startCountdown() {
         countdownHandler.removeCallbacks(countdownTick)
         remainingSec = AUTO_DISMISS_SEC
+        countdownView?.visibility = View.VISIBLE
         updateCountdown()
         countdownHandler.postDelayed(countdownTick, COUNTDOWN_INTERVAL_MS)
+    }
+
+    /**
+     * 自動クローズをやめ、以降はユーザーの操作をいつまでも待つ。
+     *
+     * 残り秒数の表示は GONE ではなく INVISIBLE で隠す。GONE にするとダイアログの高さが
+     * 縮んで、操作した瞬間にレイアウトが飛び跳ねて見えるため。
+     */
+    private fun cancelCountdown() {
+        if (userInteracted) return
+        userInteracted = true
+        countdownHandler.removeCallbacks(countdownTick)
+        countdownView?.visibility = View.INVISIBLE
     }
 
     private fun updateCountdown() {
@@ -126,8 +145,8 @@ class ResumePlaybackDialogFragment : DialogFragment() {
     companion object {
         const val TAG = "ResumePlaybackDialog"
 
-        /** 無操作でダイアログが自動的に閉じるまでの秒数。 */
-        private const val AUTO_DISMISS_SEC = 5
+        /** 一度も操作されなかった場合にダイアログが自動的に閉じるまでの秒数。 */
+        private const val AUTO_DISMISS_SEC = 20
         private const val COUNTDOWN_INTERVAL_MS = 1_000L
     }
 }
