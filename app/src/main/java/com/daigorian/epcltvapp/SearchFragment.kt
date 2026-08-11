@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.text.TextUtils
 import android.util.Log
 
+import android.view.View
 import android.widget.Toast
 import androidx.core.app.ActivityOptionsCompat
 import androidx.leanback.app.SearchSupportFragment
@@ -44,16 +45,6 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         // XXXを音声検索　XXXを検索　というように状況に応じて後ろに文言がつく
         super.setTitle(getString(R.string.program_name))
 
-        //もしAmazon Fire TV端末だった場合インアプリ音声検索は使えないのでコールバックをオーバーライドする
-        if (requireContext().packageManager.hasSystemFeature(AMAZON_FEATURE_FIRE_TV)) {
-            setSpeechRecognitionCallback {
-                Log.i(TAG, "SpeechRecognitionCallback")
-            }
-            //　TODO Amazon Fire TV端末だったら"音声検索" プレースホルダーも混乱を招くので消す
-            //　TODO Amazon Fire TV端末だったらマイクオーブも混乱を招くので消す
-
-
-        }
         mRowsAdapter.clear()
         historyOnCreate.forEach { queryHistory ->
             addResultRow(query = queryHistory, recodeHistory=false,showErrorToast = false)
@@ -61,8 +52,31 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        if (isAmazonFireTv()) {
+            //Fire OSにはGoogleの音声認識サービスが載っておらずインアプリ音声検索が使えないので
+            //押しても反応しないマイクのオーブを消す。
+            //Leanbackはマイクのオーブにフォーカスがあるかどうかでプレースホルダーの文言を
+            //切り替えている(SearchBar.isVoiceMode())ため、オーブを消すと
+            //"番組名を音声検索" ではなく "番組名を検索" に固定される。
+            view.findViewById<View>(androidx.leanback.R.id.lb_search_bar_speech_orb).visibility =
+                View.GONE
+        }
+    }
+
     override fun onResume() {
         super.onResume()
+
+        if (isAmazonFireTv()) {
+            //SearchSupportFragmentはonResumeでSpeechRecognizerを生成してSearchBarに渡し、
+            //画面表示の直後に音声検索を自動で開始する。Fire TVでは認識器を外しておくことで
+            //この自動開始がフォーカス移動だけして何もせずに終わるようにする。
+            //外さないとRECORD_AUDIOの実行時パーミッションを要求してしまう。
+            searchBar?.setSpeechRecognizer(null)
+        }
+
         Log.i(TAG, "onResume rowsAdapterSize=${mRowsAdapter.size()}")
     }
 
@@ -70,6 +84,12 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         super.onPause()
         Log.d(TAG, "onPause rowsAdapterSize=${mRowsAdapter.size()}")
     }
+
+    private fun isAmazonFireTv(): Boolean =
+        requireContext().packageManager.hasSystemFeature(AMAZON_FEATURE_FIRE_TV)
+
+    private val searchBar: SearchBar?
+        get() = view?.findViewById(androidx.leanback.R.id.lb_search_bar)
 
     override fun onQueryTextChange(newQuery: String?): Boolean {
         return true
