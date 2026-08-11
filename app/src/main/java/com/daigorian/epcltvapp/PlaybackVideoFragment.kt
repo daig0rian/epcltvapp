@@ -134,6 +134,19 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // probeHeadの結果は再生中不変のため一度だけ保持し、再プローブのたびに使い回す。
     private var tsHeadPoint: TsProbe.HeadProbeResult? = null
 
+    // レジューム再生
+    // 前回停止位置の保存先キー。レジューム対象外(ライブ・HLS追いかけ再生)ならnull。
+    private var resumePositionKey: String? = null
+    // 起動時に読み出した前回停止位置。0なら記録なし(=何もしない)。
+    private var savedResumePositionMs = 0L
+    // 設定「レジューム再生」の値(毎回確認 / 最初から / 前回停止位置から)。
+    private var resumeMode: String? = null
+    // 録画オリジナルTSでシーク点テーブルの完成を待っているレジューム要求。
+    private var pendingTsResumePositionMs: Long? = null
+    // 再生位置・総時間の取得口。TS/非TSで実装が分かれる(TsSeekPlayerAdapter参照)ため
+    // 直接ExoPlayerを見ず、Leanbackへ見せているのと同じ値をここから取る。
+    private var playerAdapter: PlayerAdapter? = null
+
     // Live viewing state
     private var liveChannelId: Long = -1L
     private var isLiveMpegTs = false
@@ -203,6 +216,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             prefs.getString(getString(R.string.pref_key_live_hls_profile), ""),
             EpgStationV2.streamConfig?.live?.ts?.hls.orEmpty()
         )
+        // レジューム再生: 対象は「録画済みファイルを最初から通して見る」再生だけ。
+        // ライブと HLS 追いかけ再生(収録中のものを今のところまで見る)は前回位置に意味がない。
+        if (!isAnyLive && !isHls) {
+            resumePositionKey = buildResumePositionKey(recordedProgram?.id, recordedItem?.id, actionId)
+            // 位置の記録自体は設定によらず常に続ける(「毎回確認」に戻したときすぐ使えるように)。
+            // 設定が決めるのは、記録された位置をどう使うか(確認する/使わない/黙って飛ぶ)だけ。
+            savedResumePositionMs = resumePositionKey
+                ?.let { PlaybackPositionStore.load(requireContext(), it) } ?: 0L
+            resumeMode = prefs.getString(
+                getString(R.string.pref_key_resume_playback_mode),
+                getString(R.string.pref_val_resume_mode_default)
+            )
+        }
+
         val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
         val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
             prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
@@ -335,6 +362,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             }.also { seekableAdapter = it }
         }
+        this.playerAdapter = playerAdapter
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
@@ -441,6 +469,99 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isLiveMpegTs) {
             hideSeekBar(view)
         }
+        // 再生成時は DialogFragment 自身が復元されるため出し直さない。
+        if (savedResumePositionMs <= 0 || savedInstanceState != null) return
+        when (resumeMode) {
+            // 再生はすでに先頭から始まっている。その上に半透明で確認を重ねるので、
+            // 何も選ばずに放っておいてもそのまま頭から見続けられる。
+            getString(R.string.pref_val_resume_mode_ask) ->
+                ResumePlaybackDialogFragment.newInstance(savedResumePositionMs)
+                    .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
+            getString(R.string.pref_val_resume_mode_resume) ->
+                seekToResumePosition(savedResumePositionMs)
+            // 「最初から」は記録があっても使わない(=何もしない)。
+        }
+    }
+
+    /**
+     * [ResumePlaybackDialogFragment] の選択結果。
+     *
+     * [resume] が false(=「このまま」)のときは何もしない。前回位置の記録もそのまま残す
+     * ——ダイアログは無操作でも5秒で消えるので、記録を消してまで次回の確認を止める必要がない。
+     */
+    fun onResumeChoice(resume: Boolean, dontAskAgain: Boolean) {
+        if (dontAskAgain) {
+            val mode = if (resume) {
+                getString(R.string.pref_val_resume_mode_resume)
+            } else {
+                getString(R.string.pref_val_resume_mode_beginning)
+            }
+            PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .edit().putString(getString(R.string.pref_key_resume_playback_mode), mode).apply()
+            Log.d(TAG, "onResumeChoice: resume mode changed to $mode")
+        }
+        if (resume) seekToResumePosition(savedResumePositionMs)
+    }
+
+    private fun seekToResumePosition(positionMs: Long) {
+        if (tsSeekAdapter != null) {
+            // 録画オリジナルTSのシークはTsProbeのシーク点テーブル待ち。
+            // 完成前ならここでは積んでおき、refreshTailAndSeekBar の完了時に実行する。
+            if (tsSeekDataProvider != null) {
+                performTsSeek(positionMs)
+            } else {
+                pendingTsResumePositionMs = positionMs
+                Log.d(TAG, "seekToResumePosition: deferred until seek table is ready ($positionMs ms)")
+            }
+            return
+        }
+        val player = exoPlayer ?: return
+        val durationMs = player.duration
+        // ファイルが差し替わっている等で記録が総時間を超えていた場合の保険。
+        val target = if (durationMs != C.TIME_UNSET && durationMs > 0) {
+            positionMs.coerceAtMost(durationMs - 1)
+        } else {
+            positionMs
+        }
+        player.seekTo(target)
+        Log.d(TAG, "seekToResumePosition: seekTo($target)")
+    }
+
+    /**
+     * 今の再生位置をレジューム再生用に記録する(画面を離れるとき)。
+     *
+     * - 見始めてすぐ(=[RESUME_MIN_POSITION_MS]未満)は何もしない。**前回の記録も消さない**
+     *   ——確認ダイアログを見て何も選ばずに戻っただけ、というケースで記録を失わないため。
+     * - 終端付近まで見ていたら記録を消す(最後まで見た動画に次回また確認が出るのは煩わしい)。
+     *   ただし収録中TSの追いかけ再生([tsCatchUpActive])は例外。この場合の「終端」は
+     *   その時点の収録済み位置に追いついただけで番組はまだ続いており、見終わったことを
+     *   意味しない。除外しないと、追いついた状態で視聴をやめるたびに記録が消えてしまう
+     *   ——[TsSeekPlayerAdapter.getCurrentPosition] は既知のdurationで頭打ちにするため、
+     *   追いついて見続けているときは position == duration になりやすい。
+     */
+    private fun savePlaybackPosition() {
+        val key = resumePositionKey ?: return
+        val adapter = playerAdapter ?: return
+        val positionMs = adapter.currentPosition
+        if (positionMs < RESUME_MIN_POSITION_MS) return
+        val durationMs = adapter.duration
+        if (!tsCatchUpActive && durationMs > 0 && positionMs >= durationMs - RESUME_END_MARGIN_MS) {
+            PlaybackPositionStore.remove(requireContext(), key)
+            return
+        }
+        PlaybackPositionStore.save(requireContext(), key, positionMs)
+    }
+
+    /**
+     * 前回停止位置の保存先キー。動画ファイル1本を一意に指す必要があるため、
+     * 番組IDだけでなく再生対象(TS/エンコード済みの別、v2ならvideoFileのID)まで含める。
+     */
+    private fun buildResumePositionKey(programId: Long?, itemId: Long?, actionId: Long): String? = when {
+        // EPGStation v1: actionId は ACTION_WATCH_ORIGINAL_TS または encodedId
+        programId != null -> "v1:$programId:$actionId"
+        // EPGStation v2: actionId は videoFile の ID
+        itemId != null -> "v2:$itemId:$actionId"
+        else -> null
     }
 
     /**
@@ -544,6 +665,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             mTransportControlGlue.setSeekProvider(provider)
             mTransportControlGlue.isSeekEnabled = true
             Log.d(TAG, "refreshTailAndSeekBar: seek ready (${provider.seekPositionCount} points), durationMs=${provider.durationMs}")
+            // シーク可能になるのを待っていたレジューム要求をここで実行する。
+            pendingTsResumePositionMs?.let { positionMs ->
+                pendingTsResumePositionMs = null
+                performTsSeek(positionMs)
+            }
         }
     }
 
@@ -1240,6 +1366,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     override fun onPause() {
         super.onPause()
+        savePlaybackPosition()
         mTransportControlGlue.pause()
     }
 
@@ -1263,6 +1390,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // ライブHLSウォームアップ中のリトライ回数・間隔（20回 x 2秒 = 最大40秒程度待つ）
         private const val LIVE_WARMUP_RETRY_COUNT = 20
         private const val LIVE_WARMUP_RETRY_DELAY_MS = 2_000L
+        // レジューム再生で位置を記録し始める下限。これ未満で終了した場合は「まだ見ていない」
+        // とみなし、前回の記録もそのまま残す(savePlaybackPosition参照)。
+        private const val RESUME_MIN_POSITION_MS = 10_000L
+        // 終端とみなすマージン。ここまで見ていたら記録を消して次回は最初から再生する。
+        private const val RESUME_END_MARGIN_MS = 15_000L
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"

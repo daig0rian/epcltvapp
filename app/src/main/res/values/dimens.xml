@@ -1,0 +1,7 @@
+<resources>
+
+    <!-- レジューム再生ダイアログを画面の右下に置くときの端からの距離。
+         オーバースキャンで欠ける機種があるため画面端ぎりぎりには置かない。 -->
+    <dimen name="resume_dialog_screen_margin">48dp</dimen>
+
+</resources>

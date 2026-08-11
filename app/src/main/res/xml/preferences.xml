@@ -50,6 +50,16 @@
             app:useSimpleSummaryProvider="true"
             />
 
+        <!-- 内蔵プレーヤー選択時のみ表示する (SettingsFragment.updateInternalPlayerOnlyUI) -->
+        <ListPreference
+            app:key=         "@string/pref_key_resume_playback_mode"
+            app:defaultValue="@string/pref_val_resume_mode_default"
+            app:title=       "@string/resume_playback_setting"
+            app:entries=     "@array/pref_options_resume_mode_label"
+            app:entryValues= "@array/pref_options_resume_mode_val"
+            app:useSimpleSummaryProvider="true"
+            />
+
         <PreferenceCategory
             app:title="@string/pref_category_stream_profile">
 
