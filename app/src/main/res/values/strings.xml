@@ -216,6 +216,8 @@
     <string name="resume_playback_message">Resume from where you stopped last time?</string>
     <string name="resume_keep_playing">Keep playing</string>
     <string name="resume_from_last_position">Play from last position</string>
+    <!-- %1$s is the last stopped position, e.g. "12:34" or "1:23:45" -->
+    <string name="resume_from_position">Play from %1$s</string>
     <string name="resume_dont_ask_again">Don\'t show again</string>
     <string name="resume_countdown">Keep playing in %1$d s</string>
 

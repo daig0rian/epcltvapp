@@ -109,6 +109,7 @@
     <string name="resume_playback_message">前回再生を停止した位置から再開しますか？</string>
     <string name="resume_keep_playing">このまま</string>
     <string name="resume_from_last_position">前回停止位置から再生</string>
+    <string name="resume_from_position">%1$s から再生</string>
     <string name="resume_dont_ask_again">次から表示しない</string>
     <string name="resume_countdown">%1$d秒後にこのまま再生します</string>
 

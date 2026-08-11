@@ -475,7 +475,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             // 再生はすでに先頭から始まっている。その上に半透明で確認を重ねるので、
             // 何も選ばずに放っておいてもそのまま頭から見続けられる。
             getString(R.string.pref_val_resume_mode_ask) ->
-                ResumePlaybackDialogFragment()
+                ResumePlaybackDialogFragment.newInstance(savedResumePositionMs)
                     .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
             getString(R.string.pref_val_resume_mode_resume) ->
                 seekToResumePosition(savedResumePositionMs)

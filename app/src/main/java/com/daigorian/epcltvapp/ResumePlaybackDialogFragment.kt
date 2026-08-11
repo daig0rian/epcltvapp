@@ -11,6 +11,7 @@ import android.widget.Button
 import android.widget.CheckBox
 import android.widget.TextView
 import androidx.fragment.app.DialogFragment
+import java.util.Locale
 
 /**
  * 前回停止位置が記録されている動画を開いたときに出す「前回停止位置から再生しますか？」の確認。
@@ -70,6 +71,11 @@ class ResumePlaybackDialogFragment : DialogFragment() {
         val resumeButton = view.findViewById<Button>(R.id.resume_from_last_position)
         resumeButton.setOnClickListener {
             notifyChoice(resume = true)
+        }
+        // 前回どこまで見ていたかを覚えている人は少ないので、どこへ飛ぶのかをボタン自身に書く。
+        val positionMs = arguments?.getLong(ARG_POSITION_MS) ?: 0L
+        if (positionMs > 0) {
+            resumeButton.text = getString(R.string.resume_from_position, formatPosition(positionMs))
         }
         // 続きから見たい人のほうが多いという想定でレジューム側を初期フォーカスにする。
         resumeButton.requestFocus()
@@ -148,5 +154,28 @@ class ResumePlaybackDialogFragment : DialogFragment() {
         /** 一度も操作されなかった場合にダイアログが自動的に閉じるまでの秒数。 */
         private const val AUTO_DISMISS_SEC = 20
         private const val COUNTDOWN_INTERVAL_MS = 1_000L
+        private const val ARG_POSITION_MS = "position_ms"
+
+        fun newInstance(positionMs: Long): ResumePlaybackDialogFragment {
+            return ResumePlaybackDialogFragment().apply {
+                arguments = Bundle().apply { putLong(ARG_POSITION_MS, positionMs) }
+            }
+        }
+
+        /**
+         * 再生位置を `mm:ss` (1時間以上なら `h:mm:ss`) にする。
+         * シークバーの時刻表示と同じ読み方になるよう、秒は切り捨てる。
+         */
+        private fun formatPosition(positionMs: Long): String {
+            val totalSec = positionMs / 1000
+            val hours = totalSec / 3600
+            val minutes = (totalSec % 3600) / 60
+            val seconds = totalSec % 60
+            return if (hours > 0) {
+                String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+            } else {
+                String.format(Locale.US, "%02d:%02d", minutes, seconds)
+            }
+        }
     }
 }
