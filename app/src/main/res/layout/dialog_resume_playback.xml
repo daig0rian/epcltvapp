@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 視聴の邪魔をしないよう、余白は最小限にして画面右下に小さく置く
+     (配置は ResumePlaybackDialogFragment.onStart)。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="32dp"
+    android:padding="12dp"
     android:background="@drawable/bg_resume_dialog">
 
     <TextView
@@ -12,33 +14,80 @@
         android:layout_height="wrap_content"
         android:text="@string/resume_playback_message"
         android:textColor="@android:color/white"
-        android:textSize="18sp"
-        android:paddingBottom="24dp"
+        android:textSize="16sp"
         android:focusable="false" />
+
+    <CheckBox
+        android:id="@+id/resume_dont_ask_again"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:paddingStart="4dp"
+        android:paddingEnd="8dp"
+        android:text="@string/resume_dont_ask_again"
+        android:textColor="@android:color/white"
+        android:textSize="14sp"
+        android:buttonTint="@android:color/white"
+        android:background="@drawable/bg_focus_highlight"
+        android:focusable="true"
+        android:nextFocusDown="@id/resume_from_last_position" />
 
     <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="end"
+        android:layout_marginTop="6dp"
         android:orientation="horizontal">
 
         <Button
-            android:id="@+id/resume_from_beginning"
+            android:id="@+id/resume_keep"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
-            android:text="@string/resume_from_beginning"
+            android:layout_marginEnd="8dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/resume_keep_playing"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:textColor="@color/dialog_button_text"
+            android:background="@drawable/bg_dialog_button"
             android:focusable="true"
-            android:nextFocusRight="@id/resume_playback" />
+            android:nextFocusUp="@id/resume_dont_ask_again"
+            android:nextFocusRight="@id/resume_from_last_position" />
 
         <Button
-            android:id="@+id/resume_playback"
+            android:id="@+id/resume_from_last_position"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/resume_playback"
+            android:minWidth="0dp"
+            android:minHeight="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="@string/resume_from_last_position"
+            android:textSize="14sp"
+            android:textAllCaps="false"
+            android:textColor="@color/dialog_button_text"
+            android:background="@drawable/bg_dialog_button"
             android:focusable="true"
-            android:nextFocusLeft="@id/resume_from_beginning" />
+            android:nextFocusUp="@id/resume_dont_ask_again"
+            android:nextFocusLeft="@id/resume_keep" />
 
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/resume_countdown"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="end"
+        android:layout_marginTop="6dp"
+        android:textColor="#B3FFFFFF"
+        android:textSize="12sp"
+        android:focusable="false" />
 
 </LinearLayout>

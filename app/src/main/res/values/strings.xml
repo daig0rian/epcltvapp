@@ -189,12 +189,35 @@
     <string name="stream_profile_auto_unconverted">Auto (prefer unconverted)</string>
 
     <!-- Resume playback -->
-    <string name="pref_key_resume_playback" translatable="false">KEY_RESUME_PLAYBACK</string>
+    <string name="pref_key_resume_playback_mode" translatable="false">KEY_RESUME_PLAYBACK_MODE</string>
     <string name="resume_playback_setting">Resume Playback</string>
-    <string name="resume_playback_setting_summary">Ask whether to resume from where you stopped last time</string>
+
+    <string name="pref_val_resume_mode_ask"       translatable="false">ask</string>
+    <string name="pref_val_resume_mode_beginning" translatable="false">beginning</string>
+    <string name="pref_val_resume_mode_resume"    translatable="false">resume</string>
+    <string name="pref_val_resume_mode_default"   translatable="false">@string/pref_val_resume_mode_ask</string>
+
+    <string name="pref_options_resume_mode_label_ask">Always ask</string>
+    <string name="pref_options_resume_mode_label_beginning">From the beginning</string>
+    <string name="pref_options_resume_mode_label_resume">From last position</string>
+
+    <string-array name="pref_options_resume_mode_label">
+        <item>@string/pref_options_resume_mode_label_ask</item>
+        <item>@string/pref_options_resume_mode_label_beginning</item>
+        <item>@string/pref_options_resume_mode_label_resume</item>
+    </string-array>
+
+    <string-array name="pref_options_resume_mode_val">
+        <item>@string/pref_val_resume_mode_ask</item>
+        <item>@string/pref_val_resume_mode_beginning</item>
+        <item>@string/pref_val_resume_mode_resume</item>
+    </string-array>
+
     <string name="resume_playback_message">Resume from where you stopped last time?</string>
-    <string name="resume_from_beginning">From the beginning</string>
-    <string name="resume_playback">Resume</string>
+    <string name="resume_keep_playing">Keep playing</string>
+    <string name="resume_from_last_position">Play from last position</string>
+    <string name="resume_dont_ask_again">Don\'t show again</string>
+    <string name="resume_countdown">Keep playing in %1$d s</string>
 
 
 

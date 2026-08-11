@@ -196,7 +196,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
 
         private fun updateInternalPlayerOnlyUI(playerPkgName: String?) {
             val isInternal = playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)
-            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_resume_playback))
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_resume_playback_mode))
                 ?.isVisible = isInternal
         }
 

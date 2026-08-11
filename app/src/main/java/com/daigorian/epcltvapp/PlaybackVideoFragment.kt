@@ -137,8 +137,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // レジューム再生
     // 前回停止位置の保存先キー。レジューム対象外(ライブ・HLS追いかけ再生)ならnull。
     private var resumePositionKey: String? = null
-    // 起動時に読み出した前回停止位置。0なら記録なし(=ダイアログを出さない)。
+    // 起動時に読み出した前回停止位置。0なら記録なし(=何もしない)。
     private var savedResumePositionMs = 0L
+    // 設定「レジューム再生」の値(毎回確認 / 最初から / 前回停止位置から)。
+    private var resumeMode: String? = null
     // 録画オリジナルTSでシーク点テーブルの完成を待っているレジューム要求。
     private var pendingTsResumePositionMs: Long? = null
     // 再生位置・総時間の取得口。TS/非TSで実装が分かれる(TsSeekPlayerAdapter参照)ため
@@ -218,12 +220,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // ライブと HLS 追いかけ再生(収録中のものを今のところまで見る)は前回位置に意味がない。
         if (!isAnyLive && !isHls) {
             resumePositionKey = buildResumePositionKey(recordedProgram?.id, recordedItem?.id, actionId)
-            // 位置の記録自体は設定OFFでも続ける(ONに戻したときすぐ使えるように)。
-            // 設定で切り替わるのは確認ダイアログを出すかどうかだけ。
-            if (prefs.getBoolean(getString(R.string.pref_key_resume_playback), true)) {
-                savedResumePositionMs = resumePositionKey
-                    ?.let { PlaybackPositionStore.load(requireContext(), it) } ?: 0L
-            }
+            // 位置の記録自体は設定によらず常に続ける(「毎回確認」に戻したときすぐ使えるように)。
+            // 設定が決めるのは、記録された位置をどう使うか(確認する/使わない/黙って飛ぶ)だけ。
+            savedResumePositionMs = resumePositionKey
+                ?.let { PlaybackPositionStore.load(requireContext(), it) } ?: 0L
+            resumeMode = prefs.getString(
+                getString(R.string.pref_key_resume_playback_mode),
+                getString(R.string.pref_val_resume_mode_default)
+            )
         }
 
         val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
@@ -465,25 +469,38 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isLiveMpegTs) {
             hideSeekBar(view)
         }
-        // 再生はすでに先頭から始まっている。その上に半透明で確認を重ねるので、
-        // 何も選ばずに戻ってもそのまま頭から見られる。
-        // (再生成時は DialogFragment 自身が復元されるため出し直さない)
-        if (savedResumePositionMs > 0 && savedInstanceState == null) {
-            ResumePlaybackDialogFragment()
-                .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
+        // 再生成時は DialogFragment 自身が復元されるため出し直さない。
+        if (savedResumePositionMs <= 0 || savedInstanceState != null) return
+        when (resumeMode) {
+            // 再生はすでに先頭から始まっている。その上に半透明で確認を重ねるので、
+            // 何も選ばずに放っておいてもそのまま頭から見続けられる。
+            getString(R.string.pref_val_resume_mode_ask) ->
+                ResumePlaybackDialogFragment()
+                    .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
+            getString(R.string.pref_val_resume_mode_resume) ->
+                seekToResumePosition(savedResumePositionMs)
+            // 「最初から」は記録があっても使わない(=何もしない)。
         }
     }
 
-    /** [ResumePlaybackDialogFragment] の選択結果。 */
-    fun onResumeChoice(resume: Boolean) {
-        if (!resume) {
-            // 「最初から」を選んだ時点で前回位置は用済み。ここで消しておかないと、
-            // 見始めてすぐ終了した場合(=位置を保存しない。savePlaybackPosition参照)に
-            // 古い位置が残り続け、次回もまた同じ確認が出てしまう。
-            resumePositionKey?.let { PlaybackPositionStore.remove(requireContext(), it) }
-            return
+    /**
+     * [ResumePlaybackDialogFragment] の選択結果。
+     *
+     * [resume] が false(=「このまま」)のときは何もしない。前回位置の記録もそのまま残す
+     * ——ダイアログは無操作でも5秒で消えるので、記録を消してまで次回の確認を止める必要がない。
+     */
+    fun onResumeChoice(resume: Boolean, dontAskAgain: Boolean) {
+        if (dontAskAgain) {
+            val mode = if (resume) {
+                getString(R.string.pref_val_resume_mode_resume)
+            } else {
+                getString(R.string.pref_val_resume_mode_beginning)
+            }
+            PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .edit().putString(getString(R.string.pref_key_resume_playback_mode), mode).apply()
+            Log.d(TAG, "onResumeChoice: resume mode changed to $mode")
         }
-        seekToResumePosition(savedResumePositionMs)
+        if (resume) seekToResumePosition(savedResumePositionMs)
     }
 
     private fun seekToResumePosition(positionMs: Long) {

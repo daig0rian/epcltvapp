@@ -103,9 +103,13 @@
 
     <!-- レジューム再生 -->
     <string name="resume_playback_setting">レジューム再生</string>
-    <string name="resume_playback_setting_summary">前回停止した位置から再開するか確認する</string>
+    <string name="pref_options_resume_mode_label_ask">毎回確認</string>
+    <string name="pref_options_resume_mode_label_beginning">最初から</string>
+    <string name="pref_options_resume_mode_label_resume">前回停止位置から</string>
     <string name="resume_playback_message">前回再生を停止した位置から再開しますか？</string>
-    <string name="resume_from_beginning">最初から</string>
-    <string name="resume_playback">レジューム再生</string>
+    <string name="resume_keep_playing">このまま</string>
+    <string name="resume_from_last_position">前回停止位置から再生</string>
+    <string name="resume_dont_ask_again">次から表示しない</string>
+    <string name="resume_countdown">%1$d秒後にこのまま再生します</string>
 
 </resources>
