@@ -81,4 +81,7 @@ dependencies {
     // 推移的に持たないため個別に追加が必要。
     implementation "androidx.media3:media3-ui:$media3_version"
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+
+    // 単体テスト。JVM 上で動く (エミュレータ不要)。APK には含まれない。
+    testImplementation 'junit:junit:4.13.2'
 }
