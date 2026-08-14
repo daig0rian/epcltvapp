@@ -434,26 +434,15 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     private fun updateRelatedMovieListRow() {
         Log.d(TAG, "updateRelatedMovieListRow()")
         // 関連動画一覧の生成
-        //  - 現在表示中の動画の名前にregexDelimiterがあれば、その前までの文字列をシリーズ名とみなして一覧を表示
+        //  - 現在表示中の動画の名前からシリーズ名を取り出し、それをキーワードに検索して一覧を表示
         //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
-
-        val regexDelimiter = """(?!^)(([\s　]?([#＃♯第][0-9０-９]{1,3}|[0-9０-９]{1,3}[話回]|\([0-9０-９]{1,3}\)|[「【『<])|\[[新字デ解再無映終多]\]|\(吹\))|([\s　][^0-9０-９\s　]+[\s　]?[0-9０-９]{2,3}))""".toRegex()
-        val regexDeleteStr = """^(\[[新字デ解再無映終多]\])|\(吹\)""".toRegex()
-
 
         // 番組名 originalTitle
         val originalTitle :String =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.name
         else mSelectedRecordedItem!!.name
 
-        // 行頭に[新]などがあった場合は消しておく
-        val programNameStriped = originalTitle.replace(regexDeleteStr,"")
-
-        // 名前にregexDelimiterがあった場合はそこで区切る
-        val programName = programNameStriped.split(regexDelimiter)
-
-        // 区切り文字が見つかった場合、シリーズとして表示する
-        if (programName.size > 1 ) {
-            val searchKeyword = programName[0]
+        val searchKeyword = SeriesTitleExtractor.extract(originalTitle)
+        if (searchKeyword.isNotEmpty()) {
             mAdapter.updateContentsListRow(
                 GetRecordedParam(keyword = searchKeyword),
                 GetRecordedParamV2(keyword = searchKeyword),
