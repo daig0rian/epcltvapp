@@ -119,12 +119,10 @@
     <string name="series_playing_next">次: %1$s</string>
     <string name="series_not_available">シリーズ情報を読み込めていません</string>
     <string name="series_no_next">シリーズの次の番組がありません</string>
-    <string name="series_no_previous">シリーズの前の番組がありません</string>
     <string name="series_no_playable_file">再生できるファイルがありません</string>
     <string name="series_already_playing">この回を再生中です</string>
 
     <!-- 再生コントロールのボタンキャプション（フォーカス中のボタンの下に出る） -->
-    <string name="action_previous_episode">前のエピソード</string>
     <string name="action_restart">最初から再生</string>
     <string name="action_next_episode">次のエピソード</string>
     <string name="action_episode_list">他のエピソード</string>

@@ -40,20 +40,16 @@ class SeriesPlaylist private constructor(
     /** [entries] の中で今見ている回が何番目か。居なければ -1。 */
     fun indexOf(currentId: Long): Int = entries.indexOfFirst { it.id == currentId }
 
-    /** 今見ている回の次に録画されたもの。無ければ null。 */
-    fun next(currentId: Long): SeriesEntry? = neighborOf(currentId, 1)
-
-    /** 今見ている回の1つ前に録画されたもの。無ければ null。 */
-    fun previous(currentId: Long): SeriesEntry? = neighborOf(currentId, -1)
-
     /**
-     * 今見ている回の [offset] 個隣。今見ている回が一覧に居ない場合(検索できる範囲より
-     * 古い回を見ている場合など)は、隣がどれか決められないので null を返す。
+     * 今見ている回の次に録画されたもの。無ければ null。
+     *
+     * 今見ている回が一覧に居ない場合(検索できる範囲より古い回を見ている場合など)も、
+     * どれが次か決められないので null を返す。
      */
-    private fun neighborOf(currentId: Long, offset: Int): SeriesEntry? {
+    fun next(currentId: Long): SeriesEntry? {
         val index = indexOf(currentId)
         if (index < 0) return null
-        return entries.getOrNull(index + offset)
+        return entries.getOrNull(index + 1)
     }
 
     companion object {

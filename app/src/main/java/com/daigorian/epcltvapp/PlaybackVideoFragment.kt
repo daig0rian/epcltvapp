@@ -657,21 +657,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         seekToPosition(0)
     }
 
-    /** 前トラック。シリーズの前の回へ移る。 */
-    fun onSkipPrevious() {
-        val playlist = seriesPlaylist
-        if (playlist == null) {
-            showQuickToast(getString(R.string.series_not_available))
-            return
-        }
-        val previous = playlist.previous(currentProgramId)
-        if (previous == null) {
-            showQuickToast(getString(R.string.series_no_previous))
-            return
-        }
-        playSeriesEntry(previous)
-    }
-
     /**
      * シリーズの別の回へ切り替える。再生位置の記録・プレーヤーの解放・新しい再生の開始は
      * すべて [PlaybackActivity.switchProgram] がフラグメントを作り直すことで行われる
@@ -911,15 +896,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
         episodeListAdded = true
-    }
-
-    /** 「他のエピソード」ボタン。一覧の行へフォーカスを移す。 */
-    fun onShowEpisodeList() {
-        if (!episodeListAdded) {
-            showQuickToast(getString(R.string.series_not_available))
-            return
-        }
-        setSelectedPosition(EPISODE_LIST_ROW_POSITION)
     }
 
     /** エピソード一覧のカードが選ばれたとき。今見ている回なら何もしない。 */
@@ -1775,8 +1751,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val RESUME_END_MARGIN_MS = 15_000L
         // フォーカス中のボタンの下に出すキャプションの文字サイズ。
         private const val ACTION_CAPTION_TEXT_SP = 14f
-        // エピソード一覧の行の位置。0番目は再生コントロール行(グルーが使う)。
-        private const val EPISODE_LIST_ROW_POSITION = 1
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
@@ -1887,10 +1861,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // 分からないため、どのボタンにも読んで分かる名前を付けておくこと。
         private fun label(resId: Int): String = getContext()?.getString(resId) ?: ""
 
-        private val skipPreviousAction = PlaybackControlsRow.SkipPreviousAction(getContext()).apply {
-            label1 = label(R.string.action_previous_episode)
-        }
-
         private val restartAction = Action(
             ACTION_ID_RESTART,
             label(R.string.action_restart),
@@ -1901,13 +1871,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private val skipNextAction = PlaybackControlsRow.SkipNextAction(getContext()).apply {
             label1 = label(R.string.action_next_episode)
         }
-
-        private val episodeListAction = Action(
-            ACTION_ID_EPISODE_LIST,
-            label(R.string.action_episode_list),
-            "",
-            getContext()?.getDrawable(R.drawable.ic_action_episode_list)
-        )
 
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
             setLabels(arrayOf(label(R.string.action_caption_off), label(R.string.action_caption_on)))
@@ -1961,14 +1924,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
             if (hasSeriesNavigation) {
-                // 音楽プレーヤーのような[前][再生/一時停止][次]の並びにはしない。コントロール行の
-                // 初期フォーカスは左端のボタンに当たるため(ControlBar.getDefaultFocusIndex は
-                // PlaybackTransportRowPresenter が setDefaultFocusToMiddle(false) を指定していて
-                // 0番目で固定)、左端は再生/一時停止のまま残したい。
-                primaryActionsAdapter.add(skipPreviousAction)
+                // 「前のエピソード」ボタンは置かない。使う頻度が低く、エピソード一覧を1つ左へ
+                // たどれば同じことができるため。一覧を開くボタンも同様に置かない
+                // (一覧は常に画面下に見えている)。
                 primaryActionsAdapter.add(restartAction)
                 primaryActionsAdapter.add(skipNextAction)
-                primaryActionsAdapter.add(episodeListAction)
             }
             primaryActions = primaryActionsAdapter
             trackActionIndex = primaryActionsAdapter.size()
@@ -2040,17 +2000,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 infoAction -> {
                     playbackFragment?.showCurrentProgramInfo()
                 }
-                skipPreviousAction -> {
-                    playbackFragment?.onSkipPrevious()
-                }
                 restartAction -> {
                     playbackFragment?.onRestart()
                 }
                 skipNextAction -> {
                     playbackFragment?.onSkipNext()
-                }
-                episodeListAction -> {
-                    playbackFragment?.onShowEpisodeList()
                 }
                 else -> super.onActionClicked(action)
             }
@@ -2080,7 +2034,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             private const val ACTION_ID_RECORD = 10003L
             private const val ACTION_ID_INFO = 10004L
             private const val ACTION_ID_RESTART = 10005L
-            private const val ACTION_ID_EPISODE_LIST = 10006L
         }
     }
 }

@@ -34,7 +34,7 @@ class SeriesPlaylistTest {
         SeriesPlaylist.build(programs.map { SeriesEntry.of(it) })
 
     @Test
-    fun `録画された順に並び、前後の回を返す`() {
+    fun `録画された順に並び、次の回を返す`() {
         // わざと録画順と違う順で渡す(検索結果は新しい順に返ってくるため)。
         val playlist = playlistOf(
             program(3, 3_000, "ためしの冒険 #3"),
@@ -44,35 +44,32 @@ class SeriesPlaylistTest {
 
         assertEquals(2L, playlist.next(1)?.id)
         assertEquals(3L, playlist.next(2)?.id)
-        assertEquals(1L, playlist.previous(2)?.id)
-        assertEquals(2L, playlist.previous(3)?.id)
+        assertEquals(listOf(1L, 2L, 3L), playlist.entries.map { it.id })
     }
 
     @Test
-    fun `末尾の次と先頭の前は無い`() {
+    fun `最後に録画された回の次は無い`() {
         val playlist = playlistOf(
             program(1, 1_000, "ためしの冒険 #1"),
             program(2, 2_000, "ためしの冒険 #2"),
         )
 
-        assertNull("最後に録画された回の次は無い", playlist.next(2))
-        assertNull("最初に録画された回の前は無い", playlist.previous(1))
+        assertNull(playlist.next(2))
     }
 
     @Test
-    fun `一覧に居ない回の前後は決められない`() {
+    fun `一覧に居ない回の次は決められない`() {
         val playlist = playlistOf(program(1, 1_000, "ためしの冒険 #1"))
 
         assertNull(playlist.next(99))
-        assertNull(playlist.previous(99))
+        assertEquals(-1, playlist.indexOf(99))
     }
 
     @Test
-    fun `1本だけのシリーズには前も次も無い`() {
+    fun `1本だけのシリーズには次が無い`() {
         val playlist = playlistOf(program(1, 1_000, "ためしの冒険 #1"))
 
         assertNull(playlist.next(1))
-        assertNull(playlist.previous(1))
     }
 
     @Test
