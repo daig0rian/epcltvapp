@@ -147,6 +147,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // 直接ExoPlayerを見ず、Leanbackへ見せているのと同じ値をここから取る。
     private var playerAdapter: PlayerAdapter? = null
 
+    // シリーズ連続再生
+    // 前/次トラックと終端での自動再生を扱うか。録画済みファイルを通して見る再生だけが対象。
+    private var seriesNavigationEnabled = false
+    // 設定「シリーズ自動再生」。OFFなら終端で次へ進まず詳細画面へ戻る。
+    private var seriesAutoPlayEnabled = false
+    // 同じシリーズの録画一覧。取得できるまで(取得に失敗した場合も)null。
+    private var seriesPlaylist: SeriesPlaylist? = null
+    // 今再生している録画のID。シリーズ一覧の中で今どこに居るかを知るために使う。
+    private var currentProgramId = 0L
+    // 今再生しているファイルの表示名。次の回でも同じ画質(プロファイル)を選ぶために使う。
+    private var currentVideoFileName: String? = null
+    // 別の回へ切り替え中。切り替えは今のフラグメントの破棄を伴うので、二重に走らせない。
+    private var switchingProgram = false
+
     // Live viewing state
     private var liveChannelId: Long = -1L
     private var isLiveMpegTs = false
@@ -230,6 +244,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             )
         }
 
+        // シリーズ連続再生: レジューム再生と同じく「録画済みファイルを通して見る」再生だけが
+        // 対象。ライブと HLS 追いかけ再生には「シリーズの次の回」という概念が無い。
+        seriesNavigationEnabled = !isAnyLive && !isHls && (recordedProgram != null || recordedItem != null)
+        if (seriesNavigationEnabled) {
+            seriesAutoPlayEnabled = prefs.getBoolean(getString(R.string.pref_key_series_autoplay), true)
+            currentProgramId = recordedProgram?.id ?: recordedItem!!.id
+            currentVideoFileName = recordedProgram?.encoded?.firstOrNull { it.encodedId == actionId }?.name
+                ?: recordedItem?.videoFiles?.firstOrNull { it.id == actionId }?.name
+            SeriesPlaylist.load(recordedProgram, recordedItem) { playlist ->
+                if (!isAdded) return@load
+                seriesPlaylist = playlist
+                Log.d(TAG, "series playlist loaded: next=${playlist?.next(currentProgramId)?.name}")
+            }
+        }
+
         val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
         val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
             prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
@@ -285,11 +314,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
-                if (playbackState == Player.STATE_ENDED && tsCatchUpActive) {
-                    // EOF手前の安全マージン分だけ戻した位置へ「今と同時刻へのシーク」を行う。
-                    // これがrestartTsPlaybackAt()を経由して開き直しになり、その末尾で
-                    // 収録状況の再確認とシークバー更新が再度走る。
-                    performTsCatchUpSeek()
+                if (playbackState == Player.STATE_ENDED) {
+                    if (tsCatchUpActive) {
+                        // EOF手前の安全マージン分だけ戻した位置へ「今と同時刻へのシーク」を行う。
+                        // これがrestartTsPlaybackAt()を経由して開き直しになり、その末尾で
+                        // 収録状況の再確認とシークバー更新が再度走る。
+                        // (収録中TSの終端は「今のところまで見た」だけで、見終わってはいない)
+                        performTsCatchUpSeek()
+                    } else {
+                        onPlaybackEnded()
+                    }
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -368,7 +402,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mTransportControlGlue = MyPlaybackTransportControlGlue(
             activity, playerAdapter, useNativeTsProcessing, isAnyLive,
             captionEnabled, superimposeEnabled, preferSubAudio,
-            hasSubtitleSource(), hasSubAudio
+            hasSubtitleSource(), hasSubAudio, seriesNavigationEnabled
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
@@ -478,7 +512,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 ResumePlaybackDialogFragment.newInstance(savedResumePositionMs)
                     .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
             getString(R.string.pref_val_resume_mode_resume) ->
-                seekToResumePosition(savedResumePositionMs)
+                seekToPosition(savedResumePositionMs)
             // 「最初から」は記録があっても使わない(=何もしない)。
         }
     }
@@ -500,10 +534,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 .edit().putString(getString(R.string.pref_key_resume_playback_mode), mode).apply()
             Log.d(TAG, "onResumeChoice: resume mode changed to $mode")
         }
-        if (resume) seekToResumePosition(savedResumePositionMs)
+        if (resume) seekToPosition(savedResumePositionMs)
     }
 
-    private fun seekToResumePosition(positionMs: Long) {
+    /**
+     * 指定位置へ飛ぶ。レジューム再生の復帰と、前トラックボタンでの頭出しの共通処理。
+     * TS/非TSで手段が違う(TSは疑似シーク)ため、呼ぶ側はその別を意識しなくてよいようにしている。
+     */
+    private fun seekToPosition(positionMs: Long) {
         if (tsSeekAdapter != null) {
             // 録画オリジナルTSのシークはTsProbeのシーク点テーブル待ち。
             // 完成前ならここでは積んでおき、refreshTailAndSeekBar の完了時に実行する。
@@ -511,7 +549,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 performTsSeek(positionMs)
             } else {
                 pendingTsResumePositionMs = positionMs
-                Log.d(TAG, "seekToResumePosition: deferred until seek table is ready ($positionMs ms)")
+                Log.d(TAG, "seekToPosition: deferred until seek table is ready ($positionMs ms)")
             }
             return
         }
@@ -524,7 +562,106 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             positionMs
         }
         player.seekTo(target)
-        Log.d(TAG, "seekToResumePosition: seekTo($target)")
+        Log.d(TAG, "seekToPosition: seekTo($target)")
+    }
+
+    /**
+     * 再生が終端に達したときの行き先を決める。
+     *
+     * 設定「シリーズ自動再生」がONで次の回があればそれを再生し、そうでなければ再生画面を
+     * 離れる。収録中TSの追いかけ再生はここへ来ない(終端は「今のところまで見た」だけなので、
+     * 呼び出し元で追いかけ用のシークに分岐している)。
+     */
+    private fun onPlaybackEnded() {
+        // ライブ・HLS追いかけ再生は従来どおり終端で何もしない(そのまま画面に留まる)。
+        if (!seriesNavigationEnabled || switchingProgram) return
+        val next = if (seriesAutoPlayEnabled) seriesPlaylist?.next(currentProgramId) else null
+        if (next == null) {
+            Log.d(TAG, "onPlaybackEnded: leaving playback (autoPlay=$seriesAutoPlayEnabled)")
+            (activity as? PlaybackActivity)?.leavePlayback()
+            return
+        }
+        Toast.makeText(
+            requireContext().applicationContext,
+            getString(R.string.series_playing_next, next.name),
+            Toast.LENGTH_SHORT
+        ).show()
+        // 次の回のファイルが消えている等で再生に移れないなら、再生画面に居座らせずに詳細画面へ戻す。
+        if (!playSeriesEntry(next)) {
+            (activity as? PlaybackActivity)?.leavePlayback()
+        }
+    }
+
+    /** 次トラック。シリーズの次の回へ移る。 */
+    fun onSkipNext() {
+        val playlist = seriesPlaylist
+        if (playlist == null) {
+            // 再生開始直後でまだ取得できていない場合と、取得に失敗した場合の両方がここへ来る。
+            showQuickToast(getString(R.string.series_not_available))
+            return
+        }
+        val next = playlist.next(currentProgramId)
+        if (next == null) {
+            showQuickToast(getString(R.string.series_no_next))
+            return
+        }
+        playSeriesEntry(next)
+    }
+
+    /**
+     * 前トラック。音楽プレーヤーと同じ振る舞いにする——冒頭([PREV_TRACK_HEAD_MS]未満)なら
+     * 前の回へ、それ以外は今見ている回の先頭へ戻る。頭出しのほうが使用頻度が高く、
+     * 「1つ前の回へ飛ぶ」だけだと見ている回を頭から見直す手段が無くなるため。
+     */
+    fun onSkipPrevious() {
+        val positionMs = playerAdapter?.currentPosition ?: 0L
+        if (positionMs >= PREV_TRACK_HEAD_MS) {
+            seekToPosition(0)
+            return
+        }
+        val playlist = seriesPlaylist
+        if (playlist == null) {
+            showQuickToast(getString(R.string.series_not_available))
+            return
+        }
+        val previous = playlist.previous(currentProgramId)
+        if (previous == null) {
+            showQuickToast(getString(R.string.series_no_previous))
+            return
+        }
+        playSeriesEntry(previous)
+    }
+
+    /**
+     * シリーズの別の回へ切り替える。再生位置の記録・プレーヤーの解放・新しい再生の開始は
+     * すべて [PlaybackActivity.switchProgram] がフラグメントを作り直すことで行われる
+     * (このフラグメントは破棄され、onPause で今の再生位置が記録される)。
+     *
+     * @return 切り替えに入ったか。再生できるファイルが無ければ false。
+     */
+    private fun playSeriesEntry(entry: SeriesEntry): Boolean {
+        if (switchingProgram) return false
+        val target = entry.resolvePlaybackTarget(isTsContent, currentVideoFileName)
+        if (target == null) {
+            showQuickToast(getString(R.string.series_no_playable_file))
+            return false
+        }
+        val playbackActivity = activity as? PlaybackActivity ?: return false
+        switchingProgram = true
+        Log.d(TAG, "playSeriesEntry: id=${entry.id} actionId=${target.actionId} isTs=${target.isTs}")
+        val extras = Bundle().apply {
+            entry.recordedProgram?.let { putSerializable(DetailsActivity.RECORDEDPROGRAM, it) }
+            entry.recordedItem?.let { putSerializable(DetailsActivity.RECORDEDITEM, it) }
+            putLong(DetailsActivity.ACTIONID, target.actionId)
+            putBoolean(DetailsActivity.IS_TS_CONTENT, target.isTs)
+        }
+        // 切り替えはフラグメントの同期的な破棄(=ExoPlayerの解放)を伴うため、post して
+        // 呼び出し元の処理が終わってから実行する。終端検知(ExoPlayerのリスナーの中)から
+        // 呼ばれることがあり、リスナーの中でそのプレーヤーを解放しに行かないようにする。
+        mainHandler.post {
+            if (isAdded) playbackActivity.switchProgram(extras)
+        }
+        return true
     }
 
     /**
@@ -1395,6 +1532,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val RESUME_MIN_POSITION_MS = 10_000L
         // 終端とみなすマージン。ここまで見ていたら記録を消して次回は最初から再生する。
         private const val RESUME_END_MARGIN_MS = 15_000L
+        // 前トラックボタンが「前の回へ」ではなく「今の回の頭出し」になる境目。
+        // 音楽プレーヤーの一般的な作り(数秒)に倣う。
+        private const val PREV_TRACK_HEAD_MS = 5_000L
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
@@ -1477,7 +1617,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         preferSubAudio: Boolean,
         private var hasSubtitle: Boolean,
         private var hasSubAudio: Boolean,
+        // シリーズの前/次へ移るボタンを置くか。録画再生でのみ true。
+        private val hasSeriesNavigation: Boolean,
     ) : PlaybackTransportControlGlue<PlayerAdapter>(context, impl) {
+
+        private val skipPreviousAction = PlaybackControlsRow.SkipPreviousAction(getContext())
+        private val skipNextAction = PlaybackControlsRow.SkipNextAction(getContext())
 
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
             index = if (captionEnabled) PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
@@ -1529,6 +1674,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
+            if (hasSeriesNavigation) {
+                // 音楽プレーヤーのような[前][再生/一時停止][次]の並びにはしない。コントロール行の
+                // 初期フォーカスは常に**左端**のボタンに当たるため(PlaybackTransportRowPresenter が
+                // ControlBar の setDefaultFocusToMiddle(false) を指定しており、既定のフォーカス位置は
+                // 0番目で固定)、前トラックを左端に置くと、コントロールを開いた直後のOKが
+                // 一時停止ではなく頭出しになってしまう。左端は従来どおり再生/一時停止に残す。
+                primaryActionsAdapter.add(skipPreviousAction)
+                primaryActionsAdapter.add(skipNextAction)
+            }
             primaryActions = primaryActionsAdapter
             trackActionIndex = primaryActionsAdapter.size()
             if (isLive) {
@@ -1611,6 +1765,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
                 infoAction -> {
                     playbackFragment?.showCurrentProgramInfo()
+                }
+                skipPreviousAction -> {
+                    playbackFragment?.onSkipPrevious()
+                }
+                skipNextAction -> {
+                    playbackFragment?.onSkipNext()
                 }
                 else -> super.onActionClicked(action)
             }

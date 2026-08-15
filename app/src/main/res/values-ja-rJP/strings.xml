@@ -113,4 +113,13 @@
     <string name="resume_dont_ask_again">次から表示しない</string>
     <string name="resume_countdown">%1$d秒後にこのまま再生します</string>
 
+    <!-- シリーズ自動再生 -->
+    <string name="series_autoplay_setting">シリーズ自動再生</string>
+    <string name="series_autoplay_summary">再生が終わったら同じシリーズの次の録画を再生します。OFFのときは詳細画面に戻ります。</string>
+    <string name="series_playing_next">次: %1$s</string>
+    <string name="series_not_available">シリーズ情報を読み込めていません</string>
+    <string name="series_no_next">シリーズの次の番組がありません</string>
+    <string name="series_no_previous">シリーズの前の番組がありません</string>
+    <string name="series_no_playable_file">再生できるファイルがありません</string>
+
 </resources>

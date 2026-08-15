@@ -60,6 +60,14 @@
             app:useSimpleSummaryProvider="true"
             />
 
+        <!-- 内蔵プレーヤー選択時のみ表示する (SettingsFragment.updateInternalPlayerOnlyUI) -->
+        <SwitchPreference
+            app:key=         "@string/pref_key_series_autoplay"
+            app:defaultValue="true"
+            app:title=       "@string/series_autoplay_setting"
+            app:summary=     "@string/series_autoplay_summary"
+            />
+
         <PreferenceCategory
             app:title="@string/pref_category_stream_profile">
 

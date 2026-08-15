@@ -221,6 +221,17 @@
     <string name="resume_dont_ask_again">Don\'t show again</string>
     <string name="resume_countdown">Keep playing in %1$d s</string>
 
+    <!-- Series auto play -->
+    <string name="pref_key_series_autoplay" translatable="false">KEY_SERIES_AUTOPLAY</string>
+    <string name="series_autoplay_setting">Auto-play Next in Series</string>
+    <string name="series_autoplay_summary">When playback ends, play the next recording of the same series. When off, return to the details screen.</string>
+    <!-- %1$s is the program name of the next recording -->
+    <string name="series_playing_next">Next: %1$s</string>
+    <string name="series_not_available">Series information is not available</string>
+    <string name="series_no_next">No next program in this series</string>
+    <string name="series_no_previous">No previous program in this series</string>
+    <string name="series_no_playable_file">No playable video file</string>
+
 
 
 </resources>

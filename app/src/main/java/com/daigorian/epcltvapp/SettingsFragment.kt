@@ -121,7 +121,8 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 true
             }
 
-            // レジューム再生は内蔵プレーヤーの機能なので、外部プレーヤー選択時は設定ごと隠す。
+            // レジューム再生・シリーズ自動再生は内蔵プレーヤーの機能なので、
+            // 外部プレーヤー選択時は設定ごと隠す。
             val playerPref = preferenceScreen.findPreference(getText(R.string.pref_key_player)) as ListPreference?
             playerPref?.let { updateInternalPlayerOnlyUI(it.value) }
             playerPref?.onPreferenceChangeListener = Preference.OnPreferenceChangeListener { _, newValue ->
@@ -197,6 +198,8 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
         private fun updateInternalPlayerOnlyUI(playerPkgName: String?) {
             val isInternal = playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)
             preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_resume_playback_mode))
+                ?.isVisible = isInternal
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_series_autoplay))
                 ?.isVisible = isInternal
         }
 
