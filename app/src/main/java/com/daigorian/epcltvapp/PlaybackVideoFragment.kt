@@ -1836,17 +1836,24 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
+    /**
+     * ON/OFFで見た目が変わる2状態のボタン。
+     *
+     * **アイコンは今の状態、ラベルは押すとどうなるかを表す。** ラベルはフォーカス時の
+     * キャプションとして画面に出るので、他のボタン(再生/一時停止など)と同じく
+     * 「押した結果」を書く。したがってOFFのときのラベルには「ONにする」文言が入る。
+     */
     private class TwoStateAction(
         id: Int,
         context: Context?,
         offDrawableRes: Int,
         onDrawableRes: Int,
-        offLabel: String,
-        onLabel: String,
+        labelToTurnOn: String,
+        labelToTurnOff: String,
     ) : PlaybackControlsRow.MultiAction(id) {
         init {
             setDrawables(arrayOf(context?.getDrawable(offDrawableRes), context?.getDrawable(onDrawableRes)))
-            setLabels(arrayOf(offLabel, onLabel))
+            setLabels(arrayOf(labelToTurnOn, labelToTurnOff))
         }
 
         companion object {
@@ -1887,8 +1894,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             label1 = label(R.string.action_next_episode)
         }
 
+        // ラベルは「押した結果」を書く(TwoStateAction 参照)。OFFの位置に「ONにする」文言、
+        // ONの位置に「OFFにする」文言が入るのはそのため。
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
-            setLabels(arrayOf(label(R.string.action_caption_off), label(R.string.action_caption_on)))
+            setLabels(arrayOf(label(R.string.action_caption_on), label(R.string.action_caption_off)))
             index = if (captionEnabled) PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
         }
@@ -1898,19 +1907,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             getContext(),
             R.drawable.ic_action_superimpose_off,
             R.drawable.ic_action_superimpose_on,
-            label(R.string.action_superimpose_off),
-            label(R.string.action_superimpose_on)
+            labelToTurnOn = label(R.string.action_superimpose_on),
+            labelToTurnOff = label(R.string.action_superimpose_off)
         ).apply {
             index = if (superimposeEnabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
 
+        // 音声は ON/OFF ではなく主/副の切り替え。OFF=主音声・ON=副音声として扱う。
         private val audioAction = TwoStateAction(
             ACTION_ID_AUDIO.toInt(),
             getContext(),
             R.drawable.ic_action_audio_track_main,
             R.drawable.ic_action_audio_track_sub,
-            label(R.string.action_audio_main),
-            label(R.string.action_audio_sub)
+            labelToTurnOn = label(R.string.action_audio_sub),
+            labelToTurnOff = label(R.string.action_audio_main)
         ).apply {
             index = if (preferSubAudio) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
