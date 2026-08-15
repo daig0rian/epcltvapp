@@ -180,6 +180,27 @@ $env:PATH = "$env:JAVA_HOME\bin;" + $env:PATH
 adb connect <device-ip>:5555
 ```
 
+### 発生頻度の低い不具合を端末側ログで待ち伏せする
+
+数十分に1回しか起きないような現象は、PC 側で `adb logcat` を張って待つ方式では取り逃す
+(セッション終了・スリープ・LAN 切断で止まる)。端末側で logcat をローテーション付きの
+ファイルに常駐させると、視聴を続けるだけで受け身に採取できる。
+
+```powershell
+# 常駐開始(2MB × 8世代。字幕詰まり調査の例)
+adb -s <serial> shell 'nohup logcat -f /data/local/tmp/substall.log -r 2048 -n 8 -v time SubStallDiag:V PlaybackVideoFragment:V Choreographer:I ExoPlayerImplInternal:W "*:S" >/dev/null 2>&1 &'
+
+# 生存確認
+adb -s <serial> shell 'ls -la /data/local/tmp/substall.log*'
+
+# 回収(PowerShell で実行すること。Git Bash はパスを変換して失敗する)
+adb -s <serial> pull /data/local/tmp/substall.log <保存先>
+```
+
+- 端末を再起動すると止まる。再起動後は張り直すこと
+- `-n` の世代数 × `-r` のサイズが保持量。ログ量を絞れば数日分を保持できる
+- 現象を見たら**再生位置**を控えておくと、ログの `pos=` と直接照合できる
+
 ### Fire TV Stick 世代別 Android API レベル
 
 | デバイス | 発売年 | API |
