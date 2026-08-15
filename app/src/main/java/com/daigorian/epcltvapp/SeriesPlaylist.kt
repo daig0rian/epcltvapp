@@ -34,9 +34,12 @@ import java.text.Normalizer
  * 拾いすぎても実害がないため。
  */
 class SeriesPlaylist private constructor(
-    /** 録画開始時刻の昇順。 */
-    private val entries: List<SeriesEntry>,
+    /** 録画開始時刻の昇順。エピソード一覧の並びもこれをそのまま使う。 */
+    val entries: List<SeriesEntry>,
 ) {
+    /** [entries] の中で今見ている回が何番目か。居なければ -1。 */
+    fun indexOf(currentId: Long): Int = entries.indexOfFirst { it.id == currentId }
+
     /** 今見ている回の次に録画されたもの。無ければ null。 */
     fun next(currentId: Long): SeriesEntry? = neighborOf(currentId, 1)
 
@@ -48,7 +51,7 @@ class SeriesPlaylist private constructor(
      * 古い回を見ている場合など)は、隣がどれか決められないので null を返す。
      */
     private fun neighborOf(currentId: Long, offset: Int): SeriesEntry? {
-        val index = entries.indexOfFirst { it.id == currentId }
+        val index = indexOf(currentId)
         if (index < 0) return null
         return entries.getOrNull(index + offset)
     }

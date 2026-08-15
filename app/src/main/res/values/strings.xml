@@ -231,6 +231,21 @@
     <string name="series_no_next">No next program in this series</string>
     <string name="series_no_previous">No previous program in this series</string>
     <string name="series_no_playable_file">No playable video file</string>
+    <string name="series_already_playing">Currently playing this program</string>
+
+    <!-- Playback control button captions (shown under the focused button) -->
+    <string name="action_previous_episode">Previous Episode</string>
+    <string name="action_restart">Play from Beginning</string>
+    <string name="action_next_episode">Next Episode</string>
+    <string name="action_episode_list">Other Episodes</string>
+    <string name="action_caption_on">Subtitle ON</string>
+    <string name="action_caption_off">Subtitle OFF</string>
+    <string name="action_superimpose_on">Superimpose ON</string>
+    <string name="action_superimpose_off">Superimpose OFF</string>
+    <string name="action_audio_main">Main Audio</string>
+    <string name="action_audio_sub">Sub Audio</string>
+    <string name="action_record">Reserve Recording</string>
+    <string name="action_record_in_progress">Reserving…</string>
 
 
 
