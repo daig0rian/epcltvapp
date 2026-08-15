@@ -113,4 +113,26 @@
     <string name="resume_dont_ask_again">次から表示しない</string>
     <string name="resume_countdown">%1$d秒後にこのまま再生します</string>
 
+    <!-- シリーズ自動再生 -->
+    <string name="series_autoplay_setting">シリーズ自動再生</string>
+    <string name="series_autoplay_summary">再生が終わったら同じシリーズの次の録画を再生します。OFFのときは詳細画面に戻ります。</string>
+    <string name="series_playing_next">次: %1$s</string>
+    <string name="series_not_available">シリーズ情報を読み込めていません</string>
+    <string name="series_no_next">シリーズの次の番組がありません</string>
+    <string name="series_no_playable_file">再生できるファイルがありません</string>
+    <string name="series_already_playing">この回を再生中です</string>
+
+    <!-- 再生コントロールのボタンキャプション（フォーカス中のボタンの下に出る） -->
+    <string name="action_restart">最初から再生</string>
+    <string name="action_next_episode">次のエピソード</string>
+    <string name="action_episode_list">他のエピソード</string>
+    <string name="action_caption_on">字幕 ON</string>
+    <string name="action_caption_off">字幕 OFF</string>
+    <string name="action_superimpose_on">文字スーパー ON</string>
+    <string name="action_superimpose_off">文字スーパー OFF</string>
+    <string name="action_audio_main">主音声</string>
+    <string name="action_audio_sub">副音声</string>
+    <string name="action_record">録画予約</string>
+    <string name="action_record_in_progress">予約中…</string>
+
 </resources>

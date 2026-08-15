@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  最初から再生。中央の再生三角を、上で途切れた円環（やり直しの矢印）が囲む図。
+  円環は外半径8・内半径6で、内側の空きに高さ5の三角が収まる。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- 12時のすぐ左から左回りに一周する円環と、その始点の矢じり -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,4V1L8,5l4,4V6c3.31,0 6,2.69 6,6s-2.69,6 -6,6 -6,-2.69 -6,-6H4c0,4.42 3.58,8 8,8s8,-3.58 8,-8 -3.58,-8 -8,-8z"/>
+    <!-- 中央の再生三角 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10.5,9.5l5,2.5 -5,2.5z"/>
+</vector>

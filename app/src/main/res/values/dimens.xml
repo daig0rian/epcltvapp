@@ -4,4 +4,16 @@
          オーバースキャンで欠ける機種があるため画面端ぎりぎりには置かない。 -->
     <dimen name="resume_dialog_screen_margin">48dp</dimen>
 
+    <!-- 再生コントロールのボタン間隔(Leanback の同名リソースの上書き)。
+
+         ControlBarPresenter はボタンの**中心間の距離**を
+         「この値 + lb_control_icon_width(32dp)」として ControlBar に渡す。ボタンの数によらず
+         一定で、既定の 48dp では中心間 80dp ＝ アイコン(32dp)の間が 48dp 空き、視線の
+         横移動が大きい。32dp にして中心間 64dp まで詰める。
+
+         これ以上詰めるならフォーカス時の円(lb_control_button_diameter = 90dp、半径45dp)が
+         隣のアイコン(中心から48dpの位置に端がある)にかかり始めるため、円の大きさも
+         一緒に見直すこと。 -->
+    <dimen name="lb_playback_controls_child_margin_default">32dp</dimen>
+
 </resources>

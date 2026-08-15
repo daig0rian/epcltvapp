@@ -221,6 +221,31 @@
     <string name="resume_dont_ask_again">Don\'t show again</string>
     <string name="resume_countdown">Keep playing in %1$d s</string>
 
+    <!-- Series auto play -->
+    <string name="pref_key_series_autoplay" translatable="false">KEY_SERIES_AUTOPLAY</string>
+    <string name="series_autoplay_setting">Auto-play Next in Series</string>
+    <string name="series_autoplay_summary">When playback ends, play the next recording of the same series. When off, return to the details screen.</string>
+    <!-- %1$s is the program name of the next recording -->
+    <string name="series_playing_next">Next: %1$s</string>
+    <string name="series_not_available">Series information is not available</string>
+    <string name="series_no_next">No next program in this series</string>
+    <string name="series_no_playable_file">No playable video file</string>
+    <string name="series_already_playing">Currently playing this program</string>
+
+    <!-- Playback control button captions (shown under the focused button) -->
+    <string name="action_restart">Play from Beginning</string>
+    <string name="action_next_episode">Next Episode</string>
+    <!-- Also used as the header of the episode list row -->
+    <string name="action_episode_list">Other Episodes</string>
+    <string name="action_caption_on">Subtitle ON</string>
+    <string name="action_caption_off">Subtitle OFF</string>
+    <string name="action_superimpose_on">Superimpose ON</string>
+    <string name="action_superimpose_off">Superimpose OFF</string>
+    <string name="action_audio_main">Main Audio</string>
+    <string name="action_audio_sub">Sub Audio</string>
+    <string name="action_record">Reserve Recording</string>
+    <string name="action_record_in_progress">Reserving…</string>
+
 
 
 </resources>

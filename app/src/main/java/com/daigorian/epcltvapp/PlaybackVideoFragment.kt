@@ -12,9 +12,13 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.TypefaceSpan
 import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import android.widget.TextView
 import android.widget.Toast
 import androidx.leanback.app.VideoSupportFragment
 import androidx.leanback.app.VideoSupportFragmentGlueHost
@@ -22,7 +26,15 @@ import androidx.leanback.media.PlaybackTransportControlGlue
 import androidx.leanback.media.PlayerAdapter
 import androidx.leanback.widget.Action
 import androidx.leanback.widget.ArrayObjectAdapter
+import androidx.leanback.widget.ClassPresenterSelector
+import androidx.leanback.widget.HeaderItem
+import androidx.leanback.widget.HorizontalGridView
+import androidx.leanback.widget.ListRow
+import androidx.leanback.widget.ListRowPresenter
+import androidx.leanback.widget.ObjectAdapter
+import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.PlaybackControlsRow
+import androidx.leanback.widget.RowPresenter
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -147,6 +159,33 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // 直接ExoPlayerを見ず、Leanbackへ見せているのと同じ値をここから取る。
     private var playerAdapter: PlayerAdapter? = null
 
+    // シリーズ連続再生
+    // 前/次トラックと終端での自動再生を扱うか。録画済みファイルを通して見る再生だけが対象。
+    private var seriesNavigationEnabled = false
+    // 設定「シリーズ自動再生」。OFFなら終端で次へ進まず詳細画面へ戻る。
+    private var seriesAutoPlayEnabled = false
+    // 同じシリーズの録画一覧。取得できるまで(取得に失敗した場合も)null。
+    private var seriesPlaylist: SeriesPlaylist? = null
+    // 今再生している録画のID。シリーズ一覧の中で今どこに居るかを知るために使う。
+    private var currentProgramId = 0L
+    // 今再生しているファイルの表示名。次の回でも同じ画質(プロファイル)を選ぶために使う。
+    private var currentVideoFileName: String? = null
+    // 別の回へ切り替え中。切り替えは今のフラグメントの破棄を伴うので、二重に走らせない。
+    private var switchingProgram = false
+    // コントロール行の下に並べる行(エピソード一覧)。行0はグルーが再生コントロールに使う。
+    private var seriesRowsAdapter: ArrayObjectAdapter? = null
+    // エピソード一覧の行を置いたか。「他のエピソード」ボタンの可否判定に使う。
+    private var episodeListAdded = false
+    // エピソード一覧の横スクロール部分。カーソル位置を戻すために掴んでおく。
+    private var episodeGridView: HorizontalGridView? = null
+
+    // エピソード一覧のカード。一覧画面・詳細画面と同じ見た目にする。
+    private val episodeCardPresenter = OriginalCardPresenter()
+
+    // フォーカス中のボタンのキャプション(ボタン列とシークバーの間に1行だけ挿す)
+    private var actionCaptionView: TextView? = null
+    private var focusChangeListener: ViewTreeObserver.OnGlobalFocusChangeListener? = null
+
     // Live viewing state
     private var liveChannelId: Long = -1L
     private var isLiveMpegTs = false
@@ -230,6 +269,36 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             )
         }
 
+        // シリーズ連続再生: レジューム再生と同じく「録画済みファイルを通して見る」再生だけが
+        // 対象。ライブと HLS 追いかけ再生には「シリーズの次の回」という概念が無い。
+        seriesNavigationEnabled = !isAnyLive && !isHls && (recordedProgram != null || recordedItem != null)
+        if (seriesNavigationEnabled) {
+            seriesAutoPlayEnabled = prefs.getBoolean(getString(R.string.pref_key_series_autoplay), true)
+            currentProgramId = recordedProgram?.id ?: recordedItem!!.id
+            currentVideoFileName = recordedProgram?.encoded?.firstOrNull { it.encodedId == actionId }?.name
+                ?: recordedItem?.videoFiles?.firstOrNull { it.id == actionId }?.name
+            // エピソード一覧をコントロール行の下に置けるよう、行の入れ物を自前で用意する。
+            // グルーがこの後 host に繋がるときに再生コントロール行が0番目へ入るので、
+            // ここでは空のまま渡しておく(PlaybackSupportFragment.setPlaybackRow が
+            // 0番目を埋める仕様)。
+            val rows = ArrayObjectAdapter(
+                ClassPresenterSelector().apply {
+                    addClassPresenter(ListRow::class.java, EpisodeListRowPresenter())
+                }
+            )
+            seriesRowsAdapter = rows
+            adapter = rows
+            setOnItemViewClickedListener(OnItemViewClickedListener { _, item, _, _ ->
+                onEpisodeCardClicked(item)
+            })
+            SeriesPlaylist.load(recordedProgram, recordedItem) { playlist ->
+                if (!isAdded) return@load
+                seriesPlaylist = playlist
+                Log.d(TAG, "series playlist loaded: next=${playlist?.next(currentProgramId)?.name}")
+                if (playlist != null) buildEpisodeListRow(playlist)
+            }
+        }
+
         val liveM2tsProfiles = EpgStationV2.streamConfig?.live?.ts?.m2ts.orEmpty()
         val liveMpegTsMode = EpgStationV2.resolveM2tsProfileIndex(
             prefs.getString(getString(R.string.pref_key_live_mpegts_profile), ""),
@@ -285,11 +354,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
-                if (playbackState == Player.STATE_ENDED && tsCatchUpActive) {
-                    // EOF手前の安全マージン分だけ戻した位置へ「今と同時刻へのシーク」を行う。
-                    // これがrestartTsPlaybackAt()を経由して開き直しになり、その末尾で
-                    // 収録状況の再確認とシークバー更新が再度走る。
-                    performTsCatchUpSeek()
+                if (playbackState == Player.STATE_ENDED) {
+                    if (tsCatchUpActive) {
+                        // EOF手前の安全マージン分だけ戻した位置へ「今と同時刻へのシーク」を行う。
+                        // これがrestartTsPlaybackAt()を経由して開き直しになり、その末尾で
+                        // 収録状況の再確認とシークバー更新が再度走る。
+                        // (収録中TSの終端は「今のところまで見た」だけで、見終わってはいない)
+                        performTsCatchUpSeek()
+                    } else {
+                        onPlaybackEnded()
+                    }
                 }
             }
             override fun onPlayerError(error: PlaybackException) {
@@ -368,7 +442,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         mTransportControlGlue = MyPlaybackTransportControlGlue(
             activity, playerAdapter, useNativeTsProcessing, isAnyLive,
             captionEnabled, superimposeEnabled, preferSubAudio,
-            hasSubtitleSource(), hasSubAudio
+            hasSubtitleSource(), hasSubAudio, seriesNavigationEnabled
         )
         mTransportControlGlue.host = glueHost
         mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
@@ -469,6 +543,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isLiveMpegTs) {
             hideSeekBar(view)
         }
+        setupTransportRowWhenReady(view)
+        focusChangeListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
+            updateActionCaption(newFocus)
+        }
+        view.viewTreeObserver.addOnGlobalFocusChangeListener(focusChangeListener)
         // 再生成時は DialogFragment 自身が復元されるため出し直さない。
         if (savedResumePositionMs <= 0 || savedInstanceState != null) return
         when (resumeMode) {
@@ -478,7 +557,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 ResumePlaybackDialogFragment.newInstance(savedResumePositionMs)
                     .show(childFragmentManager, ResumePlaybackDialogFragment.TAG)
             getString(R.string.pref_val_resume_mode_resume) ->
-                seekToResumePosition(savedResumePositionMs)
+                seekToPosition(savedResumePositionMs)
             // 「最初から」は記録があっても使わない(=何もしない)。
         }
     }
@@ -500,10 +579,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 .edit().putString(getString(R.string.pref_key_resume_playback_mode), mode).apply()
             Log.d(TAG, "onResumeChoice: resume mode changed to $mode")
         }
-        if (resume) seekToResumePosition(savedResumePositionMs)
+        if (resume) seekToPosition(savedResumePositionMs)
     }
 
-    private fun seekToResumePosition(positionMs: Long) {
+    /**
+     * 指定位置へ飛ぶ。レジューム再生の復帰と、前トラックボタンでの頭出しの共通処理。
+     * TS/非TSで手段が違う(TSは疑似シーク)ため、呼ぶ側はその別を意識しなくてよいようにしている。
+     */
+    private fun seekToPosition(positionMs: Long) {
         if (tsSeekAdapter != null) {
             // 録画オリジナルTSのシークはTsProbeのシーク点テーブル待ち。
             // 完成前ならここでは積んでおき、refreshTailAndSeekBar の完了時に実行する。
@@ -511,7 +594,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 performTsSeek(positionMs)
             } else {
                 pendingTsResumePositionMs = positionMs
-                Log.d(TAG, "seekToResumePosition: deferred until seek table is ready ($positionMs ms)")
+                Log.d(TAG, "seekToPosition: deferred until seek table is ready ($positionMs ms)")
             }
             return
         }
@@ -524,7 +607,87 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             positionMs
         }
         player.seekTo(target)
-        Log.d(TAG, "seekToResumePosition: seekTo($target)")
+        Log.d(TAG, "seekToPosition: seekTo($target)")
+    }
+
+    /**
+     * 再生が終端に達したときの行き先を決める。
+     *
+     * 設定「シリーズ自動再生」がONで次の回があればそれを再生し、そうでなければ再生画面を
+     * 離れる。収録中TSの追いかけ再生はここへ来ない(終端は「今のところまで見た」だけなので、
+     * 呼び出し元で追いかけ用のシークに分岐している)。
+     */
+    private fun onPlaybackEnded() {
+        // ライブ・HLS追いかけ再生は従来どおり終端で何もしない(そのまま画面に留まる)。
+        if (!seriesNavigationEnabled || switchingProgram) return
+        val next = if (seriesAutoPlayEnabled) seriesPlaylist?.next(currentProgramId) else null
+        if (next == null) {
+            Log.d(TAG, "onPlaybackEnded: leaving playback (autoPlay=$seriesAutoPlayEnabled)")
+            (activity as? PlaybackActivity)?.leavePlayback()
+            return
+        }
+        Toast.makeText(
+            requireContext().applicationContext,
+            getString(R.string.series_playing_next, next.name),
+            Toast.LENGTH_SHORT
+        ).show()
+        // 次の回のファイルが消えている等で再生に移れないなら、再生画面に居座らせずに詳細画面へ戻す。
+        if (!playSeriesEntry(next)) {
+            (activity as? PlaybackActivity)?.leavePlayback()
+        }
+    }
+
+    /** 次トラック。シリーズの次の回へ移る。 */
+    fun onSkipNext() {
+        val playlist = seriesPlaylist
+        if (playlist == null) {
+            // 再生開始直後でまだ取得できていない場合と、取得に失敗した場合の両方がここへ来る。
+            showQuickToast(getString(R.string.series_not_available))
+            return
+        }
+        val next = playlist.next(currentProgramId)
+        if (next == null) {
+            showQuickToast(getString(R.string.series_no_next))
+            return
+        }
+        playSeriesEntry(next)
+    }
+
+    /** 「最初から再生」。今見ている回の先頭へ戻る。 */
+    fun onRestart() {
+        seekToPosition(0)
+    }
+
+    /**
+     * シリーズの別の回へ切り替える。再生位置の記録・プレーヤーの解放・新しい再生の開始は
+     * すべて [PlaybackActivity.switchProgram] がフラグメントを作り直すことで行われる
+     * (このフラグメントは破棄され、onPause で今の再生位置が記録される)。
+     *
+     * @return 切り替えに入ったか。再生できるファイルが無ければ false。
+     */
+    private fun playSeriesEntry(entry: SeriesEntry): Boolean {
+        if (switchingProgram) return false
+        val target = entry.resolvePlaybackTarget(isTsContent, currentVideoFileName)
+        if (target == null) {
+            showQuickToast(getString(R.string.series_no_playable_file))
+            return false
+        }
+        val playbackActivity = activity as? PlaybackActivity ?: return false
+        switchingProgram = true
+        Log.d(TAG, "playSeriesEntry: id=${entry.id} actionId=${target.actionId} isTs=${target.isTs}")
+        val extras = Bundle().apply {
+            entry.recordedProgram?.let { putSerializable(DetailsActivity.RECORDEDPROGRAM, it) }
+            entry.recordedItem?.let { putSerializable(DetailsActivity.RECORDEDITEM, it) }
+            putLong(DetailsActivity.ACTIONID, target.actionId)
+            putBoolean(DetailsActivity.IS_TS_CONTENT, target.isTs)
+        }
+        // 切り替えはフラグメントの同期的な破棄(=ExoPlayerの解放)を伴うため、post して
+        // 呼び出し元の処理が終わってから実行する。終端検知(ExoPlayerのリスナーの中)から
+        // 呼ばれることがあり、リスナーの中でそのプレーヤーを解放しに行かないようにする。
+        mainHandler.post {
+            if (isAdded) playbackActivity.switchProgram(extras)
+        }
+        return true
     }
 
     /**
@@ -562,6 +725,205 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // EPGStation v2: actionId は videoFile の ID
         itemId != null -> "v2:$itemId:$actionId"
         else -> null
+    }
+
+    /**
+     * コントロール行の組み替えを、Leanback がそのビューを作った後に行う。
+     * 行のビューは RecyclerView 経由で遅れて現れるため、できるまでレイアウトを待つ。
+     */
+    private fun setupTransportRowWhenReady(root: View) {
+        if (setupTransportRow(root)) return
+        root.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
+            override fun onGlobalLayout() {
+                if (setupTransportRow(root)) {
+                    root.viewTreeObserver.removeOnGlobalLayoutListener(this)
+                }
+            }
+        })
+    }
+
+    /**
+     * コントロール行を **[シークバー][時刻][ボタン列][キャプション]** の順に組み替え、
+     * 最後にキャプション用の1行を足す。
+     *
+     * ## 並べ替えの理由
+     *
+     * Leanback の既定は[ボタン列][シークバー][時刻]だが、**フォーカスは必ずシークバーに乗る**
+     * ([androidx.leanback.widget.PlaybackTransportRowView] の onRequestFocusInDescendants が
+     * `playback_progress` を優先する)。これ自体は正しい——コントロールが閉じている状態で
+     * 左右キーを押したときに期待される動作は常に早送り/巻き戻しだからである。
+     *
+     * 問題は見た目との食い違いのほうで、下からせり上がってくるコントロールの一番上に
+     * ボタン列があると、そこにフォーカスがあるつもりで操作を始めてしまう。並びを実際の
+     * フォーカス位置に合わせ、一番上をシークバーにする。
+     *
+     * ## キャプション行
+     *
+     * アイコンだけでは何のボタンか分からないため、フォーカス中のボタンの真下にその名前を出す
+     * ([updateActionCaption])。全ボタンに常時出すと、キャプションが重ならないようにボタンの
+     * 間隔を大きく空けねばならず、ボタン列が間延びしてしまうのでフォーカス中の1つだけにする。
+     * 高さは文字の有無によらず常に1行分を確保しておく(出るたびに行の高さが変わらないように)。
+     *
+     * @return 組み替えられたか。コントロール行のビューがまだ無ければ false。
+     */
+    private fun setupTransportRow(root: View): Boolean {
+        if (actionCaptionView != null) return true
+        val transportRow = root.findViewById<ViewGroup>(androidx.leanback.R.id.transport_row) ?: return false
+        val controlsDock = transportRow.findViewById<View>(androidx.leanback.R.id.controls_dock) ?: return false
+        val seekBar = transportRow.findViewById<View>(androidx.leanback.R.id.playback_progress) ?: return false
+        // 時刻表示(再生位置/総時間)の行。idを持たないので、中の時刻から親をたどる。
+        val timeRow = transportRow.findViewById<View>(androidx.leanback.R.id.current_time)?.parent as? View
+            ?: return false
+
+        // 並べ替えの間だけフォーカスが外れる。removeView したビューがフォーカスを持っていると
+        // それが落ち、Android が別の可フォーカスビュー(=ボタン列の先頭)へ振り直してしまうため、
+        // 元々この行にフォーカスがあったなら最後にシークバーへ戻す。
+        val hadFocus = transportRow.hasFocus()
+        transportRow.removeView(seekBar)
+        transportRow.addView(seekBar, 0)
+        transportRow.removeView(timeRow)
+        transportRow.addView(timeRow, 1)
+        if (hadFocus) seekBar.requestFocus()
+
+        val caption = TextView(requireContext()).apply {
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            )
+            gravity = Gravity.CENTER_HORIZONTAL
+            minLines = 1
+            maxLines = 1
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, ACTION_CAPTION_TEXT_SP)
+        }
+        transportRow.addView(caption, transportRow.indexOfChild(controlsDock) + 1)
+        actionCaptionView = caption
+        return true
+    }
+
+    /**
+     * フォーカスが移るたびに呼ばれ、コントロールのボタンなら、そのボタンの真下に名前を出す。
+     *
+     * ボタンに付いている名前は Leanback が [Action] のラベルから contentDescription として
+     * 設定してくれるので、それをそのまま読む。キャプション行は幅いっぱいの中央寄せなので、
+     * ボタンの中心とキャプションの中心の差だけ横へずらせば真下に来る。
+     */
+    private fun updateActionCaption(focused: View?) {
+        val caption = actionCaptionView ?: return
+        val row = caption.parent as? ViewGroup ?: return
+        val button = focused?.takeIf { it.id == androidx.leanback.R.id.button }
+        val label = button?.contentDescription
+        if (button == null || label.isNullOrEmpty()) {
+            caption.text = ""
+            return
+        }
+        caption.text = label
+        val rowLocation = IntArray(2)
+        row.getLocationInWindow(rowLocation)
+        val buttonLocation = IntArray(2)
+        button.getLocationInWindow(buttonLocation)
+        val buttonCenterInRow = buttonLocation[0] - rowLocation[0] + button.width / 2f
+        val captionCenterInRow = caption.left + caption.width / 2f
+        caption.translationX = buttonCenterInRow - captionCenterInRow
+    }
+
+    /** ボタンの状態が変わったとき、表示中のキャプションを新しいラベルに差し替える。 */
+    fun updateActionCaptionText(label: CharSequence?) {
+        actionCaptionView?.text = label ?: ""
+    }
+
+    /**
+     * コントロールバーの何番目のボタンにフォーカスがあるか。ボタンに無ければ null。
+     *
+     * ボタンのビューの並びは primary actions の並びと1対1なので、この番号でアクションを引ける
+     * ([MyPlaybackTransportControlGlue.refreshFocusedActionCaption])。
+     */
+    fun focusedControlButtonIndex(): Int? {
+        val root = view ?: return null
+        val controlsDock = root.findViewById<ViewGroup>(androidx.leanback.R.id.controls_dock) ?: return null
+        val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return null
+        val focusedChild = controlBar.focusedChild ?: return null
+        return controlBar.indexOfChild(focusedChild).takeIf { it >= 0 }
+    }
+
+    /**
+     * コントロールを開くたびに、フォーカスをシークバーへ戻す。
+     *
+     * **閉じる直前にどこを触っていたかは引き継がない。** Leanback は最後にフォーカスがあった
+     * 場所を覚えていて、そこへ戻そうとする(コントロール行の
+     * [androidx.leanback.widget.PlaybackTransportRowView] は findFocus() を優先し、行の選択位置も
+     * 縦のグリッドが保持している)。そのため「前回エピソード一覧を見ていた」といった直前の状況で
+     * 開き直した直後の左右キーの意味が変わってしまう。閉じている状態からの左右キーは常に
+     * 早送り/巻き戻しであってほしいので、開くたびに毎回シークバーへ揃える。
+     *
+     * シークバーが無い場合(mpegts直送では隠している)だけ、先頭のボタンへ落とす。
+     */
+    override fun showControlsOverlay(runAnimation: Boolean) {
+        val wasVisible = isControlsOverlayVisible
+        super.showControlsOverlay(runAnimation)
+        if (!wasVisible) view?.post { focusSeekBar() }
+    }
+
+    private fun focusSeekBar() {
+        val root = view ?: return
+        // エピソード一覧まで降りていた場合に備え、行の選択もコントロール行へ戻す。
+        setSelectedPosition(0)
+        val seekBar = root.findViewById<View>(androidx.leanback.R.id.playback_progress)
+        if (seekBar == null || seekBar.visibility != View.VISIBLE || !seekBar.requestFocus()) {
+            focusFirstControlButton()
+        }
+        // 一覧のカーソルも戻す。フォーカスを移した後に呼ぶこと——一覧にフォーカスが残っている間に
+        // 位置を動かすと、その移動先へフォーカスが付いていってしまう。
+        moveEpisodeListCursorToCurrent()
+    }
+
+    /**
+     * エピソード一覧のカーソルを今見ている回へ戻す。
+     *
+     * 一覧の中で選んでいた位置は覚えない。コントロールを開くたびに起点が今見ている回で
+     * あってほしく、前に眺めていた回にカーソルが残っているのは直観に反するため。
+     */
+    private fun moveEpisodeListCursorToCurrent() {
+        val index = seriesPlaylist?.indexOf(currentProgramId) ?: return
+        if (index < 0) return
+        episodeGridView?.selectedPosition = index
+    }
+
+    private fun focusFirstControlButton() {
+        val root = view ?: return
+        val controlsDock = root.findViewById<ViewGroup>(androidx.leanback.R.id.controls_dock) ?: return
+        val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return
+        val firstButton = controlBar.getChildAt(0)?.findViewById<View>(androidx.leanback.R.id.button) ?: return
+        firstButton.requestFocus()
+    }
+
+    /**
+     * エピソード一覧の行をコントロール行の下に置く。
+     * 自分しか居ないシリーズでは一覧にする意味がないので置かない。
+     */
+    private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
+        val rows = seriesRowsAdapter ?: return
+        if (episodeListAdded || playlist.entries.size < 2) return
+        val cards = ArrayObjectAdapter(episodeCardPresenter)
+        playlist.entries.forEach { entry ->
+            val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
+            cards.add(card)
+        }
+        rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
+        episodeListAdded = true
+    }
+
+    /** エピソード一覧のカードが選ばれたとき。今見ている回なら何もしない。 */
+    private fun onEpisodeCardClicked(item: Any?) {
+        val entry = seriesPlaylist?.entries?.firstOrNull {
+            it.recordedProgram === item || it.recordedItem === item
+        } ?: return
+        if (entry.id == currentProgramId) {
+            showQuickToast(getString(R.string.series_already_playing))
+            setSelectedPosition(0)
+            return
+        }
+        playSeriesEntry(entry)
     }
 
     /**
@@ -1338,6 +1700,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     override fun onDestroyView() {
+        // ビューが生きているうちに外す(ViewTreeObserverは破棄後に触ると例外を投げる)。
+        focusChangeListener?.let { listener ->
+            view?.viewTreeObserver?.takeIf { it.isAlive }?.removeOnGlobalFocusChangeListener(listener)
+        }
+        focusChangeListener = null
+        actionCaptionView = null
+        episodeGridView = null
         super.onDestroyView()
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hlsStreamId?.let { id ->
@@ -1395,6 +1764,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val RESUME_MIN_POSITION_MS = 10_000L
         // 終端とみなすマージン。ここまで見ていたら記録を消して次回は最初から再生する。
         private const val RESUME_END_MARGIN_MS = 15_000L
+        // フォーカス中のボタンの下に出すキャプションの文字サイズ。
+        private const val ACTION_CAPTION_TEXT_SP = 14f
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
@@ -1446,17 +1817,43 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
+    /**
+     * エピソード一覧の行。横スクロール部分を掴んでおき、カーソルを今見ている回へ戻せるようにする
+     * ([moveEpisodeListCursorToCurrent])。
+     */
+    private inner class EpisodeListRowPresenter : ListRowPresenter() {
+        override fun onBindRowViewHolder(holder: RowPresenter.ViewHolder, item: Any?) {
+            super.onBindRowViewHolder(holder, item)
+            episodeGridView = (holder as ListRowPresenter.ViewHolder).gridView
+            moveEpisodeListCursorToCurrent()
+        }
+
+        override fun onUnbindRowViewHolder(holder: RowPresenter.ViewHolder) {
+            if (episodeGridView === (holder as ListRowPresenter.ViewHolder).gridView) {
+                episodeGridView = null
+            }
+            super.onUnbindRowViewHolder(holder)
+        }
+    }
+
+    /**
+     * ON/OFFで見た目が変わる2状態のボタン。
+     *
+     * **アイコンは今の状態、ラベルは押すとどうなるかを表す。** ラベルはフォーカス時の
+     * キャプションとして画面に出るので、他のボタン(再生/一時停止など)と同じく
+     * 「押した結果」を書く。したがってOFFのときのラベルには「ONにする」文言が入る。
+     */
     private class TwoStateAction(
         id: Int,
         context: Context?,
         offDrawableRes: Int,
         onDrawableRes: Int,
-        offLabel: String,
-        onLabel: String,
+        labelToTurnOn: String,
+        labelToTurnOff: String,
     ) : PlaybackControlsRow.MultiAction(id) {
         init {
             setDrawables(arrayOf(context?.getDrawable(offDrawableRes), context?.getDrawable(onDrawableRes)))
-            setLabels(arrayOf(offLabel, onLabel))
+            setLabels(arrayOf(labelToTurnOn, labelToTurnOff))
         }
 
         companion object {
@@ -1477,9 +1874,30 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         preferSubAudio: Boolean,
         private var hasSubtitle: Boolean,
         private var hasSubAudio: Boolean,
+        // シリーズの前/次へ移るボタンを置くか。録画再生でのみ true。
+        private val hasSeriesNavigation: Boolean,
     ) : PlaybackTransportControlGlue<PlayerAdapter>(context, impl) {
 
+        // ボタンのラベルはフォーカス時のキャプションとして画面に出る
+        // ([PlaybackVideoFragment.updateActionCaption])。アイコンだけでは何のボタンか
+        // 分からないため、どのボタンにも読んで分かる名前を付けておくこと。
+        private fun label(resId: Int): String = getContext()?.getString(resId) ?: ""
+
+        private val restartAction = Action(
+            ACTION_ID_RESTART,
+            label(R.string.action_restart),
+            "",
+            getContext()?.getDrawable(R.drawable.ic_action_restart)
+        )
+
+        private val skipNextAction = PlaybackControlsRow.SkipNextAction(getContext()).apply {
+            label1 = label(R.string.action_next_episode)
+        }
+
+        // ラベルは「押した結果」を書く(TwoStateAction 参照)。OFFの位置に「ONにする」文言、
+        // ONの位置に「OFFにする」文言が入るのはそのため。
         private val ccAction = PlaybackControlsRow.ClosedCaptioningAction(getContext()).apply {
+            setLabels(arrayOf(label(R.string.action_caption_on), label(R.string.action_caption_off)))
             index = if (captionEnabled) PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
         }
@@ -1489,26 +1907,27 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             getContext(),
             R.drawable.ic_action_superimpose_off,
             R.drawable.ic_action_superimpose_on,
-            "SI:OFF",
-            "SI:ON"
+            labelToTurnOn = label(R.string.action_superimpose_on),
+            labelToTurnOff = label(R.string.action_superimpose_off)
         ).apply {
             index = if (superimposeEnabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
 
+        // 音声は ON/OFF ではなく主/副の切り替え。OFF=主音声・ON=副音声として扱う。
         private val audioAction = TwoStateAction(
             ACTION_ID_AUDIO.toInt(),
             getContext(),
             R.drawable.ic_action_audio_track_main,
             R.drawable.ic_action_audio_track_sub,
-            "Main",
-            "Sub"
+            labelToTurnOn = label(R.string.action_audio_sub),
+            labelToTurnOff = label(R.string.action_audio_main)
         ).apply {
             index = if (preferSubAudio) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
 
         private val recordAction = Action(
             ACTION_ID_RECORD,
-            "REC",
+            label(R.string.action_record),
             "",
             getContext()?.getDrawable(R.drawable.ic_sidebar_rec)
         )
@@ -1522,6 +1941,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         private var primaryActions: ArrayObjectAdapter? = null
 
+        /**
+         * ボタンの見た目が変わったらキャプションも今のラベルに合わせ直すための監視。
+         *
+         * 再生/一時停止だけは Leanback 自身がアイコンとラベルを差し替える
+         * ([PlaybackTransportControlGlue] の updatePlaybackState)ため、こちらの
+         * [onActionClicked] を通らない。リモコンのメディアキーやバッファリングでの
+         * 状態変化も含めて拾えるよう、押した経路ではなくアダプタの通知を見る。
+         */
+        private val actionChangeObserver = object : ObjectAdapter.DataObserver() {
+            override fun onChanged() = refreshFocusedActionCaption()
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) =
+                refreshFocusedActionCaption()
+        }
+
         // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
         // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
@@ -1529,6 +1962,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
+            if (hasSeriesNavigation) {
+                // 「前のエピソード」ボタンは置かない。使う頻度が低く、エピソード一覧を1つ左へ
+                // たどれば同じことができるため。一覧を開くボタンも同様に置かない
+                // (一覧は常に画面下に見えている)。
+                primaryActionsAdapter.add(restartAction)
+                primaryActionsAdapter.add(skipNextAction)
+            }
             primaryActions = primaryActionsAdapter
             trackActionIndex = primaryActionsAdapter.size()
             if (isLive) {
@@ -1536,6 +1976,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 primaryActionsAdapter.add(infoAction)
             }
             refreshTrackActions()
+            primaryActionsAdapter.registerObserver(actionChangeObserver)
+        }
+
+        /** フォーカス中のボタンのキャプションを、そのアクションの今のラベルに合わせ直す。 */
+        private fun refreshFocusedActionCaption() {
+            val adapter = primaryActions ?: return
+            val fragment = playbackFragment() ?: return
+            val index = fragment.focusedControlButtonIndex() ?: return
+            if (index >= adapter.size()) return
+            val action = adapter.get(index) as? Action ?: return
+            fragment.updateActionCaptionText(action.label1)
         }
 
         /** 検出したトラック構成に合わせてCC/音声ボタンを出し入れする。 */
@@ -1558,17 +2009,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             if (hasSubAudio) adapter.add(idx, audioAction)
         }
 
-        override fun onActionClicked(action: Action?) {
-            val fragment = (host as? VideoSupportFragmentGlueHost)?.let {
-                // Access the fragment through the context
-                null
-            }
-            // Get the PlaybackVideoFragment from the activity
-            val playbackFragment = (context as? androidx.fragment.app.FragmentActivity)
+        /** 再生中のフラグメント。グルーからは host を辿れないので activity から探す。 */
+        private fun playbackFragment(): PlaybackVideoFragment? =
+            (context as? androidx.fragment.app.FragmentActivity)
                 ?.supportFragmentManager
                 ?.fragments
                 ?.filterIsInstance<PlaybackVideoFragment>()
                 ?.firstOrNull()
+
+        override fun onActionClicked(action: Action?) {
+            val playbackFragment = playbackFragment()
 
             when (action) {
                 ccAction -> {
@@ -1576,52 +2026,54 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     ccAction.index = if (ccAction.index == PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON)
                         PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
-                    primaryActions?.let { adapter ->
-                        val idx = adapter.indexOf(ccAction)
-                        if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-                    }
+                    notifyActionChanged(ccAction)
                 }
                 superimposeAction -> {
                     playbackFragment?.toggleSuperimpose()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val enabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
                     superimposeAction.index = if (enabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
-                    primaryActions?.let { adapter ->
-                        val idx = adapter.indexOf(superimposeAction)
-                        if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-                    }
+                    notifyActionChanged(superimposeAction)
                 }
                 audioAction -> {
                     playbackFragment?.toggleAudioTrack()
                     val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
                     val isSub = prefs.getBoolean(PREF_SUB_AUDIO, false)
                     audioAction.index = if (isSub) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
-                    primaryActions?.let { adapter ->
-                        val idx = adapter.indexOf(audioAction)
-                        if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-                    }
+                    notifyActionChanged(audioAction)
                 }
                 recordAction -> {
-                    recordAction.label1 = "REC..."
-                    primaryActions?.let { adapter ->
-                        val idx = adapter.indexOf(recordAction)
-                        if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
-                    }
+                    recordAction.label1 = label(R.string.action_record_in_progress)
+                    notifyActionChanged(recordAction)
                     playbackFragment?.startRecordingCurrentProgram()
                 }
                 infoAction -> {
                     playbackFragment?.showCurrentProgramInfo()
                 }
+                restartAction -> {
+                    playbackFragment?.onRestart()
+                }
+                skipNextAction -> {
+                    playbackFragment?.onSkipNext()
+                }
                 else -> super.onActionClicked(action)
             }
         }
 
-        fun resetRecordActionLabel() {
-            recordAction.label1 = "REC"
+        /**
+         * ボタンの見た目(アイコン・ラベル)を更新し直す。
+         * キャプションの追従は [actionChangeObserver] がこの通知を拾って行う。
+         */
+        private fun notifyActionChanged(action: Action) {
             primaryActions?.let { adapter ->
-                val idx = adapter.indexOf(recordAction)
+                val idx = adapter.indexOf(action)
                 if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
             }
+        }
+
+        fun resetRecordActionLabel() {
+            recordAction.label1 = label(R.string.action_record)
+            notifyActionChanged(recordAction)
         }
 
         companion object {
@@ -1629,6 +2081,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             private const val ACTION_ID_AUDIO = 10002L
             private const val ACTION_ID_RECORD = 10003L
             private const val ACTION_ID_INFO = 10004L
+            private const val ACTION_ID_RESTART = 10005L
         }
     }
 }
