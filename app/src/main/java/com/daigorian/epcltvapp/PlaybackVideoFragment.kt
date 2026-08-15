@@ -541,7 +541,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isLiveMpegTs) {
             hideSeekBar(view)
         }
-        installActionCaptionWhenReady(view)
+        setupTransportRowWhenReady(view)
         focusChangeListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
             updateActionCaption(newFocus)
         }
@@ -741,14 +741,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * ボタンのキャプション行を、Leanback がコントロール行のビューを作った後に挿し込む。
+     * コントロール行の組み替えを、Leanback がそのビューを作った後に行う。
      * 行のビューは RecyclerView 経由で遅れて現れるため、できるまでレイアウトを待つ。
      */
-    private fun installActionCaptionWhenReady(root: View) {
-        if (installActionCaption(root)) return
+    private fun setupTransportRowWhenReady(root: View) {
+        if (setupTransportRow(root)) return
         root.viewTreeObserver.addOnGlobalLayoutListener(object : ViewTreeObserver.OnGlobalLayoutListener {
             override fun onGlobalLayout() {
-                if (installActionCaption(root)) {
+                if (setupTransportRow(root)) {
                     root.viewTreeObserver.removeOnGlobalLayoutListener(this)
                 }
             }
@@ -756,23 +756,43 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * ボタン列とシークバーの間にキャプション用の1行を挿す。
+     * コントロール行を **[シークバー][時刻][ボタン列][キャプション]** の順に組み替え、
+     * 最後にキャプション用の1行を足す。
+     *
+     * ## 並べ替えの理由
+     *
+     * Leanback の既定は[ボタン列][シークバー][時刻]だが、**フォーカスは必ずシークバーに乗る**
+     * ([androidx.leanback.widget.PlaybackTransportRowView] の onRequestFocusInDescendants が
+     * `playback_progress` を優先する)。これ自体は正しい——コントロールが閉じている状態で
+     * 左右キーを押したときに期待される動作は常に早送り/巻き戻しだからである。
+     *
+     * 問題は見た目との食い違いのほうで、下からせり上がってくるコントロールの一番上に
+     * ボタン列があると、そこにフォーカスがあるつもりで操作を始めてしまう。並びを実際の
+     * フォーカス位置に合わせ、一番上をシークバーにする。
+     *
+     * ## キャプション行
      *
      * アイコンだけでは何のボタンか分からないため、フォーカス中のボタンの真下にその名前を出す
      * ([updateActionCaption])。全ボタンに常時出すと、キャプションが重ならないようにボタンの
      * 間隔を大きく空けねばならず、ボタン列が間延びしてしまうのでフォーカス中の1つだけにする。
+     * 高さは文字の有無によらず常に1行分を確保しておく(出るたびに行の高さが変わらないように)。
      *
-     * 高さは文字の有無によらず常に1行分を確保しておく。出るたびにシークバー以下が上下すると
-     * 目障りなため。
-     *
-     * @return 挿せたか。コントロール行のビューがまだ無ければ false。
+     * @return 組み替えられたか。コントロール行のビューがまだ無ければ false。
      */
-    private fun installActionCaption(root: View): Boolean {
+    private fun setupTransportRow(root: View): Boolean {
         if (actionCaptionView != null) return true
         val transportRow = root.findViewById<ViewGroup>(androidx.leanback.R.id.transport_row) ?: return false
         val controlsDock = transportRow.findViewById<View>(androidx.leanback.R.id.controls_dock) ?: return false
-        val dockIndex = transportRow.indexOfChild(controlsDock)
-        if (dockIndex < 0) return false
+        val seekBar = transportRow.findViewById<View>(androidx.leanback.R.id.playback_progress) ?: return false
+        // 時刻表示(再生位置/総時間)の行。idを持たないので、中の時刻から親をたどる。
+        val timeRow = transportRow.findViewById<View>(androidx.leanback.R.id.current_time)?.parent as? View
+            ?: return false
+
+        transportRow.removeView(seekBar)
+        transportRow.addView(seekBar, 0)
+        transportRow.removeView(timeRow)
+        transportRow.addView(timeRow, 1)
+
         val caption = TextView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -784,7 +804,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             setTextColor(Color.WHITE)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, ACTION_CAPTION_TEXT_SP)
         }
-        transportRow.addView(caption, dockIndex + 1)
+        transportRow.addView(caption, transportRow.indexOfChild(controlsDock) + 1)
         actionCaptionView = caption
         return true
     }
@@ -821,24 +841,34 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * コントロールを開いたときのフォーカスを再生/一時停止ボタンにする。
+     * コントロールを開くたびに、フォーカスをシークバーへ戻す。
      *
-     * Leanback は行の中にシークバーがあると必ずそれへフォーカスを送る
-     * ([androidx.leanback.widget.PlaybackTransportRowView] の onRequestFocusInDescendants と
-     * PlaybackTransportRowPresenter.onReappear の2か所)。シークバーは見た目にフォーカス位置が
-     * 分かりにくく、開いた直後にどこを操作しているのか掴めないため、開いた時だけ上書きする。
-     * すでにボタンやエピソード一覧にフォーカスがある場合は触らない。
+     * **閉じる直前にどこを触っていたかは引き継がない。** Leanback は最後にフォーカスがあった
+     * 場所を覚えていて、そこへ戻そうとする(コントロール行の
+     * [androidx.leanback.widget.PlaybackTransportRowView] は findFocus() を優先し、行の選択位置も
+     * 縦のグリッドが保持している)。そのため「前回エピソード一覧を見ていた」といった直前の状況で
+     * 開き直した直後の左右キーの意味が変わってしまう。閉じている状態からの左右キーは常に
+     * 早送り/巻き戻しであってほしいので、開くたびに毎回シークバーへ揃える。
+     *
+     * シークバーが無い場合(mpegts直送では隠している)だけ、先頭のボタンへ落とす。
      */
     override fun showControlsOverlay(runAnimation: Boolean) {
         val wasVisible = isControlsOverlayVisible
         super.showControlsOverlay(runAnimation)
-        if (!wasVisible) view?.post { focusFirstControlButton() }
+        if (!wasVisible) view?.post { focusSeekBar() }
+    }
+
+    private fun focusSeekBar() {
+        val root = view ?: return
+        // エピソード一覧まで降りていた場合に備え、行の選択もコントロール行へ戻す。
+        setSelectedPosition(0)
+        val seekBar = root.findViewById<View>(androidx.leanback.R.id.playback_progress)
+        if (seekBar != null && seekBar.visibility == View.VISIBLE && seekBar.requestFocus()) return
+        focusFirstControlButton()
     }
 
     private fun focusFirstControlButton() {
         val root = view ?: return
-        val progressBar = root.findViewById<View>(androidx.leanback.R.id.playback_progress)
-        if (progressBar == null || !progressBar.hasFocus()) return
         val controlsDock = root.findViewById<ViewGroup>(androidx.leanback.R.id.controls_dock) ?: return
         val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return
         val firstButton = controlBar.getChildAt(0)?.findViewById<View>(androidx.leanback.R.id.button) ?: return
