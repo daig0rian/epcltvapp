@@ -28,6 +28,7 @@ import androidx.leanback.widget.Action
 import androidx.leanback.widget.ArrayObjectAdapter
 import androidx.leanback.widget.ClassPresenterSelector
 import androidx.leanback.widget.HeaderItem
+import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.OnItemViewClickedListener
@@ -174,8 +175,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var seriesRowsAdapter: ArrayObjectAdapter? = null
     // エピソード一覧の行を置いたか。「他のエピソード」ボタンの可否判定に使う。
     private var episodeListAdded = false
-    // 一覧を初めて開いたときに今見ている回へカーソルを合わせるための、1回だけ使う位置。
-    private var pendingEpisodeListPosition = -1
+    // エピソード一覧の横スクロール部分。カーソル位置を戻すために掴んでおく。
+    private var episodeGridView: HorizontalGridView? = null
 
     // エピソード一覧のカード。一覧画面・詳細画面と同じ見た目にする。
     private val episodeCardPresenter = OriginalCardPresenter()
@@ -868,8 +869,24 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // エピソード一覧まで降りていた場合に備え、行の選択もコントロール行へ戻す。
         setSelectedPosition(0)
         val seekBar = root.findViewById<View>(androidx.leanback.R.id.playback_progress)
-        if (seekBar != null && seekBar.visibility == View.VISIBLE && seekBar.requestFocus()) return
-        focusFirstControlButton()
+        if (seekBar == null || seekBar.visibility != View.VISIBLE || !seekBar.requestFocus()) {
+            focusFirstControlButton()
+        }
+        // 一覧のカーソルも戻す。フォーカスを移した後に呼ぶこと——一覧にフォーカスが残っている間に
+        // 位置を動かすと、その移動先へフォーカスが付いていってしまう。
+        moveEpisodeListCursorToCurrent()
+    }
+
+    /**
+     * エピソード一覧のカーソルを今見ている回へ戻す。
+     *
+     * 一覧の中で選んでいた位置は覚えない。コントロールを開くたびに起点が今見ている回で
+     * あってほしく、前に眺めていた回にカーソルが残っているのは直観に反するため。
+     */
+    private fun moveEpisodeListCursorToCurrent() {
+        val index = seriesPlaylist?.indexOf(currentProgramId) ?: return
+        if (index < 0) return
+        episodeGridView?.selectedPosition = index
     }
 
     private fun focusFirstControlButton() {
@@ -894,9 +911,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
         episodeListAdded = true
-        // 一覧を開いたときは今見ている回から始める。長いシリーズで毎回先頭から
-        // 探し直すことになるのを避けるため。
-        pendingEpisodeListPosition = playlist.indexOf(currentProgramId)
     }
 
     /** 「他のエピソード」ボタン。一覧の行へフォーカスを移す。 */
@@ -1701,6 +1715,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         focusChangeListener = null
         actionCaptionView = null
+        episodeGridView = null
         super.onDestroyView()
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hlsStreamId?.let { id ->
@@ -1814,16 +1829,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
-     * エピソード一覧の行。**初めて表示するときだけ**今見ている回にカーソルを合わせる。
-     * 再表示のたびに戻すと、一覧を見ている途中で勝手に位置が飛ぶことになるため1回限りにする。
+     * エピソード一覧の行。横スクロール部分を掴んでおき、カーソルを今見ている回へ戻せるようにする
+     * ([moveEpisodeListCursorToCurrent])。
      */
     private inner class EpisodeListRowPresenter : ListRowPresenter() {
         override fun onBindRowViewHolder(holder: RowPresenter.ViewHolder, item: Any?) {
             super.onBindRowViewHolder(holder, item)
-            val position = pendingEpisodeListPosition
-            if (position <= 0) return
-            pendingEpisodeListPosition = -1
-            (holder as ListRowPresenter.ViewHolder).gridView.selectedPosition = position
+            episodeGridView = (holder as ListRowPresenter.ViewHolder).gridView
+            moveEpisodeListCursorToCurrent()
+        }
+
+        override fun onUnbindRowViewHolder(holder: RowPresenter.ViewHolder) {
+            if (episodeGridView === (holder as ListRowPresenter.ViewHolder).gridView) {
+                episodeGridView = null
+            }
+            super.onUnbindRowViewHolder(holder)
         }
     }
 
