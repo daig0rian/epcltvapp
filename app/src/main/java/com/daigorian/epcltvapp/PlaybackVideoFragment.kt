@@ -31,6 +31,7 @@ import androidx.leanback.widget.HeaderItem
 import androidx.leanback.widget.HorizontalGridView
 import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
+import androidx.leanback.widget.ObjectAdapter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.PlaybackControlsRow
 import androidx.leanback.widget.RowPresenter
@@ -829,6 +830,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     /** ボタンの状態が変わったとき、表示中のキャプションを新しいラベルに差し替える。 */
     fun updateActionCaptionText(label: CharSequence?) {
         actionCaptionView?.text = label ?: ""
+    }
+
+    /**
+     * コントロールバーの何番目のボタンにフォーカスがあるか。ボタンに無ければ null。
+     *
+     * ボタンのビューの並びは primary actions の並びと1対1なので、この番号でアクションを引ける
+     * ([MyPlaybackTransportControlGlue.refreshFocusedActionCaption])。
+     */
+    fun focusedControlButtonIndex(): Int? {
+        val root = view ?: return null
+        val controlsDock = root.findViewById<ViewGroup>(androidx.leanback.R.id.controls_dock) ?: return null
+        val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return null
+        val focusedChild = controlBar.focusedChild ?: return null
+        return controlBar.indexOfChild(focusedChild).takeIf { it >= 0 }
     }
 
     /**
@@ -1916,6 +1931,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         private var primaryActions: ArrayObjectAdapter? = null
 
+        /**
+         * ボタンの見た目が変わったらキャプションも今のラベルに合わせ直すための監視。
+         *
+         * 再生/一時停止だけは Leanback 自身がアイコンとラベルを差し替える
+         * ([PlaybackTransportControlGlue] の updatePlaybackState)ため、こちらの
+         * [onActionClicked] を通らない。リモコンのメディアキーやバッファリングでの
+         * 状態変化も含めて拾えるよう、押した経路ではなくアダプタの通知を見る。
+         */
+        private val actionChangeObserver = object : ObjectAdapter.DataObserver() {
+            override fun onChanged() = refreshFocusedActionCaption()
+            override fun onItemRangeChanged(positionStart: Int, itemCount: Int) =
+                refreshFocusedActionCaption()
+        }
+
         // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
         // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
@@ -1937,6 +1966,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 primaryActionsAdapter.add(infoAction)
             }
             refreshTrackActions()
+            primaryActionsAdapter.registerObserver(actionChangeObserver)
+        }
+
+        /** フォーカス中のボタンのキャプションを、そのアクションの今のラベルに合わせ直す。 */
+        private fun refreshFocusedActionCaption() {
+            val adapter = primaryActions ?: return
+            val fragment = playbackFragment() ?: return
+            val index = fragment.focusedControlButtonIndex() ?: return
+            if (index >= adapter.size()) return
+            val action = adapter.get(index) as? Action ?: return
+            fragment.updateActionCaptionText(action.label1)
         }
 
         /** 検出したトラック構成に合わせてCC/音声ボタンを出し入れする。 */
@@ -2012,15 +2052,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         /**
          * ボタンの見た目(アイコン・ラベル)を更新し直す。
-         * ラベルはフォーカス中ならキャプションとして出ているので、そちらも今の状態に合わせる
-         * ——ボタンを押した本人にフォーカスがある状態なので、押した結果がその場で文字で分かる。
+         * キャプションの追従は [actionChangeObserver] がこの通知を拾って行う。
          */
         private fun notifyActionChanged(action: Action) {
             primaryActions?.let { adapter ->
                 val idx = adapter.indexOf(action)
                 if (idx >= 0) adapter.notifyArrayItemRangeChanged(idx, 1)
             }
-            playbackFragment()?.updateActionCaptionText(action.label1)
         }
 
         fun resetRecordActionLabel() {
