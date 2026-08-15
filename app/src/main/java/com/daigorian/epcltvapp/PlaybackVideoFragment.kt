@@ -788,10 +788,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val timeRow = transportRow.findViewById<View>(androidx.leanback.R.id.current_time)?.parent as? View
             ?: return false
 
+        // 並べ替えの間だけフォーカスが外れる。removeView したビューがフォーカスを持っていると
+        // それが落ち、Android が別の可フォーカスビュー(=ボタン列の先頭)へ振り直してしまうため、
+        // 元々この行にフォーカスがあったなら最後にシークバーへ戻す。
+        val hadFocus = transportRow.hasFocus()
         transportRow.removeView(seekBar)
         transportRow.addView(seekBar, 0)
         transportRow.removeView(timeRow)
         transportRow.addView(timeRow, 1)
+        if (hadFocus) seekBar.requestFocus()
 
         val caption = TextView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(
