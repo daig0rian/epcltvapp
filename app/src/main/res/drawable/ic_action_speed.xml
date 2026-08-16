@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 再生速度 1.25x。図の作りは ic_action_speed_100.xml のコメントを参照。 -->
+<!--
+  再生速度。Material Symbols の "speed"(Apache-2.0)をそのまま使う。
+  等速のときが白、それ以外の速度では水色の ic_action_speed_on.xml に差し替わる
+  (CC/SI/音声と同じ「白=既定 / 水色=既定以外」の約束)。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -7,17 +11,10 @@
     android:viewportHeight="24">
     <!-- 文字盤 -->
     <path
-        android:fillColor="#FF40C4FF"
+        android:fillColor="#FFFFFF"
         android:pathData="M20.38,8.57l-1.23,1.85a8,8 0,0 1,-0.22 7.58H5.07A8,8 0,0 1,15.58 6.85l1.85,-1.23A10,10 0,0 0,3.35 19a2,2 0,0 0,1.72 1h13.85a2,2 0,0 0,1.74 -1a10,10 0,0 0,-0.27 -10.44z"/>
     <!-- 針 -->
-    <group
-        android:pivotX="12"
-        android:pivotY="14"
-        android:rotation="-60"
-        android:scaleX="0.75"
-        android:scaleY="0.75">
-        <path
-            android:fillColor="#FF40C4FF"
-            android:pathData="M10.59,15.41a2,2 0,0 0,2.83 0l5.66,-8.49 -8.49,5.66a2,2 0,0 0,0 2.83z"/>
-    </group>
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M10.59,15.41a2,2 0,0 0,2.83 0l5.66,-8.49 -8.49,5.66a2,2 0,0 0,0 2.83z"/>
 </vector>

@@ -135,14 +135,11 @@
     <string name="action_audio_sub">副音声</string>
     <string name="action_record">録画予約</string>
     <string name="action_record_in_progress">予約中…</string>
-    <string name="action_speed_to_100">等速に戻す</string>
-    <string name="action_speed_to_125">1.25倍速にする</string>
-    <string name="action_speed_to_150">1.5倍速にする</string>
-    <string name="action_speed_to_200">2倍速にする</string>
-    <string name="speed_changed_100">等速</string>
-    <string name="speed_changed_125">1.25倍速</string>
-    <string name="speed_changed_150">1.5倍速</string>
-    <string name="speed_changed_200">2倍速</string>
+    <string name="action_speed_current">再生速度 %1$s</string>
+    <string name="speed_value_100">等速</string>
+    <string name="speed_value_125">1.25倍</string>
+    <string name="speed_value_150">1.5倍</string>
+    <string name="speed_value_200">2倍</string>
     <string name="speed_not_supported">この音声では再生速度を変えられません。等速で再生します。</string>
 
 </resources>

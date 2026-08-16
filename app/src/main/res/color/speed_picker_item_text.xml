@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- bg_speed_picker_item が選択時にベタ塗りされるので、文字色も反転させる。 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true" android:color="@android:color/black" />
+    <item android:color="@android:color/white" />
+</selector>

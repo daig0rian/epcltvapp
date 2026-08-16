@@ -246,16 +246,12 @@
     <string name="action_audio_sub">Sub Audio</string>
     <string name="action_record">Reserve Recording</string>
     <string name="action_record_in_progress">Reserving…</string>
-    <!-- Playback speed: the button label names the speed you get by pressing it -->
-    <string name="action_speed_to_100">Back to Normal Speed</string>
-    <string name="action_speed_to_125">Play at 1.25x</string>
-    <string name="action_speed_to_150">Play at 1.5x</string>
-    <string name="action_speed_to_200">Play at 2x</string>
-    <!-- Shown briefly after pressing, to tell the speed now in effect -->
-    <string name="speed_changed_100">Normal Speed</string>
-    <string name="speed_changed_125">1.25x Speed</string>
-    <string name="speed_changed_150">1.5x Speed</string>
-    <string name="speed_changed_200">2x Speed</string>
+    <!-- Playback speed: %1$s is one of the speed_value_* strings below -->
+    <string name="action_speed_current">Playback Speed %1$s</string>
+    <string name="speed_value_100">Normal</string>
+    <string name="speed_value_125">1.25x</string>
+    <string name="speed_value_150">1.5x</string>
+    <string name="speed_value_200">2x</string>
     <string name="speed_not_supported">Playback speed cannot be changed for this audio. Playing at normal speed.</string>
 
 
