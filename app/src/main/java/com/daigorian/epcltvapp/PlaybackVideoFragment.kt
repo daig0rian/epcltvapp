@@ -992,6 +992,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
         val rows = seriesRowsAdapter ?: return
         if (episodeListAdded || playlist.entries.size < 2) return
+        // 今見ている回はフォーカスの当たり方だけでは他と見分けが付きにくいので、
+        // サムネイルに「再生中」を重ねて分かるようにする。
+        episodeCardPresenter.nowPlayingId = currentProgramId
         val cards = ArrayObjectAdapter(episodeCardPresenter)
         playlist.entries.forEach { entry ->
             val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach

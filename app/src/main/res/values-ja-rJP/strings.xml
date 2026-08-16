@@ -121,6 +121,7 @@
     <string name="series_no_next">シリーズの次の番組がありません</string>
     <string name="series_no_playable_file">再生できるファイルがありません</string>
     <string name="series_already_playing">この回を再生中です</string>
+    <string name="now_playing">再生中</string>
 
     <!-- 再生コントロールのボタンキャプション（フォーカス中のボタンの下に出る） -->
     <string name="action_restart">最初から再生</string>
