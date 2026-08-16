@@ -246,8 +246,9 @@
     <string name="action_audio_sub">Sub Audio</string>
     <string name="action_record">Reserve Recording</string>
     <string name="action_record_in_progress">Reserving…</string>
-    <!-- Playback speed: %1$s is one of the speed_value_* strings below -->
-    <string name="action_speed_current">Playback Speed %1$s</string>
+    <string name="action_speed">Change Speed</string>
+    <!-- Shown briefly after choosing; %1$s is one of the speed_value_* strings below -->
+    <string name="speed_now">Playback Speed %1$s</string>
     <string name="speed_value_100">Normal</string>
     <string name="speed_value_125">1.25x</string>
     <string name="speed_value_150">1.5x</string>

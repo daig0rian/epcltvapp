@@ -1755,15 +1755,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     /**
      * 選ばれた速度を適用する。
      *
-     * 確定した速度は短いトーストでも出す。一覧はこの時点で閉じており、ボタンの下の
-     * キャプション(=今の速度)はフォーカスがボタンにある間しか見えないため。
+     * 確定した速度は短いトーストで知らせる。一覧はこの時点で閉じており、アイコンの色だけでは
+     * 等速かどうかしか分からないため。
      */
     private fun applyPlaybackSpeed(index: Int) {
         val speed = PlaybackSpeed.entries[index]
         requestedPlaybackSpeed = speed.value
         exoPlayer?.setPlaybackSpeed(speed.value)
         mTransportControlGlue.setPlaybackSpeedIndex(index)
-        showQuickToast(getString(R.string.action_speed_current, getString(speed.labelRes)))
+        showQuickToast(getString(R.string.speed_now, getString(speed.labelRes)))
     }
 
     /**
@@ -2126,9 +2126,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * 再生速度ボタン。押すと [PlaybackSpeedPickerView] が開き、上下キーで選んでもう一度押すと
      * 確定する(開閉と適用は [PlaybackVideoFragment.onSpeedActionClicked])。
      *
-     * **このボタンのラベルだけは他と約束が違い、「押した結果」ではなく今の速度を表す。**
-     * 押しても速度は変わらず一覧が開くだけなので、押した結果を書きようがないため。
-     * アイコンは等速のみ白、それ以外の速度では水色(白=既定 / 水色=既定以外)。
+     * ラベルは他のボタンと同じく「押すと何が起きるか」= 速度を変えること。今どの速度なのかは
+     * アイコンの色(等速のみ白・それ以外は水色)と、確定時のトーストで知らせる。
+     *
+     * [setLabels] は使わない。使うとインデックスを変えるたびにラベルまで差し替わってしまうが、
+     * ここで変わるのはアイコンだけでよいため。
      */
     private class PlaybackSpeedAction(id: Int, context: Context?) : PlaybackControlsRow.MultiAction(id) {
         init {
@@ -2140,13 +2142,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
                 context?.getDrawable(iconRes)
             }.toTypedArray())
-            setLabels(PlaybackSpeed.entries.map { speed ->
-                if (context == null) {
-                    ""
-                } else {
-                    context.getString(R.string.action_speed_current, context.getString(speed.labelRes))
-                }
-            }.toTypedArray())
+            label1 = context?.getString(R.string.action_speed) ?: ""
         }
     }
 

@@ -135,7 +135,8 @@
     <string name="action_audio_sub">副音声</string>
     <string name="action_record">録画予約</string>
     <string name="action_record_in_progress">予約中…</string>
-    <string name="action_speed_current">再生速度 %1$s</string>
+    <string name="action_speed">速度変更</string>
+    <string name="speed_now">再生速度 %1$s</string>
     <string name="speed_value_100">等速</string>
     <string name="speed_value_125">1.25倍</string>
     <string name="speed_value_150">1.5倍</string>
