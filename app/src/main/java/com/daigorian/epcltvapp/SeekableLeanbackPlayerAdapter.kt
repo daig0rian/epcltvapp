@@ -34,8 +34,10 @@ internal class SeekableLeanbackPlayerAdapter(
     // PlaybackSupportFragment.setSeekMode(false) から showControlsOverlay() を呼ぶだけで
     // フェードタイマーを再開しない(leanback-1.0.0のstartFadeTimer()の呼び出し元は
     // tickle()/onResume()/setControlsOverlayAutoHideEnabled()の3つのみで、
-    // showControlsOverlay()からは呼ばれない)。そのため確定後は次の入力があるまで
-    // オーバーレイが開きっぱなしになり、呼び出し側で明示的に閉じる必要がある。
+    // showControlsOverlay()からは呼ばれない)。確定後にオーバーレイが残るのは
+    // PlaybackVideoFragment.applyControlsAutoHide() が自動非表示を戻すまでの間だけだが、
+    // シークしたのだから今すぐ映像に戻りたい場面でタイマーの分だけ待たせる理由がないため、
+    // 呼び出し側で明示的に閉じる。
     private val onSeekApplied: () -> Unit = {},
 ) : PlayerAdapter(), Runnable {
 

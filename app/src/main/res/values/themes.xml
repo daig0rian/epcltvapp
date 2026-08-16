@@ -2,6 +2,20 @@
 
     <style name="Theme.Epcltvapp" parent="@style/Theme.Leanback" >
        <item name="android:colorPrimary">@color/background_epgstation</item>
+
+        <!-- 再生コントロールを操作で開いた後、無操作でこの時間が経ったら自動的に閉じる。
+
+             Leanback の自動非表示のタイマーを仕掛ける起点は3つあり、そのうち
+             PlaybackSupportFragment#tickle()（Dpadのキー押下ごとに必ず呼ばれる）だけは
+             この属性が正の値のときにしかタイマーを仕掛けない。既定値は0＝無効なので、
+             「再生中にボタンを押して開いたコントロール」は開きっぱなしになる。
+             残りの2つ（onResume と setControlsOverlayAutoHideEnabled の値の変化）は
+             playbackControlsAutoHideTimeout（既定3秒）を使い、再生が始まった瞬間に
+             コントロールを閉じるのはそちらの担当。
+
+             再生開始時の値より長くするのが Leanback 側の推奨（操作の後は利用者が何を押すか
+             考える時間が要るため）。ここを変えても再生開始直後の3秒には影響しない。 -->
+        <item name="playbackControlsAutoHideTickleTimeout">5000</item>
     </style>
 
     <style name="LeanbackPreferences" parent="@style/Theme.Epcltvapp">
