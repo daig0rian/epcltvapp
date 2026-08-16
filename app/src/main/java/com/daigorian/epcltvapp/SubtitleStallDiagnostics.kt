@@ -26,7 +26,8 @@ import androidx.media3.ui.SubtitleView
  * 空サンプル表示中なら「しばらく字幕が出ない」という、見え方の違う2つの症状が同じ原因から出る。
  * どこで止まったのかは、Cueが届く経路を分解して同時に記録しないと切り分けられない。
  *
- *  - `BEAT`  … メインスレッドが動いているか。250ms周期で叩き、実測間隔の最大値を出す。
+ *  - `BEAT`  … メインスレッドが動いているか。250ms周期で叩き、実測間隔の最大値を出す
+ *              (再生中のみ計上する。理由は [beat] のコメント参照)。
  *  - `CUE`   … Cueの到着。`lag` はそのCue自身の時刻から何ms遅れて届いたか。
  *  - `DRAW`  … `setCues` した内容が実際に画面へ描かれるまでの時間。
  *  - `SEEK`  … 位置の不連続。シーク直後は復元動作でCueが大きく遅れるのが正常なため。
@@ -103,10 +104,16 @@ class SubtitleStallDiagnostics(private val player: ExoPlayer) {
             val now = SystemClock.uptimeMillis()
             val dt = now - lastBeatUptimeMs
             lastBeatUptimeMs = now
-            if (dt > windowMaxDtMs) windowMaxDtMs = dt
-            // 250ms周期のつもりが大きくずれた=メインスレッドが止まっていた。即時に出す。
-            if (dt >= STALL_THRESHOLD_MS) {
-                Log.w(TAG, "STALL_MAIN_THREAD dt=$dt (メインスレッドが${dt}ms止まった)")
+            // 再生中でないときのビートの遅れは調べたい現象と無関係。再生画面を開いたまま
+            // アプリがバックグラウンドへ回るとプロセスが凍結され、uptimeは進むのにHandlerが
+            // 動かないため、復帰時に何十分ぶんもの「停止」に見えてしまう(実測5041秒)。
+            // 調べたいのは「再生は進んでいるのに字幕だけ止まる」ケースなので、再生中に限る。
+            val playing = player.isPlaying
+            if (playing) {
+                if (dt > windowMaxDtMs) windowMaxDtMs = dt
+                if (dt >= STALL_THRESHOLD_MS) {
+                    Log.w(TAG, "STALL_MAIN_THREAD dt=$dt (メインスレッドが${dt}ms止まった)")
+                }
             }
             if (now - lastSummaryUptimeMs >= SUMMARY_INTERVAL_MS) {
                 lastSummaryUptimeMs = now
@@ -116,7 +123,7 @@ class SubtitleStallDiagnostics(private val player: ExoPlayer) {
                     "BEAT maxDt=$windowMaxDtMs maxDraw=$windowMaxDrawMs cueGap=$cueGap " +
                             "pos=${player.currentPosition} buf=${player.bufferedPosition} " +
                             "totalBuf=${player.totalBufferedDuration} state=${player.playbackState} " +
-                            "playing=${player.isPlaying} " +
+                            "playing=$playing " +
                             "drop=${player.videoDecoderCounters?.droppedBufferCount ?: -1}"
                 )
                 windowMaxDtMs = 0
