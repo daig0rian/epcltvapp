@@ -435,7 +435,9 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         Log.d(TAG, "updateRelatedMovieListRow()")
         // 関連動画一覧の生成
         //  - 現在表示中の動画の名前からシリーズ名を取り出し、それをキーワードに検索して一覧を表示
+        //    第1話から順に追えるよう、放送日の古い順 (reverse) で並べる
         //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
+        //    最近録れたものを拾う一覧なので、放送日の新しい順 (APIの既定) のまま
 
         // 番組名 originalTitle
         val originalTitle :String =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.name
@@ -444,8 +446,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val searchKeyword = SeriesTitleExtractor.extract(originalTitle)
         if (searchKeyword.isNotEmpty()) {
             mAdapter.updateContentsListRow(
-                GetRecordedParam(keyword = searchKeyword),
-                GetRecordedParamV2(keyword = searchKeyword),
+                GetRecordedParam(keyword = searchKeyword, reverse = true),
+                GetRecordedParamV2(keyword = searchKeyword, isReverse = true),
                 searchKeyword,
                 0,
                 mCardPresenter,

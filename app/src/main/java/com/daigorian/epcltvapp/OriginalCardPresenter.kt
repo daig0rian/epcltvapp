@@ -1,6 +1,12 @@
 package com.daigorian.epcltvapp
 
 import android.content.Intent
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.Paint
+import android.graphics.PixelFormat
+import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.util.Log
 import android.view.ViewGroup
@@ -37,6 +43,12 @@ class OriginalCardPresenter() : Presenter() {
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
 
     var objAdapter :DeleteEnabledArrayObjectAdapter? =null
+
+    /**
+     * 今再生中の録画のID。セットすると、そのカードのサムネイルに「再生中」の目印を重ねる。
+     * 再生画面のエピソード一覧だけで使い、他の一覧(ホーム・検索・詳細)では null のまま。
+     */
+    var nowPlayingId: Long? = null
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
         Log.d(TAG, "onCreateViewHolder")
@@ -254,6 +266,32 @@ class OriginalCardPresenter() : Presenter() {
                 cardView.contentText = ""
             }
         }
+
+        updateNowPlayingOverlay(cardView, item)
+    }
+
+    /**
+     * 「再生中」の目印を出し入れする。カードは使い回されるので、毎回どちらかを必ず行う。
+     *
+     * [ImageCardView] は子ビューを縦に積む [androidx.leanback.widget.BaseCardView] 派生で、
+     * 重ねるビューを足せない。サムネイルの ViewOverlay に載せることで、レイアウトへ手を
+     * 入れずに画像の上へ描く。
+     */
+    private fun updateNowPlayingOverlay(cardView: ImageCardView, item: Any) {
+        val itemId = when (item) {
+            is RecordedProgram -> item.id
+            is RecordedItem -> item.id
+            else -> null
+        }
+        val overlay = cardView.mainImageView?.overlay ?: return
+        overlay.clear()
+        if (itemId == null || itemId != nowPlayingId) return
+        overlay.add(
+            NowPlayingOverlayDrawable(cardView.context.getString(R.string.now_playing)).apply {
+                // setMainImageDimensions() でこのサイズに固定してあるので、実測を待たずに置ける。
+                setBounds(0, 0, CARD_WIDTH, CARD_HEIGHT)
+            }
+        )
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
@@ -262,6 +300,7 @@ class OriginalCardPresenter() : Presenter() {
         // Remove references to images so that the garbage collector can free up memory
         cardView.badgeImage = null
         cardView.mainImage = null
+        cardView.mainImageView?.overlay?.clear()
     }
 
     private fun updateCardBackgroundColor(view: ImageCardView, selected: Boolean) {
@@ -295,5 +334,48 @@ class OriginalCardPresenter() : Presenter() {
 
         private const val CARD_WIDTH = 313
         private const val CARD_HEIGHT = 176
+    }
+}
+
+/**
+ * 再生中のカードのサムネイルに重ねる目印。サムネイル全体を半透明の黒で覆い、
+ * 中央に白抜きで文言を出す。
+ */
+private class NowPlayingOverlayDrawable(private val label: String) : Drawable() {
+    private val scrimPaint = Paint().apply { color = Color.argb(SCRIM_ALPHA, 0, 0, 0) }
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
+        textAlign = Paint.Align.CENTER
+        typeface = Typeface.DEFAULT_BOLD
+    }
+
+    override fun draw(canvas: Canvas) {
+        if (bounds.isEmpty) return
+        canvas.drawRect(bounds, scrimPaint)
+
+        textPaint.textSize = bounds.height() * TEXT_SIZE_RATIO
+        // 訳語が長い言語でもカードからはみ出さないよう、幅に収まるところまで縮める。
+        val maxWidth = bounds.width() * TEXT_MAX_WIDTH_RATIO
+        val measured = textPaint.measureText(label)
+        if (measured > maxWidth) textPaint.textSize *= maxWidth / measured
+
+        // 文字の見た目の中心を高さの中心へ合わせる(baseline は文字の下端ではない)。
+        val metrics = textPaint.fontMetrics
+        val baselineY = bounds.exactCenterY() - (metrics.ascent + metrics.descent) / 2f
+        canvas.drawText(label, bounds.exactCenterX(), baselineY, textPaint)
+    }
+
+    override fun setAlpha(alpha: Int) = Unit
+
+    override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
+
+    companion object {
+        /** 黒を50%(255の半分)の濃さで重ねる */
+        private const val SCRIM_ALPHA = 128
+        private const val TEXT_SIZE_RATIO = 0.22f
+        private const val TEXT_MAX_WIDTH_RATIO = 0.8f
     }
 }

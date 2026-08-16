@@ -666,12 +666,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val playlist = seriesPlaylist
         if (playlist == null) {
             // 再生開始直後でまだ取得できていない場合と、取得に失敗した場合の両方がここへ来る。
-            showQuickToast(getString(R.string.series_not_available))
+            showMessageToast(getString(R.string.series_not_available))
             return
         }
         val next = playlist.next(currentProgramId)
         if (next == null) {
-            showQuickToast(getString(R.string.series_no_next))
+            showMessageToast(getString(R.string.series_no_next))
             return
         }
         playSeriesEntry(next)
@@ -693,7 +693,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (switchingProgram) return false
         val target = entry.resolvePlaybackTarget(isTsContent, currentVideoFileName)
         if (target == null) {
-            showQuickToast(getString(R.string.series_no_playable_file))
+            showMessageToast(getString(R.string.series_no_playable_file))
             return false
         }
         val playbackActivity = activity as? PlaybackActivity ?: return false
@@ -992,6 +992,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
         val rows = seriesRowsAdapter ?: return
         if (episodeListAdded || playlist.entries.size < 2) return
+        // 今見ている回はフォーカスの当たり方だけでは他と見分けが付きにくいので、
+        // サムネイルに「再生中」を重ねて分かるようにする。
+        episodeCardPresenter.nowPlayingId = currentProgramId
         val cards = ArrayObjectAdapter(episodeCardPresenter)
         playlist.entries.forEach { entry ->
             val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
@@ -1007,7 +1010,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             it.recordedProgram === item || it.recordedItem === item
         } ?: return
         if (entry.id == currentProgramId) {
-            showQuickToast(getString(R.string.series_already_playing))
+            showMessageToast(getString(R.string.series_already_playing))
             setSelectedPosition(0)
             return
         }
@@ -1667,6 +1670,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val toast = Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT)
         toast.show()
         Handler(Looper.getMainLooper()).postDelayed({ toast.cancel() }, QUICK_TOAST_DURATION_MS)
+    }
+
+    /**
+     * 文章を読ませるメッセージ向け。[showQuickToast] はアイコンで状態が分かるトグル用に
+     * 1秒で消えるので、読み切る必要のあるものはこちらを使う。
+     */
+    private fun showMessageToast(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
     }
 
     /** 録画予約に失敗した際、自己解決やissue報告に使えるよう技術的な詳細をダイアログで表示する */
