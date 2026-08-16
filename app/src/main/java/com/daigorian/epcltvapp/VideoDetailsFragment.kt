@@ -448,7 +448,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             mAdapter.updateContentsListRow(
                 GetRecordedParam(keyword = searchKeyword, reverse = true),
                 GetRecordedParamV2(keyword = searchKeyword, isReverse = true),
-                getString(R.string.videos_in_series, searchKeyword),
+                searchKeyword,
                 0,
                 mCardPresenter,
                 requireContext()
