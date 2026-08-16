@@ -1059,11 +1059,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * エピソード一覧の行をコントロール行の下に置く。
      *
      * 今見ている回しか無いシリーズでも置く。一覧が出ないと「他の回が無い」のか
-     * 「シリーズ情報を取れていない」のかを見分けられないため。その場合はヘッダーを
-     * 「他のエピソードはありません」に変え、再生中のカード1枚だけを並べる。
-     *
-     * 他の回の有無は件数ではなく「今見ている回以外が居るか」で見る。検索の打ち切りで
-     * 今見ている回が一覧に入らないことがあり、件数だけでは文言が実態とずれるため。
+     * 「シリーズ情報を取れていない」のかを見分けられないため。
      */
     private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
         val rows = seriesRowsAdapter ?: return
@@ -1076,11 +1072,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
             cards.add(card)
         }
-        val hasOtherEpisodes = playlist.entries.any { it.id != currentProgramId }
-        val header = getString(
-            if (hasOtherEpisodes) R.string.action_episode_list else R.string.episode_list_only_this
-        )
-        rows.add(ListRow(HeaderItem(header), cards))
+        rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
         episodeListAdded = true
     }
 

@@ -127,7 +127,6 @@
     <string name="action_restart">最初から再生</string>
     <string name="action_next_episode">次のエピソード</string>
     <string name="action_episode_list">他のエピソード</string>
-    <string name="episode_list_only_this">他のエピソードはありません</string>
     <string name="action_caption_on">字幕 ON</string>
     <string name="action_caption_off">字幕 OFF</string>
     <string name="action_superimpose_on">文字スーパー ON</string>
