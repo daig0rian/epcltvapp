@@ -17,7 +17,8 @@
     <string name="play_ts">簡易追いかけ再生(TS)</string>
     <string name="play_original_ts">TSを再生</string>
     <string name="play_x">%1$sを再生</string>
-    <string name="videos_in_same_rule">同じルールの録画</string>
+    <string name="videos_in_series">%1$s(放送日順)</string>
+    <string name="videos_in_same_rule">同じルールの最新の録画</string>
     <string name="search_results">検索結果</string>
     <string name="connect_epgstation_failed">EPGStationに接続できませんでした.　</string>
     <string name="please_check_ip_and_port">設定メニューからIPアドレスを確認してください. </string>

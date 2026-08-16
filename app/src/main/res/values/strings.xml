@@ -13,7 +13,8 @@
     <string name="play_ts">Simple Catch-up Playback (TS)</string>
     <string name="play_original_ts">Play TS</string>
     <string name="play_x">Play %1$s</string>
-    <string name="videos_in_same_rule">Videos in same Rule</string>
+    <string name="videos_in_series">%1$s (by air date)</string>
+    <string name="videos_in_same_rule">Latest Videos in same Rule</string>
     <string name="search_results">Search Result</string>
     <string name="movie_player">Movie Player</string>
     <string name="ip_addr_of_epgstation">IP Address of EPGStation</string>
