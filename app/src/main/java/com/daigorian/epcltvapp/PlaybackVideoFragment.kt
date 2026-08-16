@@ -41,6 +41,7 @@ import androidx.leanback.widget.RowPresenter
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
@@ -78,6 +79,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.net.URL
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 @UnstableApi
 class PlaybackVideoFragment : VideoSupportFragment() {
@@ -119,6 +121,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // Audio track state
     private val audioGroups = mutableListOf<Tracks.Group>()
     private var hasSubAudio = false
+
+    // ボタンで選ばれている再生速度。番組をまたいでは持ち越さない(再生のたびに等速で始める)。
+    // 実効値と突き合わせて「指定したのに効いていない」を検出するためにも使う
+    // ([onEffectivePlaybackSpeedChanged])。
+    private var requestedPlaybackSpeed = 1.0f
 
     // Text track state (加工済みTS/エンコード済み動画に埋め込まれた字幕)。
     // ARIB字幕は自前デコード(libaribcaption)なのでここには現れない——tsreadexを通す入力では
@@ -390,6 +397,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "onPlayerError: $error")
+            }
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                onEffectivePlaybackSpeedChanged(playbackParameters.speed)
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
@@ -1665,6 +1675,39 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         showQuickToast(getString(msg))
     }
 
+    /**
+     * 再生速度を変える。
+     *
+     * ボタンのアイコン(針の角度)は今の速度を表すが、1.25倍か1.5倍かまでは読み取れないので、
+     * 変えた直後に今の速度をトーストで出す(フォーカス中のボタンの下に出るキャプションは
+     * 他のボタンと同じく「押した結果」=次の速度を表しているため、今の速度はそこには出ない)。
+     */
+    fun setPlaybackSpeed(speed: Float, speedLabelRes: Int) {
+        requestedPlaybackSpeed = speed
+        exoPlayer?.setPlaybackSpeed(speed)
+        showQuickToast(getString(speedLabelRes))
+    }
+
+    /**
+     * ExoPlayerが実際に適用した速度。要求と食い違ったら等速へ戻し、その旨を知らせる。
+     *
+     * media3は音声をパススルー/オフロード出力しているとき、またはトンネリング再生のときは
+     * 速度調整を行わず等速に戻す(`DefaultAudioSink` の
+     * shouldApplyAudioProcessorPlaybackParameters。エンコードされたままの音声を速くするには
+     * デコードし直す必要があるため)。映像は音声に追従するのでズレはしないが、
+     * ボタンだけ速いことになっていると壊れて見えるので、ボタンの側を実態に合わせる。
+     */
+    private fun onEffectivePlaybackSpeedChanged(effectiveSpeed: Float) {
+        if (requestedPlaybackSpeed == 1.0f) return
+        if (abs(effectiveSpeed - requestedPlaybackSpeed) < SPEED_MATCH_TOLERANCE) return
+        if (!isAdded) return
+        Log.w(TAG, "playback speed not applied: requested=$requestedPlaybackSpeed effective=$effectiveSpeed")
+        requestedPlaybackSpeed = 1.0f
+        exoPlayer?.setPlaybackSpeed(1.0f)
+        mTransportControlGlue.resetPlaybackSpeed()
+        showMessageToast(getString(R.string.speed_not_supported))
+    }
+
     /** アイコンで状態が分かるトグルボタン向けに、通常のToastより短く表示して消す */
     fun showQuickToast(message: String) {
         val toast = Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT)
@@ -1871,6 +1914,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // 要求した再生速度と実効値が一致しているとみなす差。ExoPlayerは要求値をそのまま
+        // 返してくるので厳密比較でも足りるが、浮動小数の比較なので念のため幅を持たせる。
+        private const val SPEED_MATCH_TOLERANCE = 0.01f
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
         private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
         // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
@@ -1963,6 +2009,51 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
+    /**
+     * 再生速度ボタン。押すたびに [SPEEDS] を順に巡回し、最後まで行くと等速へ戻る。
+     *
+     * 段階を選ばせるダイアログは出さない。4段階なら最大3回押せば目的の速度に届き、
+     * リモコンでの往復(開く→選ぶ→閉じる)より速いため。
+     *
+     * アイコンは速度計の針の角度で今の速度を表す(等速のみ白・それ以外は水色)。ただし
+     * 1.25倍か1.5倍かまでは読み取れないので、正確な値は押した直後のトーストで知らせる
+     * ([PlaybackVideoFragment.setPlaybackSpeed])。ラベルは他のボタンと同じく
+     * 「押した結果」= 次の速度を表す。
+     */
+    private class PlaybackSpeedAction(id: Int, context: Context?) : PlaybackControlsRow.MultiAction(id) {
+        init {
+            setDrawables(arrayOf(
+                context?.getDrawable(R.drawable.ic_action_speed_100),
+                context?.getDrawable(R.drawable.ic_action_speed_125),
+                context?.getDrawable(R.drawable.ic_action_speed_150),
+                context?.getDrawable(R.drawable.ic_action_speed_200),
+            ))
+            // 押すと次の段へ進むので、ラベルは1つ先の速度。最後の段だけ等速へ戻る。
+            setLabels(arrayOf(
+                context?.getString(R.string.action_speed_to_125) ?: "",
+                context?.getString(R.string.action_speed_to_150) ?: "",
+                context?.getString(R.string.action_speed_to_200) ?: "",
+                context?.getString(R.string.action_speed_to_100) ?: "",
+            ))
+        }
+
+        /** 今選ばれている速度。 */
+        val speed: Float get() = SPEEDS[index]
+
+        /** 今の速度を伝えるトーストの文言。 */
+        val speedLabelRes: Int get() = SPEED_LABELS[index]
+
+        companion object {
+            private val SPEEDS = floatArrayOf(1.0f, 1.25f, 1.5f, 2.0f)
+            private val SPEED_LABELS = intArrayOf(
+                R.string.speed_changed_100,
+                R.string.speed_changed_125,
+                R.string.speed_changed_150,
+                R.string.speed_changed_200,
+            )
+        }
+    }
+
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
@@ -2040,6 +2131,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             getContext()?.getDrawable(R.drawable.ic_action_info)
         )
 
+        private val speedAction = PlaybackSpeedAction(ACTION_ID_SPEED.toInt(), getContext())
+
         private var primaryActions: ArrayObjectAdapter? = null
 
         /**
@@ -2061,6 +2154,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
         private var trackActionIndex = 0
 
+        /**
+         * ボタン列を組み立てる。
+         *
+         * **ボタンは7個までしか描画されない。** Leanbackの
+         * [androidx.leanback.widget.ControlBarPresenter] が `MAX_CONTROLS = 7` で打ち切り、
+         * 8個目以降は何のエラーも出さずに消える。最大構成(録画TS＋ネイティブTS処理＋シリーズあり
+         * ＝再生/一時停止・最初から・次の回・CC・SI・音声・速度)でちょうど7個で、もう余白はない。
+         * ボタンを増やすときは、まずどれかを畳む方法から考えること。
+         */
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
             if (hasSeriesNavigation) {
@@ -2075,6 +2177,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             if (isLive) {
                 primaryActionsAdapter.add(recordAction)
                 primaryActionsAdapter.add(infoAction)
+            } else {
+                // ライブには置かない。放送に追いつく以上には進めないので、速度を上げても
+                // バッファを食い潰して止まるだけで意味がないため(追いかけ再生には置く。
+                // こちらは録画済みの区間を早く消化して追いつけるので意味がある)。
+                primaryActionsAdapter.add(speedAction)
             }
             refreshTrackActions()
             primaryActionsAdapter.registerObserver(actionChangeObserver)
@@ -2151,6 +2258,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 infoAction -> {
                     playbackFragment?.showCurrentProgramInfo()
                 }
+                speedAction -> {
+                    speedAction.nextIndex()
+                    notifyActionChanged(speedAction)
+                    playbackFragment?.setPlaybackSpeed(speedAction.speed, speedAction.speedLabelRes)
+                }
                 restartAction -> {
                     playbackFragment?.onRestart()
                 }
@@ -2177,12 +2289,19 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             notifyActionChanged(recordAction)
         }
 
+        /** 速度指定が効かなかったときに、ボタンの表示を等速へ戻す。 */
+        fun resetPlaybackSpeed() {
+            speedAction.index = 0
+            notifyActionChanged(speedAction)
+        }
+
         companion object {
             private const val ACTION_ID_SUPERIMPOSE = 10001L
             private const val ACTION_ID_AUDIO = 10002L
             private const val ACTION_ID_RECORD = 10003L
             private const val ACTION_ID_INFO = 10004L
             private const val ACTION_ID_RESTART = 10005L
+            private const val ACTION_ID_SPEED = 10006L
         }
     }
 }
