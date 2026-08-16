@@ -1708,10 +1708,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     /** 速度の一覧を開いているか。上下キーを横取りしてよいかの判断に使う。 */
     fun isSpeedPickerOpen(): Boolean = speedPickerOpen
 
-    /** 一覧のカーソルを動かす。端では止める(巡回させない——端まで来たことが分かるように)。 */
-    fun moveSpeedPickerCursor(delta: Int) {
+    /**
+     * 一覧のカーソルを動かす。一覧は速い方を上に並べているので、上キーが [faster] にあたる。
+     * 端では止める(巡回させない——端まで来たことが分かるように)。
+     */
+    fun moveSpeedPickerCursor(faster: Boolean) {
         val picker = speedPickerView ?: return
-        picker.selectedIndex = (picker.selectedIndex + delta)
+        picker.selectedIndex = (picker.selectedIndex + if (faster) 1 else -1)
             .coerceIn(0, PlaybackSpeed.entries.lastIndex)
     }
 
@@ -2114,7 +2117,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
-    /** 選べる再生速度。この並びがそのまま一覧の並びとボタンのインデックスになる。 */
+    /**
+     * 選べる再生速度。遅い順に並べる——先頭(インデックス0)が既定の 1.00x であることに
+     * [PlaybackSpeedAction] のアイコンや速度を戻す処理が乗っている。
+     * 一覧では速い方を上に出すので、画面上の並びはこの逆になる
+     * ([PlaybackSpeedPickerView.setEntries])。
+     */
     private enum class PlaybackSpeed(val value: Float, val labelRes: Int) {
         NORMAL(1.0f, R.string.speed_value_100),
         X125(1.25f, R.string.speed_value_125),
@@ -2126,8 +2134,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * 再生速度ボタン。押すと [PlaybackSpeedPickerView] が開き、上下キーで選んでもう一度押すと
      * 確定する(開閉と適用は [PlaybackVideoFragment.onSpeedActionClicked])。
      *
-     * ラベルは他のボタンと同じく「押すと何が起きるか」= 速度を変えること。今どの速度なのかは
-     * アイコンの色(等速のみ白・それ以外は水色)と、確定時のトーストで知らせる。
+     * ラベルは他のボタンと同じく、そのボタンが何をするかを表す。今どの速度なのかは
+     * アイコンの色(1.00x のみ白・それ以外は水色)と、確定時のトーストで知らせる。
      *
      * [setLabels] は使わない。使うとインデックスを変えるたびにラベルまで差し替わってしまうが、
      * ここで変わるのはアイコンだけでよいため。
@@ -2407,7 +2415,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                     KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
                         if (event?.action == KeyEvent.ACTION_DOWN) {
                             fragment.moveSpeedPickerCursor(
-                                if (keyCode == KeyEvent.KEYCODE_DPAD_UP) -1 else 1
+                                faster = keyCode == KeyEvent.KEYCODE_DPAD_UP
                             )
                         }
                         return true

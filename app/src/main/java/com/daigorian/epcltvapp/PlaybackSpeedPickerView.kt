@@ -41,7 +41,13 @@ class PlaybackSpeedPickerView(context: Context) : LinearLayout(context) {
         descendantFocusability = FOCUS_BLOCK_DESCENDANTS
     }
 
-    /** 選択肢を作り直す。カーソルは先頭に戻るので、必要なら [selectedIndex] を入れ直すこと。 */
+    /**
+     * 選択肢を作り直す。カーソルは先頭に戻るので、必要なら [selectedIndex] を入れ直すこと。
+     *
+     * **速い方が上に来るよう、渡された並びを逆に積む。** シークバーと同じで「右/上が先へ進む方」
+     * という向きに揃えるため。逆にするのは見た目だけで、[selectedIndex] は渡された並びの
+     * 何番目かを指す(呼び出し側が速度の並びを気にせずに済むように)。
+     */
     fun setEntries(labels: List<String>) {
         removeAllViews()
         itemViews.clear()
@@ -60,7 +66,8 @@ class PlaybackSpeedPickerView(context: Context) : LinearLayout(context) {
                     ViewGroup.LayoutParams.WRAP_CONTENT
                 )
             }
-            addView(item)
+            // 先頭に差し込み続けることで、並びが上下逆になる。
+            addView(item, 0)
             itemViews.add(item)
         }
         selectedIndex = 0
