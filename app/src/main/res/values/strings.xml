@@ -238,6 +238,8 @@
     <string name="action_next_episode">Next Episode</string>
     <!-- Also used as the header of the episode list row -->
     <string name="action_episode_list">Other Episodes</string>
+    <!-- Episode list row header when the current program is the only recording of the series -->
+    <string name="episode_list_only_this">No Other Episodes</string>
     <string name="action_caption_on">Subtitle ON</string>
     <string name="action_caption_off">Subtitle OFF</string>
     <string name="action_superimpose_on">Superimpose ON</string>
