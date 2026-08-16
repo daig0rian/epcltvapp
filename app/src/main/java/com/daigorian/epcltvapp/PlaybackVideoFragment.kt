@@ -2250,17 +2250,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
-        // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
+        // 出入りしないボタン(再生系と速度)の直後を予約しておき、常に同じ位置・同じ順序で
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
         private var trackActionIndex = 0
 
         /**
          * ボタン列を組み立てる。
          *
+         * 並びは 再生/一時停止・最初から・次の回・再生速度・CC・SI・音声。トラックの有無で
+         * 出入りするCC/SI/音声を右端にまとめ、常にあるボタンの位置が番組によって動かないようにする。
+         *
          * **ボタンは7個までしか描画されない。** Leanbackの
          * [androidx.leanback.widget.ControlBarPresenter] が `MAX_CONTROLS = 7` で打ち切り、
-         * 8個目以降は何のエラーも出さずに消える。最大構成(録画TS＋ネイティブTS処理＋シリーズあり
-         * ＝再生/一時停止・最初から・次の回・CC・SI・音声・速度)でちょうど7個で、もう余白はない。
+         * 8個目以降は何のエラーも出さずに消える。上の最大構成(録画TS＋ネイティブTS処理＋
+         * シリーズあり)でちょうど7個で、もう余白はない。
          * ボタンを増やすときは、まずどれかを畳む方法から考えること。
          */
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
@@ -2272,16 +2275,20 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 primaryActionsAdapter.add(restartAction)
                 primaryActionsAdapter.add(skipNextAction)
             }
+            if (!isLive) {
+                // ライブには置かない。放送に追いつく以上には進めないので、速度を上げても
+                // バッファを食い潰して止まるだけで意味がないため(追いかけ再生には置く。
+                // こちらは録画済みの区間を早く消化して追いつけるので意味がある)。
+                //
+                // CC/SI/音声より**先**に置く。あちらはトラックの検出しだいで出入りするので、
+                // 後に置くと番組によって速度ボタンの位置が変わってしまう。
+                primaryActionsAdapter.add(speedAction)
+            }
             primaryActions = primaryActionsAdapter
             trackActionIndex = primaryActionsAdapter.size()
             if (isLive) {
                 primaryActionsAdapter.add(recordAction)
                 primaryActionsAdapter.add(infoAction)
-            } else {
-                // ライブには置かない。放送に追いつく以上には進めないので、速度を上げても
-                // バッファを食い潰して止まるだけで意味がないため(追いかけ再生には置く。
-                // こちらは録画済みの区間を早く消化して追いつけるので意味がある)。
-                primaryActionsAdapter.add(speedAction)
             }
             refreshTrackActions()
             primaryActionsAdapter.registerObserver(actionChangeObserver)
