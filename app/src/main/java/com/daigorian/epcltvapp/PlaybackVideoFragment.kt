@@ -420,8 +420,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 if (hasSubAudio != hadSubAudio || hasTextTrack != hadTextTrack) {
                     mTransportControlGlue.updateTrackActions(hasSubtitleSource(), hasSubAudio)
                 }
-                if (hasSubAudio && preferSubAudio) {
-                    selectAudioTrack(1)
+                // 主音声側も必ず明示的に選ぶ。副音声のときだけ上書きして主音声を
+                // DefaultTrackSelectorの既定選択に任せると、主/副が同じコーデック・同じ
+                // チャンネル数・同じサンプリング周波数で並ぶ録画では比較が最後の項目である
+                // ビットレートまで落ちる。ここで使われる[Format.bitrate]はesdsのmaxBitrate
+                // (ピーク値)であり、主音声か副音声かとは何の関係もない。実測では副音声側の
+                // ピークがわずかに上回る録画が存在し(差が0.01%程度のものもある)、その録画では
+                // 主音声を選んでいるのに副音声で再生が始まっていた。
+                if (hasSubAudio) {
+                    selectAudioTrack(if (preferSubAudio) 1 else 0)
                 }
                 // 永続化された字幕ON/OFFの状態を、トラックが見え始めたこの時点で反映する。
                 if (hasTextTrack != hadTextTrack) {
