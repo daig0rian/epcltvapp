@@ -14,6 +14,7 @@ import android.text.style.TypefaceSpan
 import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -41,6 +42,7 @@ import androidx.leanback.widget.RowPresenter
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
@@ -78,6 +80,7 @@ import retrofit2.Callback
 import retrofit2.Response
 import java.net.URL
 import java.util.concurrent.TimeUnit
+import kotlin.math.abs
 
 @UnstableApi
 class PlaybackVideoFragment : VideoSupportFragment() {
@@ -119,6 +122,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // Audio track state
     private val audioGroups = mutableListOf<Tracks.Group>()
     private var hasSubAudio = false
+
+    // 選ばれている再生速度。番組をまたいでは持ち越さない(再生のたびに等速で始める)。
+    // 実効値と突き合わせて「指定したのに効いていない」を検出するためにも使う
+    // ([onEffectivePlaybackSpeedChanged])。
+    private var requestedPlaybackSpeed = 1.0f
+    // 速度ボタンの上に出す選択一覧。開いている間は上下キーをカーソル移動として横取りする。
+    private var speedPickerView: PlaybackSpeedPickerView? = null
+    private var speedPickerOpen = false
 
     // Text track state (加工済みTS/エンコード済み動画に埋め込まれた字幕)。
     // ARIB字幕は自前デコード(libaribcaption)なのでここには現れない——tsreadexを通す入力では
@@ -390,6 +401,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onPlayerError(error: PlaybackException) {
                 Log.e(TAG, "onPlayerError: $error")
+            }
+            override fun onPlaybackParametersChanged(playbackParameters: PlaybackParameters) {
+                onEffectivePlaybackSpeedChanged(playbackParameters.speed)
             }
             override fun onTracksChanged(tracks: Tracks) {
                 val newAudioGroups = tracks.groups.filter { it.type == C.TRACK_TYPE_AUDIO }
@@ -863,11 +877,17 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * ([MyPlaybackTransportControlGlue.refreshFocusedActionCaption])。
      */
     fun focusedControlButtonIndex(): Int? {
+        val button = focusedControlButton() ?: return null
+        val controlBar = button.parent as? ViewGroup ?: return null
+        return controlBar.indexOfChild(button).takeIf { it >= 0 }
+    }
+
+    /** フォーカスのあるコントロールのボタン。ボタン列にフォーカスが無ければ null。 */
+    private fun focusedControlButton(): View? {
         val root = view ?: return null
         val controlsDock = root.findViewById<ViewGroup>(androidx.leanback.R.id.controls_dock) ?: return null
         val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return null
-        val focusedChild = controlBar.focusedChild ?: return null
-        return controlBar.indexOfChild(focusedChild).takeIf { it >= 0 }
+        return controlBar.focusedChild
     }
 
     /**
@@ -890,8 +910,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     private fun applyControlsAutoHide() {
         super.setControlsOverlayAutoHideEnabled(
-            autoHideAllowedByGlue && !inSeekMode && !browsingOtherRows
+            autoHideAllowedByGlue && !inSeekMode && !browsingOtherRows && !speedPickerOpen
         )
+    }
+
+    /**
+     * コントロールが閉じるときは速度の一覧も畳む。
+     *
+     * 戻るキーはここへ回ってくる——[androidx.leanback.app.PlaybackSupportFragment] の
+     * onInterceptInputEvent は、コントロールが見えている間の戻るキーを、キーハンドラが
+     * どう答えたかによらず「コントロールを閉じる」に使うため。したがって一覧を開いている
+     * 間の戻るキーは「選ぶのをやめる」として働く(速度は変わらない)。
+     */
+    override fun hideControlsOverlay(runAnimation: Boolean) {
+        closeSpeedPicker()
+        super.hideControlsOverlay(runAnimation)
     }
 
     /**
@@ -1665,6 +1698,120 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         showQuickToast(getString(msg))
     }
 
+    /**
+     * 速度ボタンが押された。一覧が閉じていれば開き、開いていれば選択中の速度で確定する。
+     */
+    fun onSpeedActionClicked() {
+        if (speedPickerOpen) confirmSpeedPicker() else openSpeedPicker()
+    }
+
+    /** 速度の一覧を開いているか。上下キーを横取りしてよいかの判断に使う。 */
+    fun isSpeedPickerOpen(): Boolean = speedPickerOpen
+
+    /**
+     * 一覧のカーソルを動かす。一覧は速い方を上に並べているので、上キーが [faster] にあたる。
+     * 端では止める(巡回させない——端まで来たことが分かるように)。
+     */
+    fun moveSpeedPickerCursor(faster: Boolean) {
+        val picker = speedPickerView ?: return
+        picker.selectedIndex = (picker.selectedIndex + if (faster) 1 else -1)
+            .coerceIn(0, PlaybackSpeed.entries.lastIndex)
+    }
+
+    /** 選択をやめて一覧を閉じる(速度は変えない)。 */
+    fun closeSpeedPicker() {
+        if (!speedPickerOpen) return
+        speedPickerOpen = false
+        speedPickerView?.visibility = View.GONE
+        applyControlsAutoHide()
+    }
+
+    private fun openSpeedPicker() {
+        val root = view as? ViewGroup ?: return
+        // 一覧は押されたボタンの真上に出す。押した直後なのでフォーカスは速度ボタンにある。
+        val anchor = focusedControlButton() ?: return
+        val picker = speedPickerView ?: PlaybackSpeedPickerView(requireContext()).also {
+            it.setEntries(PlaybackSpeed.entries.map { speed -> getString(speed.labelRes) })
+            root.addView(
+                it,
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                )
+            )
+            speedPickerView = it
+        }
+        picker.selectedIndex = mTransportControlGlue.playbackSpeedIndex()
+        picker.visibility = View.VISIBLE
+        placeSpeedPickerAbove(picker, anchor)
+        speedPickerOpen = true
+        // 選んでいる最中に自動で閉じられると選択が消えてしまうので、その間だけ止める。
+        applyControlsAutoHide()
+    }
+
+    private fun confirmSpeedPicker() {
+        val index = speedPickerView?.selectedIndex ?: return
+        closeSpeedPicker()
+        applyPlaybackSpeed(index)
+    }
+
+    /**
+     * 選ばれた速度を適用する。
+     *
+     * 確定した速度は短いトーストで知らせる。一覧はこの時点で閉じており、アイコンの色だけでは
+     * 等速かどうかしか分からないため。
+     */
+    private fun applyPlaybackSpeed(index: Int) {
+        val speed = PlaybackSpeed.entries[index]
+        requestedPlaybackSpeed = speed.value
+        exoPlayer?.setPlaybackSpeed(speed.value)
+        mTransportControlGlue.setPlaybackSpeedIndex(index)
+        showQuickToast(getString(R.string.speed_now, getString(speed.labelRes)))
+    }
+
+    /**
+     * 一覧を速度ボタンの真上・中央揃えで置く。
+     *
+     * 追加した直後(レイアウト前)でも位置を決められるよう、実寸は自前で測る。ビューは
+     * 親の左上に置かれるので、そこからのずれを translation で与える
+     * (ボタンのキャプション行と同じやり方——[updateActionCaption])。
+     */
+    private fun placeSpeedPickerAbove(picker: View, anchor: View) {
+        val root = picker.parent as? View ?: return
+        picker.measure(
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+        )
+        val rootLocation = IntArray(2)
+        root.getLocationInWindow(rootLocation)
+        val anchorLocation = IntArray(2)
+        anchor.getLocationInWindow(anchorLocation)
+        val anchorCenterX = anchorLocation[0] - rootLocation[0] + anchor.width / 2f
+        picker.translationX = anchorCenterX - picker.measuredWidth / 2f
+        picker.translationY = anchorLocation[1] - rootLocation[1] - picker.measuredHeight -
+                SPEED_PICKER_GAP_DP * resources.displayMetrics.density
+    }
+
+    /**
+     * ExoPlayerが実際に適用した速度。要求と食い違ったら等速へ戻し、その旨を知らせる。
+     *
+     * media3は音声をパススルー/オフロード出力しているとき、またはトンネリング再生のときは
+     * 速度調整を行わず等速に戻す(`DefaultAudioSink` の
+     * shouldApplyAudioProcessorPlaybackParameters。エンコードされたままの音声を速くするには
+     * デコードし直す必要があるため)。映像は音声に追従するのでズレはしないが、
+     * ボタンだけ速いことになっていると壊れて見えるので、ボタンの側を実態に合わせる。
+     */
+    private fun onEffectivePlaybackSpeedChanged(effectiveSpeed: Float) {
+        if (requestedPlaybackSpeed == 1.0f) return
+        if (abs(effectiveSpeed - requestedPlaybackSpeed) < SPEED_MATCH_TOLERANCE) return
+        if (!isAdded) return
+        Log.w(TAG, "playback speed not applied: requested=$requestedPlaybackSpeed effective=$effectiveSpeed")
+        requestedPlaybackSpeed = 1.0f
+        exoPlayer?.setPlaybackSpeed(1.0f)
+        mTransportControlGlue.setPlaybackSpeedIndex(0)
+        showMessageToast(getString(R.string.speed_not_supported))
+    }
+
     /** アイコンで状態が分かるトグルボタン向けに、通常のToastより短く表示して消す */
     fun showQuickToast(message: String) {
         val toast = Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT)
@@ -1806,6 +1953,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         focusChangeListener = null
         actionCaptionView = null
         episodeGridView = null
+        speedPickerView = null
+        speedPickerOpen = false
         super.onDestroyView()
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hlsStreamId?.let { id ->
@@ -1871,6 +2020,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // 要求した再生速度と実効値が一致しているとみなす差。ExoPlayerは要求値をそのまま
+        // 返してくるので厳密比較でも足りるが、浮動小数の比較なので念のため幅を持たせる。
+        private const val SPEED_MATCH_TOLERANCE = 0.01f
+        // 速度の一覧とボタンの間に空ける距離。
+        private const val SPEED_PICKER_GAP_DP = 8f
         // ARIB字幕の半透明パレット(kB24ColorCLUTのアルファ128の組)に合わせた黒の下地。
         private val SUBTITLE_BACKGROUND_COLOR = Color.argb(128, 0, 0, 0)
         // テキストのCueの下端を画面上端から何割の位置に置くか(=下端から20%空ける)。
@@ -1963,6 +2117,43 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
     }
 
+    /**
+     * 選べる再生速度。遅い順に並べる——先頭(インデックス0)が既定の 1.00x であることに
+     * [PlaybackSpeedAction] のアイコンや速度を戻す処理が乗っている。
+     * 一覧では速い方を上に出すので、画面上の並びはこの逆になる
+     * ([PlaybackSpeedPickerView.setEntries])。
+     */
+    private enum class PlaybackSpeed(val value: Float, val labelRes: Int) {
+        NORMAL(1.0f, R.string.speed_value_100),
+        X125(1.25f, R.string.speed_value_125),
+        X150(1.5f, R.string.speed_value_150),
+        X200(2.0f, R.string.speed_value_200),
+    }
+
+    /**
+     * 再生速度ボタン。押すと [PlaybackSpeedPickerView] が開き、上下キーで選んでもう一度押すと
+     * 確定する(開閉と適用は [PlaybackVideoFragment.onSpeedActionClicked])。
+     *
+     * ラベルは他のボタンと同じく、そのボタンが何をするかを表す。今どの速度なのかは
+     * アイコンの色(1.00x のみ白・それ以外は水色)と、確定時のトーストで知らせる。
+     *
+     * [setLabels] は使わない。使うとインデックスを変えるたびにラベルまで差し替わってしまうが、
+     * ここで変わるのはアイコンだけでよいため。
+     */
+    private class PlaybackSpeedAction(id: Int, context: Context?) : PlaybackControlsRow.MultiAction(id) {
+        init {
+            setDrawables(PlaybackSpeed.entries.map { speed ->
+                val iconRes = if (speed == PlaybackSpeed.NORMAL) {
+                    R.drawable.ic_action_speed
+                } else {
+                    R.drawable.ic_action_speed_on
+                }
+                context?.getDrawable(iconRes)
+            }.toTypedArray())
+            label1 = context?.getString(R.string.action_speed) ?: ""
+        }
+    }
+
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
@@ -2040,6 +2231,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             getContext()?.getDrawable(R.drawable.ic_action_info)
         )
 
+        private val speedAction = PlaybackSpeedAction(ACTION_ID_SPEED.toInt(), getContext())
+
         private var primaryActions: ArrayObjectAdapter? = null
 
         /**
@@ -2057,10 +2250,22 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
-        // superが追加した再生系ボタンの直後を予約しておき、常に同じ位置・同じ順序で
+        // 出入りしないボタン(再生系と速度)の直後を予約しておき、常に同じ位置・同じ順序で
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
         private var trackActionIndex = 0
 
+        /**
+         * ボタン列を組み立てる。
+         *
+         * 並びは 再生/一時停止・最初から・次の回・再生速度・CC・SI・音声。トラックの有無で
+         * 出入りするCC/SI/音声を右端にまとめ、常にあるボタンの位置が番組によって動かないようにする。
+         *
+         * **ボタンは7個までしか描画されない。** Leanbackの
+         * [androidx.leanback.widget.ControlBarPresenter] が `MAX_CONTROLS = 7` で打ち切り、
+         * 8個目以降は何のエラーも出さずに消える。上の最大構成(録画TS＋ネイティブTS処理＋
+         * シリーズあり)でちょうど7個で、もう余白はない。
+         * ボタンを増やすときは、まずどれかを畳む方法から考えること。
+         */
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             super.onCreatePrimaryActions(primaryActionsAdapter)
             if (hasSeriesNavigation) {
@@ -2069,6 +2274,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 // (一覧は常に画面下に見えている)。
                 primaryActionsAdapter.add(restartAction)
                 primaryActionsAdapter.add(skipNextAction)
+            }
+            if (!isLive) {
+                // ライブには置かない。放送に追いつく以上には進めないので、速度を上げても
+                // バッファを食い潰して止まるだけで意味がないため(追いかけ再生には置く。
+                // こちらは録画済みの区間を早く消化して追いつけるので意味がある)。
+                //
+                // CC/SI/音声より**先**に置く。あちらはトラックの検出しだいで出入りするので、
+                // 後に置くと番組によって速度ボタンの位置が変わってしまう。
+                primaryActionsAdapter.add(speedAction)
             }
             primaryActions = primaryActionsAdapter
             trackActionIndex = primaryActionsAdapter.size()
@@ -2151,6 +2365,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 infoAction -> {
                     playbackFragment?.showCurrentProgramInfo()
                 }
+                speedAction -> {
+                    // 1回目は一覧を開くだけ、2回目でその選択を確定する。
+                    playbackFragment?.onSpeedActionClicked()
+                }
                 restartAction -> {
                     playbackFragment?.onRestart()
                 }
@@ -2177,12 +2395,53 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             notifyActionChanged(recordAction)
         }
 
+        /** 今の速度([PlaybackSpeed] の並びの何番目か)。一覧を開くときの初期位置に使う。 */
+        fun playbackSpeedIndex(): Int = speedAction.index
+
+        /** ボタンのアイコンとラベルを、指定の速度のものに差し替える。 */
+        fun setPlaybackSpeedIndex(index: Int) {
+            speedAction.index = index
+            notifyActionChanged(speedAction)
+        }
+
+        /**
+         * 速度の一覧を開いている間だけ、上下キーをカーソル移動として使う。
+         *
+         * 一覧はフォーカスを持たない([PlaybackSpeedPickerView] 参照)ので、キーはボタンに
+         * 乗ったまま流れてくる。ここで消費しないと、上下キーは Leanback 本来の意味
+         * (行の移動＝エピソード一覧へ降りる)で処理されてしまう。
+         *
+         * 左右キーは消費しない。隣のボタンへ移ろうとしているのだから、選択をやめて
+         * そのまま通す。決定キーも通す——ボタンのクリックとして [onActionClicked] へ届き、
+         * そこで確定になる。
+         */
+        override fun onKey(v: View?, keyCode: Int, event: KeyEvent?): Boolean {
+            val fragment = playbackFragment()
+            if (fragment != null && fragment.isSpeedPickerOpen()) {
+                when (keyCode) {
+                    KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN -> {
+                        if (event?.action == KeyEvent.ACTION_DOWN) {
+                            fragment.moveSpeedPickerCursor(
+                                faster = keyCode == KeyEvent.KEYCODE_DPAD_UP
+                            )
+                        }
+                        return true
+                    }
+                    KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                        fragment.closeSpeedPicker()
+                    }
+                }
+            }
+            return super.onKey(v, keyCode, event)
+        }
+
         companion object {
             private const val ACTION_ID_SUPERIMPOSE = 10001L
             private const val ACTION_ID_AUDIO = 10002L
             private const val ACTION_ID_RECORD = 10003L
             private const val ACTION_ID_INFO = 10004L
             private const val ACTION_ID_RESTART = 10005L
+            private const val ACTION_ID_SPEED = 10006L
         }
     }
 }

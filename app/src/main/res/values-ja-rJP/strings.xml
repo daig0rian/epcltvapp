@@ -135,5 +135,10 @@
     <string name="action_audio_sub">副音声</string>
     <string name="action_record">録画予約</string>
     <string name="action_record_in_progress">予約中…</string>
+    <string name="action_speed">再生速度</string>
+    <string name="speed_now">再生速度 %1$s</string>
+    <!-- speed_value_* は言語によらず同じ表記なので values/strings.xml のものをそのまま使う -->
+
+    <string name="speed_not_supported">この音声では再生速度を変えられません。1.00x で再生します。</string>
 
 </resources>

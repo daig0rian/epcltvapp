@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  再生速度の一覧の1行。選択中の行だけベタ塗りにする(文字色は color/speed_picker_item_text)。
+  行自体はフォーカスを取らない(カーソルはアプリ側で管理する)ため、state_focused ではなく
+  state_selected で切り替える。
+-->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/white" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+</selector>
