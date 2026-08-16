@@ -36,6 +36,11 @@ import java.text.Normalizer
 class SeriesPlaylist private constructor(
     /** 録画開始時刻の昇順。エピソード一覧の並びもこれをそのまま使う。 */
     val entries: List<SeriesEntry>,
+    /**
+     * このシリーズを集めるのに使ったシリーズ名 ([SeriesTitleExtractor] が取り出したもの)。
+     * エピソード一覧の見出しに出す。
+     */
+    val seriesTitle: String,
 ) {
     /** [entries] の中で今見ている回が何番目か。居なければ -1。 */
     fun indexOf(currentId: Long): Int = entries.indexOfFirst { it.id == currentId }
@@ -130,7 +135,7 @@ class SeriesPlaylist private constructor(
                         if (shouldFetchMore(collected, currentId, fetched, body.total, page)) {
                             loadV1(seriesTitle, currentId, collected, fetched, page + 1, onLoaded)
                         } else {
-                            onLoaded(build(collected))
+                            onLoaded(build(collected, seriesTitle))
                         }
                     }
 
@@ -171,7 +176,7 @@ class SeriesPlaylist private constructor(
                         if (shouldFetchMore(collected, currentId, fetched, body.total.toLong(), page)) {
                             loadV2(seriesTitle, currentId, collected, fetched, page + 1, onLoaded)
                         } else {
-                            onLoaded(build(collected))
+                            onLoaded(build(collected, seriesTitle))
                         }
                     }
 
@@ -205,8 +210,8 @@ class SeriesPlaylist private constructor(
         }
 
         /** 検索で集めた回を録画順に並べる。同時刻の録画は id 順にして並びを一意にする。 */
-        fun build(candidates: List<SeriesEntry>): SeriesPlaylist =
-            SeriesPlaylist(candidates.sortedWith(compareBy({ it.startAt }, { it.id })))
+        fun build(candidates: List<SeriesEntry>, seriesTitle: String): SeriesPlaylist =
+            SeriesPlaylist(candidates.sortedWith(compareBy({ it.startAt }, { it.id })), seriesTitle)
 
         /**
          * 番組名がシリーズ名を含むか。

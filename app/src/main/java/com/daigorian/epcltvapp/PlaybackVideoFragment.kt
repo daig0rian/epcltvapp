@@ -1060,6 +1060,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      *
      * 今見ている回しか無いシリーズでも置く。一覧が出ないと「他の回が無い」のか
      * 「シリーズ情報を取れていない」のかを見分けられないため。
+     *
+     * 見出しにはシリーズ名を出す。何のシリーズを並べているのかが分かり、
+     * 番組名からシリーズ名を取り出せているかもその場で確認できる。
      */
     private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
         val rows = seriesRowsAdapter ?: return
@@ -1072,7 +1075,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
             cards.add(card)
         }
-        rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
+        // シリーズ名は空にならない(空ならそもそも一覧を作れず playlist が null になる)が、
+        // 見出しが空欄の行は壊れて見えるので保険を置いておく。
+        val header = playlist.seriesTitle.ifEmpty { getString(R.string.action_episode_list) }
+        rows.add(ListRow(HeaderItem(header), cards))
         episodeListAdded = true
     }
 

@@ -31,7 +31,7 @@ class SeriesPlaylistTest {
     )
 
     private fun playlistOf(vararg programs: RecordedProgram) =
-        SeriesPlaylist.build(programs.map { SeriesEntry.of(it) })
+        SeriesPlaylist.build(programs.map { SeriesEntry.of(it) }, "ためしの冒険")
 
     @Test
     fun `録画された順に並び、次の回を返す`() {
