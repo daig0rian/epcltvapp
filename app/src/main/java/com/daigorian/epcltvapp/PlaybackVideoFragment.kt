@@ -33,7 +33,10 @@ import androidx.leanback.widget.ListRow
 import androidx.leanback.widget.ListRowPresenter
 import androidx.leanback.widget.ObjectAdapter
 import androidx.leanback.widget.OnItemViewClickedListener
+import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.PlaybackControlsRow
+import androidx.leanback.widget.PlaybackSeekDataProvider
+import androidx.leanback.widget.PlaybackSeekUi
 import androidx.leanback.widget.RowPresenter
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -188,6 +191,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var actionCaptionView: TextView? = null
     private var focusChangeListener: ViewTreeObserver.OnGlobalFocusChangeListener? = null
 
+    // コントロールの自動非表示。判定は applyControlsAutoHide() に集約する。
+    // Leanbackが最後に指示してきた可否(=再生中かどうか)。
+    private var autoHideAllowedByGlue = false
+    // シークポイントを選んでいる最中。確定するまでは閉じない。
+    private var inSeekMode = false
+    // コントロール行より下の行(エピソード一覧)を見ている最中。
+    private var browsingOtherRows = false
+
     // Live viewing state
     private var liveChannelId: Long = -1L
     private var isLiveMpegTs = false
@@ -292,6 +303,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             adapter = rows
             setOnItemViewClickedListener(OnItemViewClickedListener { _, item, _, _ ->
                 onEpisodeCardClicked(item)
+            })
+            // エピソード一覧を見ている間はコントロールを自動で閉じない(applyControlsAutoHide参照)。
+            // 行の選択はフォーカスの有無によらず通知されるので、これで今どちらに居るか分かる。
+            setOnItemViewSelectedListener(OnItemViewSelectedListener { _, _, _, row ->
+                // 行0(再生コントロール)は PlaybackControlsRow、エピソード一覧は ListRow。
+                browsingOtherRows = row is ListRow
+                applyControlsAutoHide()
             })
             SeriesPlaylist.load(recordedProgram, recordedItem) { playlist ->
                 if (!isAdded) return@load
@@ -850,6 +868,70 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return null
         val focusedChild = controlBar.focusedChild ?: return null
         return controlBar.indexOfChild(focusedChild).takeIf { it >= 0 }
+    }
+
+    /**
+     * コントロールを自動で閉じてよいか。**Leanbackの判断を打ち消さず、閉じられると困る状況の間だけ
+     * 一時的に落とすマスクとして使う。**
+     *
+     * Leanbackはこの可否を「再生中かどうか」で決めている
+     * ([androidx.leanback.media.PlaybackTransportControlGlue] の updatePlaybackState が
+     * isPlaying をそのまま渡してくる)。一時停止中に閉じないのはその設計意図なのでそのまま従う。
+     *
+     * マスクが要るのは、テーマで `playbackControlsAutoHideTickleTimeout` を有効にしたため。
+     * [androidx.leanback.app.PlaybackSupportFragment] の tickle() はDpadのキー押下ごとに——
+     * シーク中でもエピソード一覧を見ている最中でも——呼ばれてタイマーを仕掛け直す。
+     * シーク開始時の stopFadeTimer() は1回きりなので、その後の操作で仕掛かる分は止められない。
+     */
+    override fun setControlsOverlayAutoHideEnabled(enabled: Boolean) {
+        autoHideAllowedByGlue = enabled
+        applyControlsAutoHide()
+    }
+
+    private fun applyControlsAutoHide() {
+        super.setControlsOverlayAutoHideEnabled(
+            autoHideAllowedByGlue && !inSeekMode && !browsingOtherRows
+        )
+    }
+
+    /**
+     * シークポイントを選んでいる最中かどうかを知るために、グルーが登録するクライアントを包む。
+     * [androidx.leanback.app.PlaybackSupportFragment] はその状態を外へ見せていないため。
+     */
+    override fun setPlaybackSeekUiClient(client: PlaybackSeekUi.Client?) {
+        super.setPlaybackSeekUiClient(client?.let { SeekModeTrackingClient(it) })
+    }
+
+    /**
+     * シークの開始・終了を拾って [inSeekMode] を保つだけのデコレータ。他はそのまま流す。
+     *
+     * 開始は**フラグを立ててから**委譲する。委譲先(グルー)はシーク開始時に一度 pause() し、
+     * それが再生状態の変化として [setControlsOverlayAutoHideEnabled] に回ってくるので、
+     * その時点でシーク中だと分かっている必要がある。終了はその逆で、委譲先に本来の処理
+     * (シークの確定/取り消し)をさせてからフラグを戻す。
+     */
+    private inner class SeekModeTrackingClient(
+        private val delegate: PlaybackSeekUi.Client,
+    ) : PlaybackSeekUi.Client() {
+
+        override fun isSeekEnabled(): Boolean = delegate.isSeekEnabled
+
+        override fun getPlaybackSeekDataProvider(): PlaybackSeekDataProvider? =
+            delegate.playbackSeekDataProvider
+
+        override fun onSeekPositionChanged(pos: Long) = delegate.onSeekPositionChanged(pos)
+
+        override fun onSeekStarted() {
+            inSeekMode = true
+            applyControlsAutoHide()
+            delegate.onSeekStarted()
+        }
+
+        override fun onSeekFinished(cancelled: Boolean) {
+            delegate.onSeekFinished(cancelled)
+            inSeekMode = false
+            applyControlsAutoHide()
+        }
     }
 
     /**
