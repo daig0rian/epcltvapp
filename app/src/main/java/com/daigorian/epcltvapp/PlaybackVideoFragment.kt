@@ -190,7 +190,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var switchingProgram = false
     // コントロール行の下に並べる行(エピソード一覧)。行0はグルーが再生コントロールに使う。
     private var seriesRowsAdapter: ArrayObjectAdapter? = null
-    // エピソード一覧の行を置いたか。「他のエピソード」ボタンの可否判定に使う。
+    // エピソード一覧の行をもう置いたか。二重に置かないための目印。
     private var episodeListAdded = false
     // エピソード一覧の横スクロール部分。カーソル位置を戻すために掴んでおく。
     private var episodeGridView: HorizontalGridView? = null
@@ -1057,11 +1057,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * エピソード一覧の行をコントロール行の下に置く。
-     * 自分しか居ないシリーズでは一覧にする意味がないので置かない。
+     *
+     * 今見ている回しか無いシリーズでも置く。一覧が出ないと「他の回が無い」のか
+     * 「シリーズ情報を取れていない」のかを見分けられないため。
+     *
+     * 見出しにはシリーズ名を出す。何のシリーズを並べているのかが分かり、
+     * 番組名からシリーズ名を取り出せているかもその場で確認できる。
      */
     private fun buildEpisodeListRow(playlist: SeriesPlaylist) {
         val rows = seriesRowsAdapter ?: return
-        if (episodeListAdded || playlist.entries.size < 2) return
+        if (episodeListAdded || playlist.entries.isEmpty()) return
         // 今見ている回はフォーカスの当たり方だけでは他と見分けが付きにくいので、
         // サムネイルに「再生中」を重ねて分かるようにする。
         episodeCardPresenter.nowPlayingId = currentProgramId
@@ -1070,7 +1075,10 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
             cards.add(card)
         }
-        rows.add(ListRow(HeaderItem(getString(R.string.action_episode_list)), cards))
+        // シリーズ名は空にならない(空ならそもそも一覧を作れず playlist が null になる)が、
+        // 見出しが空欄の行は壊れて見えるので保険を置いておく。
+        val header = playlist.seriesTitle.ifEmpty { getString(R.string.action_episode_list) }
+        rows.add(ListRow(HeaderItem(header), cards))
         episodeListAdded = true
     }
 

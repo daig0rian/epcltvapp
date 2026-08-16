@@ -236,7 +236,7 @@
     <!-- Playback control button captions (shown under the focused button) -->
     <string name="action_restart">Play from Beginning</string>
     <string name="action_next_episode">Next Episode</string>
-    <!-- Also used as the header of the episode list row -->
+    <!-- Fallback header of the episode list row, used only when the series name is empty -->
     <string name="action_episode_list">Other Episodes</string>
     <string name="action_caption_on">Subtitle ON</string>
     <string name="action_caption_off">Subtitle OFF</string>
