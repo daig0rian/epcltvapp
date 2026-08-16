@@ -85,6 +85,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var overlayView: SubtitleOverlayView? = null
     // ExoPlayerのtextトラック(Cue)描画先。ARIB字幕用のoverlayViewとは供給元が異なるため別ビュー。
     private var subtitleView: SubtitleView? = null
+    // 字幕詰まりの常設計測。原因が判明したら SubtitleStallDiagnostics ごと削除する。
+    private var subtitleDiag: SubtitleStallDiagnostics? = null
 
     // ARIB caption handles
     private var captionHandle: Long = 0
@@ -351,6 +353,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .setLoadControl(loadControl)
             .build()
 
+        subtitleDiag = SubtitleStallDiagnostics(exoPlayer!!).also { it.start() }
+
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 Log.d(TAG, "onPlaybackStateChanged: $playbackState")
@@ -394,6 +398,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             }
             override fun onCues(cueGroup: CueGroup) {
                 subtitleView?.setCues(cueGroup.cues.map { adjustCue(it) })
+                subtitleDiag?.onCues(cueGroup)
             }
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 if (videoSize.width > 0 && videoSize.height > 0) {
@@ -534,6 +539,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             applySubtitleStyle(this)
         }
         root?.addView(subtitleView, if (overlayView != null) 2 else 1)
+        subtitleView?.let { subtitleDiag?.attachSubtitleView(it) }
         return root
     }
 
@@ -1721,6 +1727,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             hlsStreamId = null
         }
         mainHandler.removeCallbacksAndMessages(null)
+        subtitleDiag?.stop()
+        subtitleDiag = null
         captionTickerScheduled = false
         resetCaptionScheduling()
         tsProbeExecutor.shutdownNow()
