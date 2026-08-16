@@ -477,7 +477,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, useNativeTsProcessing, isAnyLive,
+            activity, playerAdapter, useNativeTsProcessing, isAnyLive, isLiveMpegTs,
             captionEnabled, superimposeEnabled, preferSubAudio,
             hasSubtitleSource(), hasSubAudio, seriesNavigationEnabled
         )
@@ -578,9 +578,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         setControlsOverlayAutoHideEnabled(true)
-        if (isLiveMpegTs) {
-            hideSeekBar(view)
-        }
         setupTransportRowWhenReady(view)
         focusChangeListener = ViewTreeObserver.OnGlobalFocusChangeListener { _, newFocus ->
             updateActionCaption(newFocus)
@@ -782,7 +779,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * コントロール行を **[シークバー][時刻][ボタン列][キャプション]** の順に組み替え、
-     * 最後にキャプション用の1行を足す。
+     * 最後にキャプション用の1行を足す。ライブmpegts直送ではシークバーと時刻を隠す。
      *
      * ## 並べ替えの理由
      *
@@ -802,6 +799,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * 間隔を大きく空けねばならず、ボタン列が間延びしてしまうのでフォーカス中の1つだけにする。
      * 高さは文字の有無によらず常に1行分を確保しておく(出るたびに行の高さが変わらないように)。
      *
+     * ## ライブmpegts直送で隠すもの
+     *
+     * シーク不可の生ストリームなのでシークバーを見せても意味がなく、放送は「今」しかないので
+     * 経過時間・総時間も意味を持たない(総時間は取れず、経過時間は再生を始めてからの秒数に
+     * すぎない)。Leanbackにこれらの表示を切り替えるAPIが無いため、直接 GONE にする。
+     * HLSライブは追いかけ再生と同じくバッファ状況が見えて便利なので、どちらも残す。
+     *
      * @return 組み替えられたか。コントロール行のビューがまだ無ければ false。
      */
     private fun setupTransportRow(root: View): Boolean {
@@ -810,8 +814,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val controlsDock = transportRow.findViewById<View>(androidx.leanback.R.id.controls_dock) ?: return false
         val seekBar = transportRow.findViewById<View>(androidx.leanback.R.id.playback_progress) ?: return false
         // 時刻表示(再生位置/総時間)の行。idを持たないので、中の時刻から親をたどる。
+        // secondary actions もこの行に入るが、このアプリでは使っていないので行ごと畳んでよい。
         val timeRow = transportRow.findViewById<View>(androidx.leanback.R.id.current_time)?.parent as? View
             ?: return false
+
+        if (isLiveMpegTs) {
+            seekBar.visibility = View.GONE
+            timeRow.visibility = View.GONE
+        }
 
         // 並べ替えの間だけフォーカスが外れる。removeView したビューがフォーカスを持っていると
         // それが落ち、Android が別の可フォーカスビュー(=ボタン列の先頭)へ振り直してしまうため、
@@ -821,7 +831,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         transportRow.addView(seekBar, 0)
         transportRow.removeView(timeRow)
         transportRow.addView(timeRow, 1)
-        if (hadFocus) seekBar.requestFocus()
+        // シークバーを隠しているときは requestFocus() が失敗するので、ボタン列の先頭へ落とす。
+        if (hadFocus && !seekBar.requestFocus()) focusFirstControlButton()
 
         val caption = TextView(requireContext()).apply {
             layoutParams = ViewGroup.LayoutParams(
@@ -836,6 +847,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         transportRow.addView(caption, transportRow.indexOfChild(controlsDock) + 1)
         actionCaptionView = caption
+        // すでにボタンにフォーカスがある状態でこの行が出来ることがある(シークバーを隠している
+        // ライブmpegts直送では、開いた直後のフォーカスがボタン列に乗る)。その最初のフォーカス
+        // 確定は行が出来る前に済んでいて [updateActionCaption] が空振りしているので、ここで
+        // 今のフォーカスから作り直す。位置の計算にキャプションの実寸が要るためレイアウト後に行う。
+        caption.post { updateActionCaption(root.findFocus()) }
         return true
     }
 
@@ -843,14 +859,33 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * フォーカスが移るたびに呼ばれ、コントロールのボタンなら、そのボタンの真下に名前を出す。
      *
      * ボタンに付いている名前は Leanback が [Action] のラベルから contentDescription として
-     * 設定してくれるので、それをそのまま読む。キャプション行は幅いっぱいの中央寄せなので、
-     * ボタンの中心とキャプションの中心の差だけ横へずらせば真下に来る。
+     * 設定してくれるので、それをそのまま読む。
      */
     private fun updateActionCaption(focused: View?) {
+        val button = focused?.takeIf { it.id == androidx.leanback.R.id.button }
+        showActionCaption(button, button?.contentDescription)
+    }
+
+    /**
+     * ボタンの状態が変わったとき、表示中のキャプションを新しいラベルに差し替える。
+     *
+     * ラベルを引数で受け取るのは、この時点ではまだボタンのビューが作り直されておらず、
+     * contentDescription が古いラベルのままのことがあるため。
+     */
+    fun updateActionCaptionText(label: CharSequence?) {
+        showActionCaption(focusedControlButtonIcon(), label)
+    }
+
+    /**
+     * キャプションを [button] の真下に [label] で出す。ボタンが無ければ消す。
+     *
+     * キャプション行は幅いっぱいの中央寄せなので、ボタンの中心とキャプションの中心の差だけ
+     * 横へずらせば真下に来る。**テキストと位置は必ず一緒に更新すること**——片方だけ更新すると
+     * 前のボタンの位置に新しい名前が出たり、位置未設定(=画面中央)のまま文字だけが出たりする。
+     */
+    private fun showActionCaption(button: View?, label: CharSequence?) {
         val caption = actionCaptionView ?: return
         val row = caption.parent as? ViewGroup ?: return
-        val button = focused?.takeIf { it.id == androidx.leanback.R.id.button }
-        val label = button?.contentDescription
         if (button == null || label.isNullOrEmpty()) {
             caption.text = ""
             return
@@ -863,11 +898,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val buttonCenterInRow = buttonLocation[0] - rowLocation[0] + button.width / 2f
         val captionCenterInRow = caption.left + caption.width / 2f
         caption.translationX = buttonCenterInRow - captionCenterInRow
-    }
-
-    /** ボタンの状態が変わったとき、表示中のキャプションを新しいラベルに差し替える。 */
-    fun updateActionCaptionText(label: CharSequence?) {
-        actionCaptionView?.text = label ?: ""
     }
 
     /**
@@ -889,6 +919,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val controlBar = controlsDock.findViewById<ViewGroup>(androidx.leanback.R.id.control_bar) ?: return null
         return controlBar.focusedChild
     }
+
+    /**
+     * フォーカスのあるボタンのアイコン本体。[focusedControlButton] が返すのはボタン列の直下の
+     * 入れ物(FrameLayout)で、キャプションを真下に置くには中のアイコンの位置が要る。
+     */
+    private fun focusedControlButtonIcon(): View? =
+        focusedControlButton()?.findViewById<View>(androidx.leanback.R.id.button)
 
     /**
      * コントロールを自動で閉じてよいか。**Leanbackの判断を打ち消さず、閉じられると困る状況の間だけ
@@ -1048,29 +1085,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             return
         }
         playSeriesEntry(entry)
-    }
-
-    /**
-     * mpegts直送はシーク不可の生ストリームで、シークバーを見せても意味がない
-     * （HLSは追いかけ再生時のバッファ状況が見えて便利なので残す）。
-     * Leanbackにシークバーの表示/非表示を切り替えるAPIが無いため、コントロール行の
-     * ビューが実際に生成されるのを待って直接 GONE にする。
-     */
-    private fun hideSeekBar(root: View) {
-        val progressBar = root.findViewById<androidx.leanback.widget.SeekBar>(androidx.leanback.R.id.playback_progress)
-        if (progressBar != null) {
-            progressBar.visibility = View.GONE
-            return
-        }
-        root.viewTreeObserver.addOnGlobalLayoutListener(object : android.view.ViewTreeObserver.OnGlobalLayoutListener {
-            override fun onGlobalLayout() {
-                val pb = root.findViewById<androidx.leanback.widget.SeekBar>(androidx.leanback.R.id.playback_progress)
-                if (pb != null) {
-                    pb.visibility = View.GONE
-                    root.viewTreeObserver.removeOnGlobalLayoutListener(this)
-                }
-            }
-        })
     }
 
     private fun startDirectPlayback(
@@ -2161,6 +2175,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // ときだけ扱える。CC/音声と違い再生中に増減しないので固定値で持つ。
         private val hasSuperimpose: Boolean,
         private val isLive: Boolean,
+        // mpegts直送のライブか。ライブの中でもこちらだけ再生/一時停止ボタンを置かない
+        // ([onCreatePrimaryActions] 参照)。
+        private val isLiveMpegTs: Boolean,
         captionEnabled: Boolean,
         superimposeEnabled: Boolean,
         preferSubAudio: Boolean,
@@ -2265,9 +2282,23 @@ class PlaybackVideoFragment : VideoSupportFragment() {
          * 8個目以降は何のエラーも出さずに消える。上の最大構成(録画TS＋ネイティブTS処理＋
          * シリーズあり)でちょうど7個で、もう余白はない。
          * ボタンを増やすときは、まずどれかを畳む方法から考えること。
+         *
+         * ## mpegts直送のライブに再生/一時停止を置かない理由
+         *
+         * 放送を今そのまま見るだけの再生で、止める需要がない。再生/一時停止ボタンは
+         * [PlaybackTransportControlGlue.onCreatePrimaryActions] が作って足しているので、
+         * superを呼ばないことで消す。Leanback側は再生状態の反映
+         * (updatePlaybackState)でこのアクションのnullチェックを済ませてあるため、
+         * 無いままで問題ない(leanback-1.0.0のソースで確認)。リモコンのメディアキーも
+         * 紐づくアクションが無くなり効かなくなるが、これも意図どおり。
+         *
+         * HLSライブには従来どおり置く。こちらはシークバーも残していて、止めて追いつく
+         * (=バッファに溜まった分を後から見る)操作に意味があるため。
          */
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
-            super.onCreatePrimaryActions(primaryActionsAdapter)
+            if (!isLiveMpegTs) {
+                super.onCreatePrimaryActions(primaryActionsAdapter)
+            }
             if (hasSeriesNavigation) {
                 // 「前のエピソード」ボタンは置かない。使う頻度が低く、エピソード一覧を1つ左へ
                 // たどれば同じことができるため。一覧を開くボタンも同様に置かない
