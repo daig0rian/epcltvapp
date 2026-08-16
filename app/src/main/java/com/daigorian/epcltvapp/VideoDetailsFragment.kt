@@ -438,6 +438,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //    第1話から順に追えるよう、放送日の古い順 (reverse) で並べる
         //  - 現在表示中の動画と同じルールIDを持った動画を検索して一覧を表示
         //    最近録れたものを拾う一覧なので、放送日の新しい順 (APIの既定) のまま
+        //    ただしルールを使わず個別に録画したものはルールIDを持たないため、この一覧は出さない
 
         // 番組名 originalTitle
         val originalTitle :String =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.name
@@ -458,14 +459,18 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val ruleId =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.ruleId
         else mSelectedRecordedItem!!.ruleId
 
-        mAdapter.updateContentsListRow(
-            GetRecordedParam(rule = ruleId),
-            GetRecordedParamV2(ruleId = ruleId),
-            getString(R.string.videos_in_same_rule),
-            1,
-            mCardPresenter,
-            requireContext()
-        )
+        // 番組表やライブ再生から個別に録画した番組はルールIDを持たない。そのまま検索すると
+        // ルールでの絞り込みが効かず、全ルールの録画 (＝「最近の録画」と同じ内容) が並んでしまう。
+        if (ruleId != null && ruleId != 0L) {
+            mAdapter.updateContentsListRow(
+                GetRecordedParam(rule = ruleId),
+                GetRecordedParamV2(ruleId = ruleId),
+                getString(R.string.videos_in_same_rule),
+                1,
+                mCardPresenter,
+                requireContext()
+            )
+        }
         mPresenterSelector.addClassPresenter(ListRow::class.java, ListRowPresenter())
 
     }
