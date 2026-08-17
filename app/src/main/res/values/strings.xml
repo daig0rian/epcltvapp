@@ -163,8 +163,6 @@
     <string name="subtitle_off">Subtitle OFF</string>
     <string name="caption_on">Caption ON</string>
     <string name="caption_off">Caption OFF</string>
-    <string name="superimpose_on">Superimpose ON</string>
-    <string name="superimpose_off">Superimpose OFF</string>
     <string name="audio_main">Main Audio</string>
     <string name="audio_sub">Sub Audio</string>
     <string name="no_sub_audio">No Sub Audio</string>
@@ -240,8 +238,6 @@
     <string name="action_episode_list">Other Episodes</string>
     <string name="action_caption_on">Subtitle ON</string>
     <string name="action_caption_off">Subtitle OFF</string>
-    <string name="action_superimpose_on">Superimpose ON</string>
-    <string name="action_superimpose_off">Superimpose OFF</string>
     <string name="action_audio_main">Main Audio</string>
     <string name="action_audio_sub">Sub Audio</string>
     <string name="action_record">Reserve Recording</string>

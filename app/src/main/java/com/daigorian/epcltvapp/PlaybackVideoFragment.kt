@@ -116,7 +116,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     // Persisted toggle states
     private var captionEnabled = false
-    private var superimposeEnabled = false
     private var preferSubAudio = false
 
     // Audio track state
@@ -266,7 +265,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // Restore persisted states
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         captionEnabled = prefs.getBoolean(PREF_CAPTION_ENABLED, false)
-        superimposeEnabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
         preferSubAudio = prefs.getBoolean(PREF_SUB_AUDIO, false)
 
         // ストリームプロファイル選択（Issue #34）: config.ymlの並び順ではなくプロファイル名で
@@ -484,8 +482,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val glueHost = VideoSupportFragmentGlueHost(this@PlaybackVideoFragment)
 
         mTransportControlGlue = MyPlaybackTransportControlGlue(
-            activity, playerAdapter, useNativeTsProcessing, isAnyLive, isLiveMpegTs,
-            captionEnabled, superimposeEnabled, preferSubAudio,
+            activity, playerAdapter, isAnyLive, isLiveMpegTs,
+            captionEnabled, preferSubAudio,
             hasSubtitleSource(), hasSubAudio, seriesNavigationEnabled
         )
         mTransportControlGlue.host = glueHost
@@ -1443,7 +1441,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         tsFactory.superimposePesListener = PesCallback { ptsMs, pesPayload ->
             postCaptionCallback {
                 val h = superimposeHandle
-                if (h == 0L || !superimposeEnabled) return@postCaptionCallback
+                if (h == 0L) return@postCaptionCallback
                 if (AribCaptionFilter.decode(h, ptsMs, pesPayload, 0, pesPayload.size)) {
                     enqueuePendingCaption(pendingSuperimposes, ptsMs)
                 }
@@ -1499,7 +1497,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             queue = pendingSuperimposes,
             positionMs = positionMs,
             handle = superimposeHandle,
-            enabled = superimposeEnabled,
+            // 文字スーパーは緊急地震速報などの臨時テロップで、消す需要がないため常に表示する。
+            enabled = true,
             expiryPositionMs = superimposeExpiryPositionMs,
             maxDurationMs = SUPERIMPOSE_MAX_DURATION_MS,
             show = { images -> overlayView?.showSuperimpose(images) },
@@ -1698,19 +1697,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
         applyTextTrackSelection()
         val msg = if (captionEnabled) R.string.caption_on else R.string.caption_off
-        showQuickToast(getString(msg))
-    }
-
-    fun toggleSuperimpose() {
-        superimposeEnabled = !superimposeEnabled
-        PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .edit().putBoolean(PREF_SUPERIMPOSE_ENABLED, superimposeEnabled).apply()
-        if (!superimposeEnabled) {
-            pendingSuperimposes.clear()
-            superimposeExpiryPositionMs = C.TIME_UNSET
-            overlayView?.clearSuperimpose()
-        }
-        val msg = if (superimposeEnabled) R.string.superimpose_on else R.string.superimpose_off
         showQuickToast(getString(msg))
     }
 
@@ -2046,7 +2032,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // フォーカス中のボタンの下に出すキャプションの文字サイズ。
         private const val ACTION_CAPTION_TEXT_SP = 14f
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
-        private const val PREF_SUPERIMPOSE_ENABLED = "pref_superimpose_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
         // 要求した再生速度と実効値が一致しているとみなす差。ExoPlayerは要求値をそのまま
@@ -2186,15 +2171,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     class MyPlaybackTransportControlGlue(
         context: Context?,
         impl: PlayerAdapter,
-        // 文字スーパー(SI)はARIB固有機能のため、tsreadexネイティブ処理を使っている
-        // ときだけ扱える。CC/音声と違い再生中に増減しないので固定値で持つ。
-        private val hasSuperimpose: Boolean,
         private val isLive: Boolean,
         // mpegts直送のライブか。ライブの中でもこちらだけ再生/一時停止ボタンを置かない
         // ([onCreatePrimaryActions] 参照)。
         private val isLiveMpegTs: Boolean,
         captionEnabled: Boolean,
-        superimposeEnabled: Boolean,
         preferSubAudio: Boolean,
         private var hasSubtitle: Boolean,
         private var hasSubAudio: Boolean,
@@ -2224,17 +2205,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             setLabels(arrayOf(label(R.string.action_caption_on), label(R.string.action_caption_off)))
             index = if (captionEnabled) PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
-        }
-
-        private val superimposeAction = TwoStateAction(
-            ACTION_ID_SUPERIMPOSE.toInt(),
-            getContext(),
-            R.drawable.ic_action_superimpose_off,
-            R.drawable.ic_action_superimpose_on,
-            labelToTurnOn = label(R.string.action_superimpose_on),
-            labelToTurnOff = label(R.string.action_superimpose_off)
-        ).apply {
-            index = if (superimposeEnabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
         }
 
         // 音声は ON/OFF ではなく主/副の切り替え。OFF=主音声・ON=副音声として扱う。
@@ -2281,7 +2251,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 refreshFocusedActionCaption()
         }
 
-        // CC/SI/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
+        // CC/音声ボタンの挿入位置。これらはトラック検出のタイミングで出入りするため、
         // 出入りしないボタン(再生系と速度)の直後を予約しておき、常に同じ位置・同じ順序で
         // 入れ直す(検出のたびに並びが変わると操作を覚えられないため)。
         private var trackActionIndex = 0
@@ -2289,14 +2259,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         /**
          * ボタン列を組み立てる。
          *
-         * 並びは 再生/一時停止・最初から・次の回・再生速度・CC・SI・音声。トラックの有無で
-         * 出入りするCC/SI/音声を右端にまとめ、常にあるボタンの位置が番組によって動かないようにする。
+         * 並びは 再生/一時停止・最初から・次の回・再生速度・CC・音声。トラックの有無で
+         * 出入りするCC/音声を右端にまとめ、常にあるボタンの位置が番組によって動かないようにする。
          *
          * **ボタンは7個までしか描画されない。** Leanbackの
          * [androidx.leanback.widget.ControlBarPresenter] が `MAX_CONTROLS = 7` で打ち切り、
          * 8個目以降は何のエラーも出さずに消える。上の最大構成(録画TS＋ネイティブTS処理＋
-         * シリーズあり)でちょうど7個で、もう余白はない。
-         * ボタンを増やすときは、まずどれかを畳む方法から考えること。
+         * シリーズあり)で6個なので、増やせるのはあと1個だけ。それ以上はどれかを畳む方法から
+         * 考えること。
          *
          * ## mpegts直送のライブに再生/一時停止を置かない理由
          *
@@ -2326,7 +2296,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 // バッファを食い潰して止まるだけで意味がないため(追いかけ再生には置く。
                 // こちらは録画済みの区間を早く消化して追いつけるので意味がある)。
                 //
-                // CC/SI/音声より**先**に置く。あちらはトラックの検出しだいで出入りするので、
+                // CC/音声より**先**に置く。あちらはトラックの検出しだいで出入りするので、
                 // 後に置くと番組によって速度ボタンの位置が変わってしまう。
                 primaryActionsAdapter.add(speedAction)
             }
@@ -2360,13 +2330,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private fun refreshTrackActions() {
             val adapter = primaryActions ?: return
             // 部分的に足し引きすると順序が崩れるため、いったん全て外してから入れ直す。
-            for (action in listOf(ccAction, superimposeAction, audioAction)) {
+            for (action in listOf(ccAction, audioAction)) {
                 val idx = adapter.indexOf(action)
                 if (idx >= 0) adapter.removeItems(idx, 1)
             }
             var idx = trackActionIndex
             if (hasSubtitle) adapter.add(idx++, ccAction)
-            if (hasSuperimpose) adapter.add(idx++, superimposeAction)
             if (hasSubAudio) adapter.add(idx, audioAction)
         }
 
@@ -2388,13 +2357,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                         PlaybackControlsRow.ClosedCaptioningAction.INDEX_OFF
                     else PlaybackControlsRow.ClosedCaptioningAction.INDEX_ON
                     notifyActionChanged(ccAction)
-                }
-                superimposeAction -> {
-                    playbackFragment?.toggleSuperimpose()
-                    val prefs = PreferenceManager.getDefaultSharedPreferences(context!!)
-                    val enabled = prefs.getBoolean(PREF_SUPERIMPOSE_ENABLED, true)
-                    superimposeAction.index = if (enabled) TwoStateAction.INDEX_ON else TwoStateAction.INDEX_OFF
-                    notifyActionChanged(superimposeAction)
                 }
                 audioAction -> {
                     playbackFragment?.toggleAudioTrack()
@@ -2482,7 +2444,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         }
 
         companion object {
-            private const val ACTION_ID_SUPERIMPOSE = 10001L
             private const val ACTION_ID_AUDIO = 10002L
             private const val ACTION_ID_RECORD = 10003L
             private const val ACTION_ID_INFO = 10004L

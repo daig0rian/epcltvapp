@@ -80,8 +80,6 @@
     <string name="no_subtitle">字幕なし</string>
     <string name="caption_on">字幕 ON</string>
     <string name="caption_off">字幕 OFF</string>
-    <string name="superimpose_on">文字スーパー ON</string>
-    <string name="superimpose_off">文字スーパー OFF</string>
     <string name="audio_main">主音声</string>
     <string name="audio_sub">副音声</string>
     <string name="no_sub_audio">副音声なし</string>
@@ -129,8 +127,6 @@
     <string name="action_episode_list">他のエピソード</string>
     <string name="action_caption_on">字幕 ON</string>
     <string name="action_caption_off">字幕 OFF</string>
-    <string name="action_superimpose_on">文字スーパー ON</string>
-    <string name="action_superimpose_off">文字スーパー OFF</string>
     <string name="action_audio_main">主音声</string>
     <string name="action_audio_sub">副音声</string>
     <string name="action_record">録画予約</string>
