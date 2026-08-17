@@ -37,10 +37,13 @@ android {
 
     signingConfigs {
         release {
-            storeFile     file(System.getenv("RELEASE_KEYSTORE_PATH") ?: "dummy.jks")
-            storePassword System.getenv("RELEASE_STORE_PASSWORD") ?: ""
-            keyAlias      System.getenv("RELEASE_KEY_ALIAS")       ?: ""
-            keyPassword   System.getenv("RELEASE_KEY_PASSWORD")    ?: ""
+            // CI(GitHub Actions)は RELEASE_KEYSTORE_* を環境変数で渡す(release.yml)。
+            // 環境変数がないローカルでは debug と同じ鍵にフォールバックする。性能計測などで
+            // リリースビルド(非debuggable)を手元で動かすためのもので、配布物には使えない。
+            storeFile     file(System.getenv("RELEASE_KEYSTORE_PATH") ?: signingConfigs.debug.storeFile)
+            storePassword System.getenv("RELEASE_STORE_PASSWORD")     ?: signingConfigs.debug.storePassword
+            keyAlias      System.getenv("RELEASE_KEY_ALIAS")          ?: signingConfigs.debug.keyAlias
+            keyPassword   System.getenv("RELEASE_KEY_PASSWORD")       ?: signingConfigs.debug.keyPassword
         }
     }
 
