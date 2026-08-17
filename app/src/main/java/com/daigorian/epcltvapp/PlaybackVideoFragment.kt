@@ -362,16 +362,25 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         trackSelector = DefaultTrackSelector(requireContext())
         // TS・ライブは素早い再生開始と低遅延のためバッファを小さく保つ。
         //
-        // 一方、録画済みのエンコード済み動画/HLSでは大きめに取る必要がある。EPGStationが
-        // ffmpegで出力するMP4は字幕トラックの多重化位置が映像から大きくずれることがあり
-        // (sparseなストリームはmax_interleave_deltaの影響で数十秒ぶんずれた位置に書かれる)、
-        // 先読みが小さいと字幕サンプルの到着だけが遅れて「字幕が止まった後に一気に流れて
-        // 追いつく」挙動になる。実測ログでは映像・音声は正常に進みバッファも健全なまま、
-        // 字幕だけ34秒間途切れてから0.5秒で15件まとめて届いていた。
-        // ここはmedia3のDefaultLoadControlの既定値(50秒)に任せる。
+        // エンコード済み動画/HLSは Issue #69 の検証のため、ローダーの動作周期を粗くしている。
+        // 既定は min=max=50秒で、ローダーは50秒に達すると止まり、少し減るとすぐ再開する
+        // ——という小刻みな停止・再開を繰り返す。字幕が数秒〜数十秒止まる現象を計測したところ、
+        // 遅れて届いたCueの到着時刻が、いずれもこの「ローダーが再開してバッファが伸びた瞬間」と
+        // 一致していた(14:32の例では buf=917983 で停滞したまま12.8秒Cueが途切れ、
+        // buf=929461 へ伸びた瞬間に8件がまとめて届いた)。
+        //
+        // そこで min(20秒)と max(60秒)を離し、読み込みの塊を大きくして停止・再開の回数を
+        // 大幅に減らす。詰まりの発生がローダーの停止・再開に追従するなら、この変更で
+        // 発生位置と頻度が目に見えて変わるはず。変わらなければ相関は偶然だったと判定できる。
+        //
+        // 検証が終わったら既定(50秒)へ戻すこと。
         val loadControl = DefaultLoadControl.Builder()
             .apply {
-                if (isTsContent || isAnyLive) setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+                if (isTsContent || isAnyLive) {
+                    setBufferDurationsMs(1_000, 8_000, 500, 1_000)
+                } else {
+                    setBufferDurationsMs(20_000, 60_000, 2_500, 5_000)
+                }
             }
             .build()
 
