@@ -3,7 +3,16 @@
 
 リモコンの↑↓←→キー操作が基本となる Android TV から EPGStation の録画を見るために開発されました。
 
-![メイン画面](screenshots/hero.png)
+<table>
+  <tr>
+    <td width="50%"><img src="screenshots/hero.png" alt="メイン画面" width="100%"></td>
+    <td width="50%"><img src="screenshots/search-screen.png" alt="検索画面" width="100%"></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="screenshots/details-screen.png" alt="番組詳細画面" width="100%"></td>
+    <td width="50%"><img src="screenshots/playback-screen.png" alt="内蔵プレーヤー" width="100%"></td>
+  </tr>
+</table>
 
 ## 特徴
 - Android TV 向け標準 UI の Leanback テーマを使用
