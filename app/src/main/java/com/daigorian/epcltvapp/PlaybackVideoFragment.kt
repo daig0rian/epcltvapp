@@ -59,6 +59,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.hls.HlsMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.DefaultExtractorsFactory
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
@@ -1119,7 +1120,21 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             ProgressiveMediaSource.Factory(tsFactory)
                 .createMediaSource(MediaItem.fromUri(url))
         } else {
-            ProgressiveMediaSource.Factory(dataSourceFactory)
+            // 字幕を「描画時パース」ではなく「抽出時パース」で処理する(Issue #69 の検証)。
+            // 旧経路は TextRenderer がデコーダのバッファ受け渡しを介してCueを1件ずつ送り出す
+            // ため、実機では映像・音声・メインスレッド・バッファのいずれも正常なまま字幕の
+            // 更新だけが数秒止まり、その後まとめて届く現象が観測されている。新経路は
+            // 抽出時にCueへ変換して再生位置から直接決めるので、この経路自体が存在しない。
+            //
+            // TS には適用しない。androidx/media#1621 で「抽出時パースにするとTSの映像が
+            // ブロックノイズだらけになる」報告があり、再現機種の傾向(Android 7〜11の
+            // TV系端末)がこのアプリの対象と重なるため。
+            //
+            // media3 1.4.0 ではこれが既定になる。新経路の実装は1.3.1と1.4.0で同一なので、
+            // バージョンは上げずにここだけ切り替えて検証する。
+            val extractorsFactory = DefaultExtractorsFactory()
+                .experimentalSetTextTrackTranscodingEnabled(true)
+            ProgressiveMediaSource.Factory(dataSourceFactory, extractorsFactory)
                 .createMediaSource(MediaItem.fromUri(url))
         }
         exoPlayer?.setMediaSource(mediaSource)
