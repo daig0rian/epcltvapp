@@ -362,25 +362,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         trackSelector = DefaultTrackSelector(requireContext())
         // TS・ライブは素早い再生開始と低遅延のためバッファを小さく保つ。
         //
-        // エンコード済み動画/HLSは Issue #69 の検証のため、ローダーの動作周期を粗くしている。
-        // 既定は min=max=50秒で、ローダーは50秒に達すると止まり、少し減るとすぐ再開する
-        // ——という小刻みな停止・再開を繰り返す。字幕が数秒〜数十秒止まる現象を計測したところ、
-        // 遅れて届いたCueの到着時刻が、いずれもこの「ローダーが再開してバッファが伸びた瞬間」と
-        // 一致していた(14:32の例では buf=917983 で停滞したまま12.8秒Cueが途切れ、
-        // buf=929461 へ伸びた瞬間に8件がまとめて届いた)。
+        // エンコード済み動画/HLSは media3 の DefaultLoadControl の既定値(50秒)に任せる。
         //
-        // そこで min(20秒)と max(60秒)を離し、読み込みの塊を大きくして停止・再開の回数を
-        // 大幅に減らす。詰まりの発生がローダーの停止・再開に追従するなら、この変更で
-        // 発生位置と頻度が目に見えて変わるはず。変わらなければ相関は偶然だったと判定できる。
-        //
-        // 検証が終わったら既定(50秒)へ戻すこと。
+        // Issue #69 の検証で一時的に min=20秒/max=60秒へ広げたことがある。「遅れて届いたCueの
+        // 到着がローダーの再開と一致している」という観測が根拠だったが、再生中のバッファ停滞は
+        // 常時50〜77%の時間帯で起きており相関が偽と判明したため、既定へ戻した。
         val loadControl = DefaultLoadControl.Builder()
             .apply {
-                if (isTsContent || isAnyLive) {
-                    setBufferDurationsMs(1_000, 8_000, 500, 1_000)
-                } else {
-                    setBufferDurationsMs(20_000, 60_000, 2_500, 5_000)
-                }
+                if (isTsContent || isAnyLive) setBufferDurationsMs(1_000, 8_000, 500, 1_000)
             }
             .build()
 
