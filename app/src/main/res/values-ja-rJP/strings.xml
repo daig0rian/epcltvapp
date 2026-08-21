@@ -136,5 +136,9 @@
     <!-- speed_value_* は言語によらず同じ表記なので values/strings.xml のものをそのまま使う -->
 
     <string name="speed_not_supported">この音声では再生速度を変えられません。1.00x で再生します。</string>
+    <!-- deep link (epcltvapp://live/channelId/<channelId>) -->
+    <string name="deep_link_unsupported">このリンクには対応していません。</string>
+    <string name="deep_link_requires_v2">リンクからのライブ視聴には EPGStation v2 が必要です。</string>
+    <string name="deep_link_channel_not_found">チャンネルが見つかりません: %1$s</string>
 
 </resources>

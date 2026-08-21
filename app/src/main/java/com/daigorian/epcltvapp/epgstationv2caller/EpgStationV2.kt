@@ -108,23 +108,44 @@ object EpgStationV2 {
     var channelMap: Map<Long, String> = emptyMap()
     var streamConfig: StreamConfig? = null
 
-    fun fetchChannels() {
-        api?.getChannels()?.enqueue(object : Callback<List<ChannelItem>> {
+    /**
+     * @param onComplete 成否によらず必ず1回だけ呼ばれる。api未初期化で送信自体ができない
+     *                   場合も呼ぶ——待っている側を取り残さないため。
+     */
+    fun fetchChannels(onComplete: (() -> Unit)? = null) {
+        val call = api?.getChannels()
+        if (call == null) {
+            onComplete?.invoke()
+            return
+        }
+        call.enqueue(object : Callback<List<ChannelItem>> {
             override fun onResponse(call: Call<List<ChannelItem>>, response: retrofit2.Response<List<ChannelItem>>) {
                 response.body()?.let { list ->
                     channelMap = list.associate { item -> item.id to item.halfWidthName.ifEmpty { item.name } }
                 }
+                onComplete?.invoke()
             }
-            override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {}
+            override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {
+                onComplete?.invoke()
+            }
         })
     }
 
-    fun fetchStreamConfig() {
-        api?.getConfig()?.enqueue(object : Callback<ConfigResponse> {
+    /** @param onComplete [fetchChannels] と同じ約束。 */
+    fun fetchStreamConfig(onComplete: (() -> Unit)? = null) {
+        val call = api?.getConfig()
+        if (call == null) {
+            onComplete?.invoke()
+            return
+        }
+        call.enqueue(object : Callback<ConfigResponse> {
             override fun onResponse(call: Call<ConfigResponse>, response: retrofit2.Response<ConfigResponse>) {
                 streamConfig = response.body()?.streamConfig
+                onComplete?.invoke()
             }
-            override fun onFailure(call: Call<ConfigResponse>, t: Throwable) {}
+            override fun onFailure(call: Call<ConfigResponse>, t: Throwable) {
+                onComplete?.invoke()
+            }
         })
     }
 

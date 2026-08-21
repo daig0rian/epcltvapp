@@ -38,6 +38,27 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- 外部からライブ視聴を開始するための受け口。
+             epcltvapp://live/channelId/<channelId>
+             識別子の種別をパスに含めているのは、将来 remoteControlKeyId のような別の
+             指定方法を足せるようにするため。 -->
+        <activity
+            android:name=".DeepLinkActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.Epcltvapp.DeepLink"
+            android:screenOrientation="landscape">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="epcltvapp" android:host="live" />
+            </intent-filter>
+        </activity>
         <activity android:name=".DetailsActivity"
             android:screenOrientation="landscape"/>
         <activity android:name=".PlaybackActivity"
