@@ -84,6 +84,10 @@ class DeepLinkActivity : FragmentActivity() {
 
         startActivity(
             Intent(this, PlaybackActivity::class.java).apply {
+                // 既に再生中なら、その画面を積み上げずに置き換える。
+                // 積むと古い再生が生き続けてストリームを掴んだままになり、チューナーを
+                // 1本ずつ食い潰す。自動化から繰り返し投げられる経路なので実際に起きる。
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 putExtra(DetailsActivity.IS_LIVE_MPEGTS, true)
                 putExtra(DetailsActivity.CHANNEL_ID, channelId)
                 putExtra(DetailsActivity.CHANNEL_NAME, channelName)

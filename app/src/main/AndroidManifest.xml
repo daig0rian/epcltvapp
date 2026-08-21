@@ -47,7 +47,6 @@
             android:exported="true"
             android:excludeFromRecents="true"
             android:noHistory="true"
-            android:launchMode="singleTask"
             android:theme="@style/Theme.Epcltvapp.DeepLink"
             android:screenOrientation="landscape">
             <intent-filter>
