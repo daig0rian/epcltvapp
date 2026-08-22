@@ -42,6 +42,13 @@
     <style name="CustomizedSearch" parent="@style/Theme.Epcltvapp">
         <item name="android:windowBackground">@color/background_epgstation</item>
     </style>
-
+    <!-- deep link の受け口用。画面を持たずすぐ次へ遷移するので背景を出さない。
+         Theme.NoDisplay は onResume までに finish() できないと落ちるため使わない
+         (接続先の初期化を待つ間、この画面は生きている必要がある)。 -->
+    <style name="Theme.Epcltvapp.DeepLink" parent="@style/Theme.Epcltvapp">
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+    </style>
 
 </resources>

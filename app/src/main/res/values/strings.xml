@@ -251,7 +251,9 @@
     <string name="speed_value_150">1.50x</string>
     <string name="speed_value_200">2.00x</string>
     <string name="speed_not_supported">Playback speed cannot be changed for this audio. Playing at 1.00x.</string>
-
-
+    <!-- deep link (epcltvapp://live/channelId/<channelId>) -->
+    <string name="deep_link_unsupported">This link is not supported.</string>
+    <string name="deep_link_requires_v2">Starting live TV from a link requires EPGStation v2.</string>
+    <string name="deep_link_channel_not_found">Channel not found: %1$s</string>
 
 </resources>

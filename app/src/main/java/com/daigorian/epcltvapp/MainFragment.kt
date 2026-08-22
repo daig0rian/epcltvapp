@@ -200,79 +200,31 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun initEPGStationApi(){
-        //Preferenceに設定されているAPIバージョン、IPアドレス、ポート番号、１回あたりの取得数を読み込んでAPIをセットアップする。
-        EpgStation.api = null //apiをいったん初期化
-        EpgStationV2.api = null //apiをいったん初期化
+        //Preferenceに設定されている接続先でAPIをセットアップする。
+        //接続先の解決とバージョン判定は EpgStationApiInitializer が持つ。deep link の
+        //受け口(DeepLinkActivity)が同じ初期化を必要とするため共通化してある。
+        //一覧の取得はここに残す——画面によって要るものが違うため。
+        EpgStationApiInitializer.initialize(requireContext()) { result ->
+            when (result) {
+                is EpgStationApiInitializer.Result.V2 -> {
+                    EpgStationV2.fetchChannels()
+                    EpgStationV2.fetchStreamConfig()
+                }
 
-        //設定値を取得
-        val pref = PreferenceManager.getDefaultSharedPreferences(context)
-        val useCustomBaseURL = pref.getBoolean(getString(R.string.pref_key_use_custom_base_url),false)
+                is EpgStationApiInitializer.Result.V1 -> {
+                    EpgStation.fetchChannels()
+                }
 
-        //base URL
-        val baseUrl = if (useCustomBaseURL) {
-            //カスタムURL ON の時はそちらを読み込む
-             pref.getString(
-                getString(R.string.pref_key_custom_base_url),
-                getString(R.string.pref_val_custom_base_url_default)
-            )!!
-
-        }else {
-            //カスタムURL OFF の時はIPとPortからURLを生成する
-            val ipAddress = pref.getString(
-                    getString(R.string.pref_key_ip_addr),
-                    getString(R.string.pref_val_ip_addr_default)
-                )!!
-            val port = pref.getString(
-                    getString(R.string.pref_key_port_num),
-                    getString(R.string.pref_val_port_num_default)
-                )!!
-            "http://$ipAddress:$port/api/"
-        }
-
-        //バージョンチェックして適切なバージョンのAPIを初期化
-        try {
-            EpgStationV2VersionChecker(baseUrl).api.getVersion()
-                .enqueue(object : Callback<Version> {
-                    override fun onResponse(call: Call<Version>, response: Response<Version>) {
-                        if (response.body() != null) {
-                            //Version 2で初期化
-                            Log.d(TAG, "initEPGStationApi() detect Version 2.x.x")
-                            EpgStationV2.initAPI(baseUrl)
-                            EpgStationV2.fetchChannels()
-                            EpgStationV2.fetchStreamConfig()
-                            loadRows()
-                        } else {
-                            //Version 1で初期化
-                            Log.d(TAG, "initEPGStationApi() detect Version 1.x.x")
-                            EpgStationV2.api = null
-                            EpgStation.initAPI(baseUrl)
-                            EpgStation.fetchChannels()
-                            loadRows()
-                        }
-                    }
-
-                    override fun onFailure(call: Call<Version>, t: Throwable) {
-                        Log.d(TAG, "initEPGStationApi() getVersion API Failure")
-                        Toast.makeText(
-                            context!!,
-                            getString(R.string.connect_epgstation_failed) + "\n" + getString(R.string.please_check_ip_and_port) ,
-                            Toast.LENGTH_LONG
-                        ).show()
-                        loadRows()
-
-                    }
-                })
-        } catch(e:Exception){
-            Toast.makeText(
-                requireContext(),
-                getString(R.string.connect_epgstation_failed)  + "\n" +  e.message,
-                Toast.LENGTH_LONG
-            ).show()
+                is EpgStationApiInitializer.Result.Failed -> {
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.connect_epgstation_failed) + "\n" + result.detail,
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
             loadRows()
         }
-
-
-
     }
 
     private fun prepareBackgroundManager() {
