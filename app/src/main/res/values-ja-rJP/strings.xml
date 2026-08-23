@@ -147,7 +147,7 @@
          自動チェック・バックグラウンドチェックは行わない。 -->
     <string name="settings_update">アップデートを確認</string>
     <string name="app_update_title">アプリのアップデート</string>
-    <string name="app_update_consent_body">新しいバージョンが公開されているかを調べるため、インターネット上の GitHub (api.github.com) へ接続します。\n\n接続するのはこの操作を選んだときだけです。自動で確認することはありません。</string>
+    <string name="app_update_consent_body">新しいバージョンが公開されているかを調べるため、インターネット上の GitHub (api.github.com) へ接続します。</string>
     <string name="app_update_consent_ok">接続して確認</string>
     <string name="app_update_checking">確認しています…</string>
     <string name="app_update_up_to_date">お使いの v%1$s が最新です。</string>

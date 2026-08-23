@@ -262,7 +262,7 @@
          the consent dialog below. There is no automatic or background check. -->
     <string name="settings_update">Check for Update</string>
     <string name="app_update_title">App Update</string>
-    <string name="app_update_consent_body">To see whether a newer version has been released, this app will connect to GitHub (api.github.com) over the internet.\n\nThis happens only when you choose to do so here. The app never checks for updates automatically or in the background.</string>
+    <string name="app_update_consent_body">To see whether a newer version has been released, this app will connect to GitHub (api.github.com) over the internet.</string>
     <string name="app_update_consent_ok">Connect and Check</string>
     <string name="app_update_checking">Checking…</string>
     <string name="app_update_up_to_date">You are on the latest version (v%1$s).</string>
