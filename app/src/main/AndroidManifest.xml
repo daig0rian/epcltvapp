@@ -3,6 +3,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- アプリ内アップデートで、落としたAPKをシステムのインストーラーへ渡すために要る。
+         宣言しただけでは足りず、利用者が「不明なアプリのインストール」を許可する必要がある
+         (API 26 以降。それ以前は端末全体の「提供元不明のアプリ」設定に従う)。 -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
@@ -67,6 +71,18 @@
             android:screenOrientation="landscape"/>
         <activity android:name=".SettingsActivity"
             android:theme="@style/LeanbackPreferences"/>
+
+        <!-- アプリ内アップデートで落としたAPKをインストーラーへ渡すための受け渡し口。
+             API 24 以降は file:// を他アプリへ渡せないため content:// にする。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 
 </manifest>

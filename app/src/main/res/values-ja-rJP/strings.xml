@@ -141,4 +141,32 @@
     <string name="deep_link_requires_v2">リンクからのライブ視聴には EPGStation v2 が必要です。</string>
     <string name="deep_link_channel_not_found">チャンネルが見つかりません: %1$s</string>
 
+
+    <!-- アプリ内アップデート（設定行のカード）。
+         GitHub へ接続するのは、カードを押してさらに下の同意ダイアログで承諾したときだけ。
+         自動チェック・バックグラウンドチェックは行わない。 -->
+    <string name="settings_update">アップデートを確認</string>
+    <string name="app_update_title">アプリのアップデート</string>
+    <string name="app_update_consent_body">新しいバージョンが公開されているかを調べるため、インターネット上の GitHub (api.github.com) へ接続します。\n\n接続するのはこの操作を選んだときだけです。自動で確認することはありません。</string>
+    <string name="app_update_consent_ok">接続して確認</string>
+    <string name="app_update_checking">確認しています…</string>
+    <string name="app_update_up_to_date">お使いの v%1$s が最新です。</string>
+    <string name="app_update_available_title">v%1$s へのアップデート</string>
+    <string name="app_update_installed_is">現在のバージョン: v%1$s</string>
+    <string name="app_update_no_release_notes">リリースノートはありません。</string>
+    <string name="app_update_do_update">更新する</string>
+    <string name="app_update_later">あとで</string>
+    <string name="app_update_downloading">ダウンロードしています… %1$d%%</string>
+    <string name="app_update_abort">中止</string>
+    <string name="app_update_retry">再試行</string>
+    <string name="app_update_install">インストール</string>
+    <string name="app_update_error_network">GitHub に接続できませんでした。ネットワークの状態を確認して、もう一度お試しください。</string>
+    <string name="app_update_error_no_release">リリース情報を読み取れませんでした。</string>
+    <string name="app_update_error_no_apk">最新のリリースに APK が添付されていません。</string>
+    <string name="app_update_error_download">ダウンロードに失敗しました。</string>
+    <string name="app_update_error_no_storage">ダウンロードに使える保存領域がありません。</string>
+    <string name="app_update_error_install">インストーラーを起動できませんでした。</string>
+    <string name="app_update_permission_body">アップデートをインストールするには、「%1$s」に「不明なアプリのインストール」を許可してください。</string>
+    <string name="app_update_permission_manual">アップデートをインストールするには、このアプリに「不明なアプリのインストール」を許可してください。\n\n端末の設定を開き、「不明なアプリのインストール」（「アプリ」&gt;「特別なアプリアクセス」の下、Fire TV では「開発者オプション」の下にあることがあります）でこのアプリを許可してください。</string>
+    <string name="app_update_permission_open">設定を開く</string>
 </resources>

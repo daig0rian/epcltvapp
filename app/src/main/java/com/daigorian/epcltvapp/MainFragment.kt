@@ -520,6 +520,13 @@ class MainFragment : BrowseSupportFragment() {
             getString(R.string.reload),
             SettingsCardPresenter.Item.Action.RELOAD
         ))
+        // アップデート確認。カードの見た目は状態によらず常に同じで、押したときだけ確認しに行く。
+        // 起動時チェックは行わない (AppUpdateDialogFragment の KDoc を参照)。
+        gridRowAdapter.add(SettingsCardPresenter.Item(
+            R.drawable.ic_settings_update,
+            getString(R.string.settings_update),
+            SettingsCardPresenter.Item.Action.UPDATE
+        ))
 
         mMainMenuAdapter.addToCategory(Category.SETTINGS, ListRow(gridHeader, gridRowAdapter))
 
@@ -700,6 +707,10 @@ class MainFragment : BrowseSupportFragment() {
                         }
                         SettingsCardPresenter.Item.Action.RELOAD -> {
                             reloadContentRows()
+                        }
+                        SettingsCardPresenter.Item.Action.UPDATE -> {
+                            AppUpdateDialogFragment.newInstance()
+                                .show(childFragmentManager, AppUpdateDialogFragment.TAG)
                         }
                     }
                 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ダウンロードしたAPKをシステムのインストーラーへ渡すためのFileProvider定義。
+
+  保存先は外部キャッシュ(external-cache-path)を第一候補にする。API 24未満では
+  content:// ではなく file:// を渡す必要があり、内部ストレージに置くと
+  インストーラーから読めないため。外部ストレージが使えない端末向けに
+  内部キャッシュ(cache-path)も宣言しておく(こちらはAPI 24以上でのみ機能する)。
+-->
+<paths>
+    <external-cache-path name="apk_external" path="apk/" />
+    <cache-path name="apk_internal" path="apk/" />
+</paths>
