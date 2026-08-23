@@ -43,4 +43,6 @@
   - 3. release キーストアがあればインストール成功まで
   - 4. `"1.37"` に戻して「最新です」表示
   - 5. Fire TV / Google TV Streamer の両方、権限画面の有無
+- [x] README / MANUAL の更新、スクリーンショット撮影（`update-available.png` を除く）
+- [ ] `update-available.png`（新バージョンが見つかったときの表示）の撮影 — versionName 1.36 のビルドが要る
 - [ ] `WIP.md` を削除してコミット → PR 作成
