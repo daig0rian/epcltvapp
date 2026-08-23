@@ -267,7 +267,7 @@ class AppUpdateDialogFragment : DialogFragment() {
 
         val asset = AppVersion.pickApkAsset(release?.assets)
         val url = asset?.browserDownloadUrl
-        if (url == null) {
+        if (asset == null || url == null) {
             showError(R.string.app_update_error_no_apk, retry = null)
             return
         }
