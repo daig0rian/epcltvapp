@@ -256,4 +256,36 @@
     <string name="deep_link_requires_v2">Starting live TV from a link requires EPGStation v2.</string>
     <string name="deep_link_channel_not_found">Channel not found: %1$s</string>
 
+
+    <!-- In-app update (Settings row card).
+         The app connects to GitHub only when the user presses the card AND accepts
+         the consent dialog below. There is no automatic or background check. -->
+    <string name="settings_update">Check for Update</string>
+    <string name="app_update_title">App Update</string>
+    <string name="app_update_consent_body">To see whether a newer version has been released, this app will connect to GitHub (api.github.com) over the internet.</string>
+    <string name="app_update_consent_ok">Connect and Check</string>
+    <string name="app_update_checking">Checking…</string>
+    <string name="app_update_up_to_date">You are on the latest version (v%1$s).</string>
+    <string name="app_update_available_title">Update to v%1$s</string>
+    <string name="app_update_installed_is">Installed version: v%1$s</string>
+    <string name="app_update_no_release_notes">No release notes.</string>
+    <string name="app_update_do_update">Update</string>
+    <string name="app_update_later">Later</string>
+    <string name="app_update_downloading">Downloading… %1$d%%</string>
+    <string name="app_update_abort">Abort</string>
+    <string name="app_update_retry">Retry</string>
+    <string name="app_update_install">Install</string>
+    <string name="app_update_error_network">Could not connect to GitHub. Check the network connection and try again.</string>
+    <string name="app_update_error_no_release">Could not read the release information.</string>
+    <string name="app_update_error_no_apk">The latest release has no APK attached.</string>
+    <string name="app_update_error_download">Download failed.</string>
+    <string name="app_update_error_no_storage">No writable storage is available for the download.</string>
+    <string name="app_update_error_install">Could not start the installer.</string>
+    <!-- %1$s is the app name -->
+    <string name="app_update_permission_body">To install the update, allow \"%1$s\" to install unknown apps.</string>
+    <!-- Shown when the settings screen cannot be opened from this app. %1$s is the app name. -->
+    <string name="app_update_permission_manual">To install the update, allow this app to install unknown apps.\n\nOpen the device Settings, find \"Install unknown apps\" (usually under Apps &gt; Special app access), and turn it on for \"%1$s\".</string>
+    <!-- Fire TV wording. Amazon protects this settings screen, so it cannot be opened from here. -->
+    <string name="app_update_permission_manual_firetv">To install the update, allow this app to install unknown apps.\n\nGo to Settings &gt; My Fire TV &gt; Developer options &gt; Install unknown apps, and turn it on for \"%1$s\".\n\nIf Developer options is not listed, you need to enable it first.</string>
+    <string name="app_update_permission_open">Open Settings</string>
 </resources>

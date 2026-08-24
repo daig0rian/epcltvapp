@@ -71,6 +71,14 @@ dependencies {
     implementation 'com.squareup.retrofit2:retrofit:2.9.0'
     implementation 'com.squareup.retrofit2:converter-gson:2.9.0'
 
+    // アップデートダイアログでリリースノート(Markdown)を整形して表示するためのパーサ。
+    // Java 11 前提だが core library desugaring は不要 (本家の Android テストモジュールが
+    // minSdk 19 / Java 11 / desugaring なしで通っている)。
+    // 表の拡張がないと "| a | b |" がパイプ付きのまま表示されてしまうので併せて入れる。
+    def commonmark_version = "0.30.0"
+    implementation "org.commonmark:commonmark:$commonmark_version"
+    implementation "org.commonmark:commonmark-ext-gfm-tables:$commonmark_version"
+
     def preference_version = "1.1.1"
     implementation "androidx.preference:preference-ktx:$preference_version"
 
