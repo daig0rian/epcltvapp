@@ -167,6 +167,9 @@
     <string name="app_update_error_no_storage">ダウンロードに使える保存領域がありません。</string>
     <string name="app_update_error_install">インストーラーを起動できませんでした。</string>
     <string name="app_update_permission_body">アップデートをインストールするには、「%1$s」に「不明なアプリのインストール」を許可してください。</string>
-    <string name="app_update_permission_manual">アップデートをインストールするには、このアプリに「不明なアプリのインストール」を許可してください。\n\n端末の設定を開き、「不明なアプリのインストール」（「アプリ」&gt;「特別なアプリアクセス」の下、Fire TV では「開発者オプション」の下にあることがあります）でこのアプリを許可してください。</string>
+    <!-- 設定画面をアプリから開けないときの案内。%1$s はアプリ名。 -->
+    <string name="app_update_permission_manual">アップデートをインストールするには、このアプリからのインストールを許可してください。\n\n端末の設定を開き、「不明なアプリのインストール」（多くは「アプリ」&gt;「特別なアプリアクセス」の下にあります）で「%1$s」をオンにしてください。</string>
+    <!-- Fire TV 用。この設定画面は Amazon 側で保護されていて、アプリからは開けない。 -->
+    <string name="app_update_permission_manual_firetv">アップデートをインストールするには、このアプリからのインストールを許可してください。\n\n「設定」&gt;「マイFire TV」&gt;「開発者オプション」&gt;「未知のアプリをインストール」と進み、「%1$s」をオンにしてください。\n\n「開発者オプション」が見当たらない場合は、先に有効にする必要があります。</string>
     <string name="app_update_permission_open">設定を開く</string>
 </resources>

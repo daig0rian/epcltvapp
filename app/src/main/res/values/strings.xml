@@ -283,6 +283,9 @@
     <string name="app_update_error_install">Could not start the installer.</string>
     <!-- %1$s is the app name -->
     <string name="app_update_permission_body">To install the update, allow \"%1$s\" to install unknown apps.</string>
-    <string name="app_update_permission_manual">To install the update, allow this app to install unknown apps.\n\nOpen the device Settings and look for \"Install unknown apps\" (it may be under Apps &gt; Special app access, or under Developer options on Fire TV), then turn it on for this app.</string>
+    <!-- Shown when the settings screen cannot be opened from this app. %1$s is the app name. -->
+    <string name="app_update_permission_manual">To install the update, allow this app to install unknown apps.\n\nOpen the device Settings, find \"Install unknown apps\" (usually under Apps &gt; Special app access), and turn it on for \"%1$s\".</string>
+    <!-- Fire TV wording. Amazon protects this settings screen, so it cannot be opened from here. -->
+    <string name="app_update_permission_manual_firetv">To install the update, allow this app to install unknown apps.\n\nGo to Settings &gt; My Fire TV &gt; Developer options &gt; Install unknown apps, and turn it on for \"%1$s\".\n\nIf Developer options is not listed, you need to enable it first.</string>
     <string name="app_update_permission_open">Open Settings</string>
 </resources>

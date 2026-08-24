@@ -3,6 +3,7 @@ package com.daigorian.epcltvapp
 import android.content.ActivityNotFoundException
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.KeyEvent
 import android.view.LayoutInflater
 import android.view.View
@@ -180,7 +181,14 @@ class AppUpdateDialogFragment : DialogFragment() {
                 titleView.setText(R.string.app_update_title)
                 setNegative(R.string.close) { dismissAllowingStateLoss() }
                 if (permissionScreenUnavailable) {
-                    bodyView.setText(R.string.app_update_permission_manual)
+                    bodyView.text = getString(
+                        if (AppUpdateDownloader.isFireTv(requireContext())) {
+                            R.string.app_update_permission_manual_firetv
+                        } else {
+                            R.string.app_update_permission_manual
+                        },
+                        getString(R.string.app_name)
+                    )
                     hidePositive()
                 } else {
                     bodyView.text = getString(R.string.app_update_permission_body, getString(R.string.app_name))
@@ -306,6 +314,11 @@ class AppUpdateDialogFragment : DialogFragment() {
 
     private fun install(apk: File) {
         if (!AppUpdateDownloader.canInstall(requireContext())) {
+            // 設定画面へ飛べないと分かっているなら、押しても何も起きないボタンは出さず
+            // 最初から手順を案内する。一度 true にしたら戻さない。
+            if (!AppUpdateDownloader.canOpenUnknownSourcesSettings(requireContext())) {
+                permissionScreenUnavailable = true
+            }
             goTo(Step.PERMISSION)
             return
         }
@@ -316,6 +329,8 @@ class AppUpdateDialogFragment : DialogFragment() {
             goTo(Step.AVAILABLE)
         } catch (e: ActivityNotFoundException) {
             showError(R.string.app_update_error_install, retry = null)
+        } catch (e: SecurityException) {
+            showError(R.string.app_update_error_install, retry = null)
         }
     }
 
@@ -323,11 +338,19 @@ class AppUpdateDialogFragment : DialogFragment() {
         try {
             startActivity(AppUpdateDownloader.unknownSourcesSettingsIntent(requireContext()))
         } catch (e: ActivityNotFoundException) {
-            // TV機種によってはこの設定画面が無い。resolveActivity は Android 11 以降の
-            // パッケージ可視性で当てにならないので、実際に投げて捕まえた結果で判断する。
-            permissionScreenUnavailable = true
-            render()
+            fallBackToManualInstructions(e)
+        } catch (e: SecurityException) {
+            // Fire TV はこちら。インテントは Amazon 製の設定画面に**解決するのに起動できない**
+            // (LAUNCHER_SETTINGS で保護されている)。ActivityNotFoundException だけを捕まえて
+            // いると、ここで落ちる。
+            fallBackToManualInstructions(e)
         }
+    }
+
+    private fun fallBackToManualInstructions(cause: Exception) {
+        Log.i(TAG, "cannot open the unknown-sources settings screen; showing manual steps", cause)
+        permissionScreenUnavailable = true
+        render()
     }
 
     // --- その他 ---

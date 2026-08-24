@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -198,5 +199,38 @@ class AppUpdateDownloader(context: Context) {
                 Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                 Uri.parse("package:${context.packageName}")
             )
+
+        /**
+         * [unknownSourcesSettingsIntent] で設定画面へ飛べる見込みがあるか。
+         *
+         * **Fire TV ではインテントが解決するのに起動できない。** 飛び先が Amazon 製の
+         * `com.amazon.tv.settings.v2/.tv.device.DeviceActivity` (マイFire TV) で、
+         * `com.amazon.tv.permission.LAUNCHER_SETTINGS` で保護されているため、一般アプリが
+         * 投げると `SecurityException` になる。つまり「解決するか」を見るだけでは足りず、
+         * **飛び先が要求するパーミッションを自分が持っているか**まで見る必要がある。
+         *
+         * 解決先が分からないときは true を返す。Android 11 以降のパッケージ可視性で
+         * 見えていないだけの可能性があり、その場合は実際に投げて確かめたほうが確実なため
+         * (呼び出し側は例外を捕まえて手順の案内に切り替えること)。
+         */
+        /**
+         * Fire TV か。設定画面までの道順が Android TV と違うので、案内文を出し分けるのに使う。
+         * (Fire TV は「マイFire TV」>「開発者オプション」>「未知のアプリをインストール」)
+         */
+        fun isFireTv(context: Context): Boolean =
+            context.packageManager.hasSystemFeature("amazon.hardware.fire_tv")
+
+        fun canOpenUnknownSourcesSettings(context: Context): Boolean {
+            val packageManager = context.packageManager
+            @Suppress("DEPRECATION")
+            val resolved = packageManager.resolveActivity(
+                unknownSourcesSettingsIntent(context),
+                // startActivity と同じ突き合わせ方にする。
+                PackageManager.MATCH_DEFAULT_ONLY
+            ) ?: return true
+            val required = resolved.activityInfo?.permission ?: return true
+            return packageManager.checkPermission(required, context.packageName) ==
+                PackageManager.PERMISSION_GRANTED
+        }
     }
 }
