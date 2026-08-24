@@ -12,6 +12,7 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.text.HtmlCompat
 import androidx.fragment.app.DialogFragment
 import com.daigorian.epcltvapp.githubcaller.GitHubRelease
 import com.daigorian.epcltvapp.githubcaller.GitHubReleaseApi
@@ -339,10 +340,17 @@ class AppUpdateDialogFragment : DialogFragment() {
         null
     }
 
-    private fun availableBody(): String {
-        val notes = release?.body?.trim().orEmpty().ifEmpty { getString(R.string.app_update_no_release_notes) }
-        val installed = getString(R.string.app_update_installed_is, installedVersionName().orEmpty())
-        return "$notes\n\n$installed"
+    /**
+     * リリースノートの本文。Markdown を整形してから出す。
+     * 記号が生のまま画面に出ると読めないため、[ReleaseNotesRenderer] を通すこと。
+     */
+    private fun availableBody(): CharSequence {
+        val notes = ReleaseNotesRenderer.toHtml(release?.body)
+            .ifEmpty { ReleaseNotesRenderer.escapeHtml(getString(R.string.app_update_no_release_notes)) }
+        val installed = ReleaseNotesRenderer.escapeHtml(
+            getString(R.string.app_update_installed_is, installedVersionName().orEmpty())
+        )
+        return HtmlCompat.fromHtml("$notes<br><br>$installed", HtmlCompat.FROM_HTML_MODE_LEGACY).trimEnd()
     }
 
     companion object {
