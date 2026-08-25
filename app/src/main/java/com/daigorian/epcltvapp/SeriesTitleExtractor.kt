@@ -49,18 +49,17 @@ package com.daigorian.epcltvapp
  * 話数と様々で、開きカッコという文字だけでは切ってよいか決まらない。中身を見て
  * 判断するのが A3・A5・A6 の役割になる。
  *
- * ## 先頭の『』
+ * ## 先頭の作品名
  *
- * `『` は境界記号(A4)に入っているので、そのままでは `TVアニメ『作品名』#8` を
+ * `『` `「` は境界記号(A4)に入っているので、そのままでは `TVアニメ『作品名』#8` を
  * 「TVアニメ」で切ってしまう。ジャンルの名乗りだけがシリーズ名として残り、
  * 別作品どうしが同じシリーズにまとまってしまう。
  *
- * 『』は作品名を囲む記号なので、**番組名の先頭に置かれた『』の中身**はシリーズ名
- * そのものである。そこで区切りを探すより先に [leadingWorkTitle] を当て、成立したら
- * 中身をそのまま返す。先頭の判定で飲み込めるのは [PREFIXES] に載せた名乗りだけで、
- * ここもタグと同じ辞書方式にしてある。
+ * そこで区切りを探すより先に [leadingWorkTitles] を当て、成立したら囲みの中身を
+ * そのまま返す。飲み込める名乗りは [PREFIXES] に載せたものだけで、ここもタグと同じ
+ * 辞書方式にしてある。
  *
- * 先頭に限るのは、文中の『』は作品名とは限らないため。副題の中の引用(`番組名 #7「AとB『C』」`)
+ * 先頭に限るのは、文中の囲みは作品名とは限らないため。副題の中の引用(`番組名 #7「AとB『C』」`)
  * や、番組名に続く企画名(`番組名『特別企画』`)がこれに当たる。後者は境界記号として
  * 扱うのが正しく、その振る舞いは今までどおり A4 が受け持つ。
  *
@@ -126,8 +125,17 @@ object SeriesTitleExtractor {
      */
     private const val PREFIXES = "TVアニメ|アニメ|ドラマ"
 
-    /** 番組名の先頭に置かれた『』。中身が作品名そのものになる。 */
-    private val leadingWorkTitle = "^[\\s　]*(?:$PREFIXES)?[\\s　]*『([^』]+)』".toRegex()
+    /**
+     * 番組名の先頭に置かれた作品名の囲み。中身が作品名そのものになる。
+     *
+     * 名乗りを必須にするかどうかが囲みによって違う。『』は作品名を囲む記号なので、
+     * 名乗りが無くても中身を採ってよい。「」は各回の副題にも使う記号なので、名乗りを
+     * 必須にする——行頭がいきなり「の番組名まで拾うと、副題を作品名と取り違える。
+     */
+    private val leadingWorkTitles = listOf(
+        "^[\\s　]*(?:$PREFIXES)?[\\s　]*『([^』]+)』".toRegex(),  // 名乗りは省略可
+        "^[\\s　]*(?:$PREFIXES)[\\s　]*「([^」]+)」".toRegex(),   // 名乗りが必須
+    )
 
     /**
      * 番組名からシリーズ名を取り出す。
@@ -139,7 +147,8 @@ object SeriesTitleExtractor {
      */
     fun extract(programName: String): String {
         val body = programName.replace(leadingTags, "")
-        leadingWorkTitle.find(body)?.let { return it.groupValues[1].trim() }
+        leadingWorkTitles.firstNotNullOfOrNull { it.find(body) }
+            ?.let { return it.groupValues[1].trim() }
         return body.split(delimiter)[0].trim()
     }
 }
