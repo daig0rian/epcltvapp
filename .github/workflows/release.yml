@@ -20,6 +20,38 @@ jobs:
         with:
           submodules: recursive
 
+      # 重いツールチェーンを入れる前に、数秒で終わる検証で落とす。
+      # タグ名は env 経由で渡す (run: に式を直接埋め込むとスクリプト注入の口になるため)。
+      - name: タグとリリース内容の整合性を確認
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+
+          # アプリは自分の versionName を GitHub のタグ名と比べて更新の有無を判断する。
+          # この2つがずれると、公開したAPKが「自分より新しいバージョンがある」と言い続ける。
+          # 例: versionName 1.37 のまま v1.38 を打つと、入れ直しても 1.37 のままなので
+          #     全利用者が永久に更新を促される。リリース自体は成功して見えるので気づけない。
+          VERSION_NAME=$(sed -n 's/.*versionName[[:space:]]*"\([^"]*\)".*/\1/p' app/build.gradle | head -n1)
+          if [ -z "$VERSION_NAME" ]; then
+            echo "::error::app/build.gradle から versionName を読み取れませんでした"
+            exit 1
+          fi
+          if [ "v$VERSION_NAME" != "$TAG" ]; then
+            echo "::error::タグ $TAG と app/build.gradle の versionName ($VERSION_NAME) が一致しません。期待するタグ名は v$VERSION_NAME です"
+            exit 1
+          fi
+          echo "タグ $TAG と versionName $VERSION_NAME は一致しています"
+
+          # リリースノートは最後のアップロードステップで body_path として使う。
+          # 無いまま進むとビルドを全部終えてから失敗するので、ここで落とす。
+          NOTES="release-notes/$TAG.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "::error::$NOTES がありません。リリースノートをコミットしてからタグを打ってください"
+            exit 1
+          fi
+          echo "$NOTES を確認しました"
+
       - name: JDK 21 セットアップ
         uses: actions/setup-java@v4
         with:
@@ -50,7 +82,7 @@ jobs:
           KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
         run: printf '%s' "$KEYSTORE_BASE64" | base64 --decode > release.keystore
 
-      - name: リリース APK をビルド・署名
+      - name: 単体テストとリリース APK のビルド・署名
         env:
           RELEASE_KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
@@ -58,7 +90,19 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         run: |
           chmod +x gradlew
-          ./gradlew assembleRelease
+          # テストを別ステップに分けない。分けると署名用の環境変数が無い状態で Gradle が
+          # 一度構成されることになり、signingConfigs.release が debug 鍵へフォールバックする
+          # 作りと相まって、デーモン再利用時に署名設定を取り違える恐れがあるため。
+          # どちらかが失敗すればジョブが止まるので、Release は作られない。
+          ./gradlew testReleaseUnitTest assembleRelease
+
+      - name: テストレポートを保存
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-release
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
 
       - name: GitHub リリースに APK をアップロード
         uses: softprops/action-gh-release@v2

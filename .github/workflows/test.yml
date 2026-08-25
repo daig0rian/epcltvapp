@@ -1,0 +1,62 @@
+name: 単体テスト
+
+# 壊れたものが master に入るのを防ぐための関門。
+# リリース時 (release.yml) にもテストは走るが、そこで初めて落ちるとタグと Release を
+# 作り直すことになる。関門はマージの前に置く。
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - master
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# 同じブランチに続けて push したときは、古い実行を止める。
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: チェックアウト
+        # 単体テストは JVM 上で完結しネイティブビルドを必要としないが、
+        # サブモジュールが無いと Gradle の構成で引っかかる可能性があるため揃えておく。
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: JDK 21 セットアップ
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Gradle キャッシュ
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      # debug だけで足りる。release との違いは署名と minify の設定だけで、
+      # テスト対象のコードは同じなので両方走らせても時間が倍になるだけ。
+      - name: 単体テスト
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest
+
+      - name: テストレポートを保存
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-debug
+          path: app/build/reports/tests/
+          if-no-files-found: ignore
