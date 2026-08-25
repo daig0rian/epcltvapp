@@ -122,7 +122,7 @@ object SeriesTitleExtractor {
      * 番組名に続く『』は企画名や副題であることがあり、そちらは境界記号として扱うのが正しいため。
      * 辞書に無い名乗りは今までどおり A4 が切る。
      */
-    private const val PREFIXES = "TVアニメ|ドラマ|夕方ミステリー"
+    private const val PREFIXES = "TVアニメ|ドラマ"
 
     /** 番組名の先頭に置かれた『』。中身が作品名そのものになる。 */
     private val leadingWorkTitle = "^[\\s　]*(?:$PREFIXES)?[\\s　]*『([^』]+)』".toRegex()
