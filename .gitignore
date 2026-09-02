@@ -23,3 +23,6 @@ keystore/
 
 # ローカル用モックEPGStation(スクリーンショット撮影用)
 /mock-epgstation/
+
+# Kotlin コンパイラの一時ログ
+.kotlin/
