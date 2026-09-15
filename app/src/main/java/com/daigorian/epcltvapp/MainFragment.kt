@@ -224,6 +224,8 @@ class MainFragment : BrowseSupportFragment() {
         //受け口(DeepLinkActivity)が同じ初期化を必要とするため共通化してある。
         //一覧の取得はここに残す——画面によって要るものが違うため。
         EpgStationApiInitializer.initialize(requireContext()) { result ->
+            // 接続先が応答しないと初期化は数秒かかる。画面を離れた後に返ってきた場合は何もしない。
+            if (!isUiAlive) return@initialize
             when (result) {
                 is EpgStationApiInitializer.Result.V2 -> {
                     EpgStationV2.fetchChannels()
@@ -445,7 +447,7 @@ class MainFragment : BrowseSupportFragment() {
                     // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
                     val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
                     // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
-                    val orderedIds = RuleOrder.orderedRuleIds(ruleSortMode, ruleIdsInServerOrder, emptyMap())
+                    val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
                     // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
                     val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
@@ -482,7 +484,7 @@ class MainFragment : BrowseSupportFragment() {
                     // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
                     val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
                     // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
-                    val orderedIds = RuleOrder.orderedRuleIds(ruleSortMode, ruleIdsInServerOrder, emptyMap())
+                    val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
                     // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
                     val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
@@ -581,10 +583,14 @@ class MainFragment : BrowseSupportFragment() {
      */
     private fun applyRuleOrder() {
         val collector = mActiveRuleOrderCollector ?: return
-        val orderedIds = collector.orderedRuleIds(currentRuleSortMode())
+        val mode = currentRuleSortMode()
+        val orderedIds = collector.orderedRuleIds(mode)
         // 並べ替えで行が動いても、いま選んでいる行が別のルールにすり替わらないよう控えておく
         val selectedRowId = selectedRowHeaderId()
-        if (mMainMenuAdapter.reorderCategory(Category.RECORDED_BY_RULES, orderedIds)) {
+        val changed = mMainMenuAdapter.reorderCategory(Category.RECORDED_BY_RULES, orderedIds)
+        // 実機で並びを確かめられるように、確定した先頭と末尾だけ残す（番組名は出さない）
+        Log.i(TAG, "applyRuleOrder: mode=$mode 並べ替え=$changed 先頭=${orderedIds.take(5).map { it to collector.latestRecordedAtOf(it) }} 末尾=${orderedIds.takeLast(3).map { it to collector.latestRecordedAtOf(it) }}")
+        if (changed) {
             restoreSelection(selectedRowId)
         }
     }
@@ -669,8 +675,12 @@ class MainFragment : BrowseSupportFragment() {
 
             if (latestStartAt != null) latestRecordedAt[ruleId] = latestStartAt
             reportedRuleIds.add(ruleId)
+            if (reportedRuleIds.size % RULE_LOAD_LOG_INTERVAL == 0) {
+                Log.i(TAG, "ruleOrder: ${reportedRuleIds.size}/${ruleIdsInServerOrder.size} 件の応答を回収")
+            }
             if (reportedRuleIds.size < ruleIdsInServerOrder.size) return
 
+            Log.i(TAG, "ruleOrder: ${ruleIdsInServerOrder.size} 件すべての応答が揃った（録画実績あり=${latestRecordedAt.size}件）")
             settled = true
             applyRuleOrder()
         }
@@ -678,6 +688,9 @@ class MainFragment : BrowseSupportFragment() {
         /** 指定された並び順に並べたルール ID の一覧。 */
         fun orderedRuleIds(mode: String): List<Long> =
             RuleOrder.orderedRuleIds(mode, ruleIdsInServerOrder, latestRecordedAt)
+
+        /** 診断ログ用。この ruleId の最終録画日時。録画実績が無ければ null。 */
+        fun latestRecordedAtOf(ruleId: Long): Long? = latestRecordedAt[ruleId]
     }
 
     /**
@@ -1510,6 +1523,9 @@ class MainFragment : BrowseSupportFragment() {
 
         /** 自動更新タイマーの最小間隔（連続発火を防ぐ下限） */
         private const val MIN_PROGRAM_REFRESH_DELAY_MS = 1000L
+
+        /** ルール一覧の読み込みが長引くときに、進み具合をログへ出す間隔（件数） */
+        private const val RULE_LOAD_LOG_INTERVAL = 100
     }
 
 

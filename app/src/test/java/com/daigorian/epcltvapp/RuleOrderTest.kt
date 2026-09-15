@@ -123,6 +123,16 @@ class RuleOrderTest {
     }
 
     @Test
+    fun 読み込み中の仮の並びは新しいルールを先にする() {
+        // 全ルール分の getRecorded が返るまでは確定できないので、待っている間は新しいルール順で見せる
+        val ids = listOf(1L, 2L, 3L)
+        assertEquals(listOf(3L, 2L, 1L), RuleOrder.provisionalOrder(RuleOrder.MODE_RULE_NEWEST, ids))
+        assertEquals(listOf(3L, 2L, 1L), RuleOrder.provisionalOrder(RuleOrder.MODE_RECORDING_NEWEST, ids))
+        // ルールの古い順を選んでいるときだけ、受け取った順のまま
+        assertEquals(ids, RuleOrder.provisionalOrder(RuleOrder.MODE_RULE_OLDEST, ids))
+    }
+
+    @Test
     fun 要素の過不足がない() {
         val provisional = (1L..600L).toList()
         // 600件のうち奇数番だけが録画実績を持つ、という現実に近い入力を1回だけ並べ替える

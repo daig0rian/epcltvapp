@@ -56,6 +56,16 @@ object RuleOrder {
     }
 
     /**
+     * 全ルール分の getRecorded が返るまでの、行を足していくときの仮の並び。
+     *
+     * ルールの古い順を選んでいるときだけ受け取った順（rule.id 昇順）のまま、それ以外は
+     * 新しいルールを先にする。録画の新しい順は全データが揃うまで確定できないので、
+     * 待っている間は「新しいルール順」で見せる。確定後の並びは [orderedRuleIds] が決める。
+     */
+    fun provisionalOrder(mode: String, ruleIdsInServerOrder: List<Long>): List<Long> =
+        if (mode == MODE_RULE_OLDEST) ruleIdsInServerOrder else ruleIdsInServerOrder.asReversed()
+
+    /**
      * 表示順に並べたルール ID の一覧を作る。
      *
      * @param mode [modeFromPreference] が返した並び順
