@@ -480,31 +480,44 @@ class MainFragment : BrowseSupportFragment() {
         EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 if (!isUiAlive) return
-                response.body()?.rules?.let{ it ->
+                response.body()?.rules?.let{ rules ->
                     // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
-                    val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
-                    // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
-                    val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
-                    // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
+                    val ruleIdsInServerOrder = rules.map { rule -> rule.id.toLong() }
+                    // 最新録画日時を集める収集器。下ごしらえの結果もここへ入れ、1ルール分の応答で上書きする。
                     val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
-                    it.forEach { rule ->
 
-                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                        val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
-                            getString(R.string.rule_id_is_x, rule.id.toString())
-                        }else{
-                            rule.searchOption?.keyword!!
+                    // 行を足していく処理。orderedIds は行を足すときの並び。
+                    val addRows: (List<Long>) -> Unit = { orderedIds ->
+                        rules.forEach { rule ->
+
+                            //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                            val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
+                                getString(R.string.rule_id_is_x, rule.id.toString())
+                            }else{
+                                rule.searchOption?.keyword!!
+                            }
+                            mMainMenuAdapter.updateContentsListRowWithCategory(
+                                GetRecordedParam(rule= rule.id),
+                                GetRecordedParamV2(ruleId= rule.id),
+                                keyword,
+                                Category.RECORDED_BY_RULES,
+                                rule.id,
+                                orderedIds,
+                                ruleOrder
+                            )
                         }
-                        mMainMenuAdapter.updateContentsListRowWithCategory(
-                            GetRecordedParam(rule= rule.id),
-                            GetRecordedParamV2(ruleId= rule.id),
-                            keyword,
-                            Category.RECORDED_BY_RULES,
-                            rule.id,
-                            orderedIds,
-                            ruleOrder
-                        )
+                    }
+
+                    if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
+                        // 1ルール1回の取得を待たずに上位の並びを確定させるため、先に下ごしらえを読む。
+                        // 失敗しても seed は空のまま返ってくるので、従来どおり仮の並びで行を足す。
+                        fetchLatestRecordedSeed { seed ->
+                            ruleOrder.seedRecordedAt(seed)
+                            addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                        }
+                    } else {
+                        addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
                     }
                 }
             }
@@ -648,6 +661,60 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
+     * 「録画の新しい順」の下ごしらえ。
+     *
+     * `/api/recorded` を ruleId なし・startAt 降順で数ページ読み、ruleId → 最後に録画された startAt を作る。
+     * 行を作るために元から走る1ルール1回の取得が全部返るのを待たず、上位の並びを先に確定させるためのもの。
+     * ページ数と1ページの件数はここで上限を切る（サーバーへの負荷を増やしすぎないため）。
+     *
+     * 全ルールを覆えないこともある（録画が少ないルールは深いページにしか出てこない）。覆えなかったルールは、
+     * あとから届く1ルール分の応答で埋まる。
+     *
+     * @param onReady 下ごしらえが終わったら呼ぶ。失敗しても必ず呼ぶ。
+     */
+    private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>) -> Unit) {
+        val seed = HashMap<Long, Long>()
+        val api = EpgStationV2.api
+        if (api == null) {
+            onReady(seed)
+            return
+        }
+
+        fun fetchPage(page: Int) {
+            api.getRecorded(
+                isHalfWidth = true,
+                offset = page.toLong() * AGGREGATE_PAGE_LIMIT,
+                limit = AGGREGATE_PAGE_LIMIT.toLong(),
+                isReverse = false
+            ).enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    if (!isUiAlive) return
+                    val records = response.body()?.records.orEmpty()
+                    // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
+                    records.forEach { record ->
+                        val ruleId = record.ruleId
+                        if (ruleId != null && !seed.containsKey(ruleId)) seed[ruleId] = record.startAt
+                    }
+                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${records.size}件 累計ルール=${seed.size}")
+                    // ページが埋まっていて、上限にも達していなければ次のページを読む
+                    if (records.size >= AGGREGATE_PAGE_LIMIT && page + 1 < AGGREGATE_MAX_PAGES) {
+                        fetchPage(page + 1)
+                    } else {
+                        onReady(seed)
+                    }
+                }
+
+                override fun onFailure(call: Call<Records>, t: Throwable) {
+                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
+                    if (isUiAlive) onReady(seed)
+                }
+            })
+        }
+
+        fetchPage(0)
+    }
+
+    /**
      * 録画ルール一覧の並びを決めるための、1ロード分の収集状態。
      *
      * 各行の内容を作るために元から走っている `getRecorded(ruleId = ...)` の応答から
@@ -688,6 +755,11 @@ class MainFragment : BrowseSupportFragment() {
         /** 指定された並び順に並べたルール ID の一覧。 */
         fun orderedRuleIds(mode: String): List<Long> =
             RuleOrder.orderedRuleIds(mode, ruleIdsInServerOrder, latestRecordedAt)
+
+        /** 下ごしらえで分かった ruleId → 最新 startAt を取り込む。あとから届く1ルール分の応答が上書きする。 */
+        fun seedRecordedAt(seed: Map<Long, Long>) {
+            latestRecordedAt.putAll(seed)
+        }
 
         /** 診断ログ用。この ruleId の最終録画日時。録画実績が無ければ null。 */
         fun latestRecordedAtOf(ruleId: Long): Long? = latestRecordedAt[ruleId]
@@ -1168,7 +1240,14 @@ class MainFragment : BrowseSupportFragment() {
             val addedUpfront = if (listRow == null) {
                 val deferred = category == Category.RECORDED_BY_RULES && !showEmptyRulesPref
                 if (!deferred) {
-                    addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                    // 行を作った順（サーバー順）に末尾へ足すのではなく、orderedIds の位置へ差し込む。
+                    // ここを末尾追加にしていたため、「0件ルールの表示」がONだと並び順の指定が無視されていた。
+                    val row = ListRow(HeaderItem(headerId, title), listRowAdapter)
+                    if (orderedIds != null) {
+                        addToCategoryOrdered(category, row, idInCategory, orderedIds)
+                    } else {
+                        addToCategory(category, row)
+                    }
                 }
                 !deferred
             } else {
@@ -1526,6 +1605,12 @@ class MainFragment : BrowseSupportFragment() {
 
         /** ルール一覧の読み込みが長引くときに、進み具合をログへ出す間隔（件数） */
         private const val RULE_LOAD_LOG_INTERVAL = 100
+
+        /** 「録画の新しい順」の下ごしらえで、1ページに頼む件数 */
+        private const val AGGREGATE_PAGE_LIMIT = 1000
+
+        /** 同じく下ごしらえで読む最大ページ数。サーバーへの負荷を抑えるための上限 */
+        private const val AGGREGATE_MAX_PAGES = 3
     }
 
 
