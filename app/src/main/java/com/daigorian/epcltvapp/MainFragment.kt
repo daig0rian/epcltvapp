@@ -1450,13 +1450,33 @@ class MainFragment : BrowseSupportFragment() {
             emptyIds.forEach { removeRowFromCategory(Category.RECORDED_BY_RULES, it) }
         }
 
+        /**
+         * orderedIds の位置引き。
+         *
+         * 行を1つ足すたびに orderedIds.indexOf で線形探索すると、1回の挿入が O(件数²) になり、
+         * 1125行では挿入を積み上げるだけで main スレッドが何分も止まる（ANR になる）。
+         * 同じリストを使い回している間は、一度作った位置表を再利用する。
+         */
+        private var mOrderIndexSource: List<Long>? = null
+        private var mOrderIndex: HashMap<Long, Int> = HashMap()
+
+        private fun orderIndexOf(orderedIds: List<Long>, id: Long): Int {
+            if (mOrderIndexSource !== orderedIds) {
+                val map = HashMap<Long, Int>(orderedIds.size * 2)
+                orderedIds.forEachIndexed { index, value -> map[value] = index }
+                mOrderIndexSource = orderedIds
+                mOrderIndex = map
+            }
+            return mOrderIndex[id] ?: -1
+        }
+
         fun addToCategoryOrdered(cat: Category, item: Any, idInCategory: Long, orderedIds: List<Long>) {
             synchronized(this) {
                 if (numOfRowInCategory[cat.ordinal] == 0) {
                     addToCategory(cat, item)
                     return
                 }
-                val myOrderIndex = orderedIds.indexOf(idInCategory)
+                val myOrderIndex = orderIndexOf(orderedIds, idInCategory)
                 val catStart = numOfRowInCategory.copyOfRange(0, cat.ordinal).sum()
                 val headerRows = 2 // DividerRow + SectionRow
                 val ruleStart = catStart + headerRows
@@ -1465,7 +1485,7 @@ class MainFragment : BrowseSupportFragment() {
                 for (i in ruleStart until ruleEnd) {
                     val row = get(i) as? ListRow ?: continue
                     val existingId = row.headerItem.id - cat.ordinal.toLong() * 10000
-                    val existingOrderIndex = orderedIds.indexOf(existingId)
+                    val existingOrderIndex = orderIndexOf(orderedIds, existingId)
                     if (myOrderIndex != -1 && (existingOrderIndex == -1 || existingOrderIndex > myOrderIndex)) {
                         insertPos = i
                         break
