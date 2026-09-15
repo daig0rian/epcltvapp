@@ -124,9 +124,32 @@
     <string name="pref_category_rules_display">Rule Display</string>
     <string name="pref_category_history_display">History Display</string>
 
+    <!-- 検索履歴の並び順。既存キーの真偽値をそのまま履歴専用として使う -->
     <string name="pref_key_rules_order_is_newest_first"   translatable="false">KEY_RULES_ORDER_IS_NEWEST_FIRST</string>
-    <string name="set_newest_rule_first">Newest-first rule &amp; history display</string>
-    <string name="set_oldest_rule_first">Oldest-first rule &amp; history display</string>
+    <string name="set_newest_history_first">Newest-first history display</string>
+
+    <!-- 録画ルールの並び順。3択なので ListPreference で選ぶ -->
+    <string name="pref_key_rules_order_mode"            translatable="false">KEY_RULES_ORDER_MODE</string>
+    <string name="pref_val_rules_order_default"         translatable="false">@string/pref_options_rules_order_val_rule_newest</string>
+    <string name="rules_order_mode">Rule order</string>
+    <string name="pref_options_rules_order_label_rule_newest">Newest rule first</string>
+    <string name="pref_options_rules_order_label_rule_oldest">Oldest rule first</string>
+    <string name="pref_options_rules_order_label_recording_newest">Latest recording first</string>
+    <string name="pref_options_rules_order_val_rule_newest" translatable="false">rule_newest</string>
+    <string name="pref_options_rules_order_val_rule_oldest" translatable="false">rule_oldest</string>
+    <string name="pref_options_rules_order_val_recording_newest" translatable="false">recording_newest</string>
+
+    <string-array name="pref_options_rules_order_label">
+        <item>@string/pref_options_rules_order_label_rule_newest</item>
+        <item>@string/pref_options_rules_order_label_rule_oldest</item>
+        <item>@string/pref_options_rules_order_label_recording_newest</item>
+    </string-array>
+
+    <string-array name="pref_options_rules_order_val" translatable="false">
+        <item>@string/pref_options_rules_order_val_rule_newest</item>
+        <item>@string/pref_options_rules_order_val_rule_oldest</item>
+        <item>@string/pref_options_rules_order_val_recording_newest</item>
+    </string-array>
 
     <string name="pref_key_show_empty_rules" translatable="false">KEY_SHOW_EMPTY_RULES</string>
     <string name="show_empty_rules">Empty rule display</string>

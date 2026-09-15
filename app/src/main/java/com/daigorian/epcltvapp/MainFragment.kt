@@ -79,14 +79,17 @@ class MainFragment : BrowseSupportFragment() {
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
+            getString(R.string.pref_key_rules_order_mode) -> {
+                // ルールの並び順。並びは取得済みのデータだけで決まるので、行は取り直さずに並べ替える。
+                Log.d(TAG, "prefChanged: rules_order_mode → applyRuleOrder (行の再取得なし)")
+                applyRuleOrder()
+            }
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
-                Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
-                Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                updateRows()
+                // こちらは検索履歴の並び順。履歴の行だけを作り直す（ルール行の再取得は起こさない）。
+                Log.d(TAG, "prefChanged: history_newest_first → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
                 startBackgroundTimer()
@@ -98,18 +101,17 @@ class MainFragment : BrowseSupportFragment() {
                 if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
             }
             getString(R.string.pref_key_num_of_history) -> {
-                Log.d(TAG, "prefChanged: num_of_history → setSelectedPosition(0) + deleteCategory(SEARCH_HISTORY)")
-                setSelectedPosition(0, false)
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                updateRows()
+                // 件数が変わっただけなので、履歴の行だけを作り直す
+                Log.d(TAG, "prefChanged: num_of_history → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
             "pref_key_search_histories" -> {
-                Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
-                Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                updateRows()
+                Log.d(TAG, "prefChanged: search_histories cleared → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
         }
     }
@@ -172,12 +174,12 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "onResume: branch=reloadHistory → deferring to view.post")
                 mNeedsReloadHistoryOnResume = false
                 view?.post {
-                    Log.d(TAG, "onResume: reloadHistory deferred → setSelectedPosition(0) adapterSize=${mMainMenuAdapter.size()}")
-                    setSelectedPosition(0, false)
-                    Log.d(TAG, "onResume: reloadHistory deferred → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                    Log.d(TAG, "onResume: reloadHistory deferred → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                    updateRows()
+                    // 検索から戻ったときは履歴の行だけを作り直す。以前は updateRows() を呼んでいたため、
+                    // ここでも録画ルール全件の getRecorded() が走っていた。
+                    Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
+                    val selectedRowId = selectedRowHeaderId()
+                    refreshSearchHistoryRows()
+                    restoreSelection(selectedRowId)
                 }
             }
             else -> {
@@ -429,33 +431,25 @@ class MainFragment : BrowseSupportFragment() {
         )
 
 
-        //ルール・履歴の並び順を表すフラグ。デフォルトfalse。
-        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
+        //履歴行の追加。並び順は既存キー（履歴専用）を見る。
+        refreshSearchHistoryRows()
 
-        //履歴行の追加
-        val historyList = SearchFragment.getHistory(requireContext())
-        val orderedHistory = if (isNewestFirst) historyList.asReversed() else historyList
-        orderedHistory.forEachIndexed { index, it ->
-            mMainMenuAdapter.updateContentsListRowWithCategory(
-                GetRecordedParam(keyword = it),
-                GetRecordedParamV2(keyword = it),
-                it,
-                Category.SEARCH_HISTORY,
-                index.toLong()
-            )
-        }
+        //ルール一覧の並び順。既定は「ルールの新しい順」。
+        val ruleSortMode = currentRuleSortMode()
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
         EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {
             override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
                 if (!isUiAlive) return
                 response.body()?.let{ it ->
-                    val rules = if(isNewestFirst){it.reversed()}else{it}
-                    val orderedIds = rules.map { rule -> rule.id.toLong() }
-                    // 全ルールの getRecorded が返ってきたときに1回だけ並べ替えるための収集器
-                    val ruleOrder = RuleOrderCollector(orderedIds)
+                    // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
+                    val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
+                    // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
+                    val orderedIds = RuleOrder.orderedRuleIds(ruleSortMode, ruleIdsInServerOrder, emptyMap())
+                    // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
+                    val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
-                    rules.forEach { rule ->
+                    it.forEach { rule ->
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
                         val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
@@ -485,12 +479,14 @@ class MainFragment : BrowseSupportFragment() {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 if (!isUiAlive) return
                 response.body()?.rules?.let{ it ->
-                    val rules = if(isNewestFirst){it.reversed()}else{it}
-                    val orderedIds = rules.map { rule -> rule.id.toLong() }
-                    // 全ルールの getRecorded が返ってきたときに1回だけ並べ替えるための収集器
-                    val ruleOrder = RuleOrderCollector(orderedIds)
+                    // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
+                    val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
+                    // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
+                    val orderedIds = RuleOrder.orderedRuleIds(ruleSortMode, ruleIdsInServerOrder, emptyMap())
+                    // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
+                    val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
-                    rules.forEach { rule ->
+                    it.forEach { rule ->
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
                         val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
@@ -576,27 +572,72 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
-     * 録画ルール行を「最後に録画された番組の startAt が新しい順」へ並べ直す。
+     * 録画ルール行を、いま設定されている並び順へ並べ直す。
      *
-     * [RuleOrderCollector] が全ルール分の応答を受け取ったときに1回だけ呼ぶ。応答が1件返るたびに
-     * 並べ直すと、600件の環境では一覧全体の再配置が繰り返し走ってしまうため、確定はこの1回に絞る。
+     * [RuleOrderCollector] が全ルール分の応答を受け取ったときに加えて、並び順の設定を変えたときにも
+     * 呼ぶ。どちらも既に手元にあるデータだけで並びが決まるので、ここで通信は起きない。応答が1件
+     * 返るたびに並べ直すと600件の環境では一覧全体の再配置が繰り返し走るため、確定はこの1回に絞る。
      * 並びが既に目標と同じときは何もしない（並べ替えのための再描画も起きない）。
      */
-    private fun applyRuleOrder(orderedIds: List<Long>) {
+    private fun applyRuleOrder() {
+        val collector = mActiveRuleOrderCollector ?: return
+        val orderedIds = collector.orderedRuleIds(currentRuleSortMode())
         // 並べ替えで行が動いても、いま選んでいる行が別のルールにすり替わらないよう控えておく
-        val selectedRowId = if (selectedPosition in 0 until mMainMenuAdapter.size()) {
+        val selectedRowId = selectedRowHeaderId()
+        if (mMainMenuAdapter.reorderCategory(Category.RECORDED_BY_RULES, orderedIds)) {
+            restoreSelection(selectedRowId)
+        }
+    }
+
+    /** 設定に保存されているルール一覧の並び順。未設定・不正値は既定へ倒れる。 */
+    private fun currentRuleSortMode(): String = RuleOrder.modeFromPreference(
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(getString(R.string.pref_key_rules_order_mode), null)
+    )
+
+    /** 検索履歴の並び順（既存キーの真偽値）。true で新しい順。 */
+    private fun isHistoryNewestFirst(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean(getString(R.string.pref_key_rules_order_is_newest_first), false)
+
+    /** いま選んでいる行の headerId。並べ替えや作り直しの前後で選択を保つために控える。 */
+    private fun selectedRowHeaderId(): Long? =
+        if (selectedPosition in 0 until mMainMenuAdapter.size()) {
             (mMainMenuAdapter.get(selectedPosition) as? ListRow)?.headerItem?.id
         } else {
             null
         }
 
-        if (!mMainMenuAdapter.reorderCategory(Category.RECORDED_BY_RULES, orderedIds)) return
-
-        if (selectedRowId == null) return
-        val newPosition = mMainMenuAdapter.indexOfListRowByHeaderId(selectedRowId)
+    /** 控えておいた行が、作り直した後も同じ行として選ばれるように選択位置を合わせ直す。 */
+    private fun restoreSelection(headerId: Long?) {
+        if (headerId == null) return
+        val newPosition = mMainMenuAdapter.indexOfListRowByHeaderId(headerId)
         if (newPosition >= 0 && newPosition != selectedPosition) {
             // 同じ行を選んだままにするだけ。先頭へ飛ばしたりスクロール位置を戻したりはしない。
             setSelectedPosition(newPosition, false)
+        }
+    }
+
+    /**
+     * 検索履歴の行だけを作り直す。
+     *
+     * 以前は履歴に関わる設定が変わるたびに updateRows() を呼んでいた。updateRows() は全カテゴリを
+     * 作り直すため、履歴の並びを変えただけで録画ルール全件の getRecorded() も走っていた
+     * （600件の環境なら600リクエスト）。ここでは履歴カテゴリしか触らない。
+     */
+    private fun refreshSearchHistoryRows() {
+        mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+
+        val historyList = SearchFragment.getHistory(requireContext())
+        val orderedHistory = if (isHistoryNewestFirst()) historyList.asReversed() else historyList
+        orderedHistory.forEachIndexed { index, it ->
+            mMainMenuAdapter.updateContentsListRowWithCategory(
+                GetRecordedParam(keyword = it),
+                GetRecordedParamV2(keyword = it),
+                it,
+                Category.SEARCH_HISTORY,
+                index.toLong()
+            )
         }
     }
 
@@ -608,7 +649,7 @@ class MainFragment : BrowseSupportFragment() {
      * API 呼び出しは行わない。応答が1件返るたびに並べ替えるのではなく、全ルール分が揃ってから
      * [applyRuleOrder] を1回だけ呼ぶ。
      */
-    private inner class RuleOrderCollector(private val provisionalOrder: List<Long>) {
+    private inner class RuleOrderCollector(private val ruleIdsInServerOrder: List<Long>) {
 
         /** ruleId → そのルールで最後に録画された番組の startAt (ms)。録画実績がないルールは入らない。 */
         private val latestRecordedAt = HashMap<Long, Long>()
@@ -628,11 +669,15 @@ class MainFragment : BrowseSupportFragment() {
 
             if (latestStartAt != null) latestRecordedAt[ruleId] = latestStartAt
             reportedRuleIds.add(ruleId)
-            if (reportedRuleIds.size < provisionalOrder.size) return
+            if (reportedRuleIds.size < ruleIdsInServerOrder.size) return
 
             settled = true
-            applyRuleOrder(RuleOrder.sortByLatestRecorded(provisionalOrder, latestRecordedAt))
+            applyRuleOrder()
         }
+
+        /** 指定された並び順に並べたルール ID の一覧。 */
+        fun orderedRuleIds(mode: String): List<Long> =
+            RuleOrder.orderedRuleIds(mode, ruleIdsInServerOrder, latestRecordedAt)
     }
 
     /**

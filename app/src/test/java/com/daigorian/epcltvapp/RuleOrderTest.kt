@@ -76,6 +76,52 @@ class RuleOrderTest {
         assertEquals(emptyList<Long>(), RuleOrder.sortByLatestRecorded(emptyList(), emptyMap()))
     }
 
+    // --- 設定値の解釈 ---
+
+    @Test
+    fun 未設定と不正値は既定のルールの新しい順になる() {
+        assertEquals(RuleOrder.MODE_RULE_NEWEST, RuleOrder.modeFromPreference(null))
+        assertEquals(RuleOrder.MODE_RULE_NEWEST, RuleOrder.modeFromPreference(""))
+        assertEquals(RuleOrder.MODE_RULE_NEWEST, RuleOrder.modeFromPreference("しらない値"))
+    }
+
+    @Test
+    fun 保存された並び順はそのまま解釈する() {
+        assertEquals(RuleOrder.MODE_RULE_NEWEST, RuleOrder.modeFromPreference(RuleOrder.MODE_RULE_NEWEST))
+        assertEquals(RuleOrder.MODE_RULE_OLDEST, RuleOrder.modeFromPreference(RuleOrder.MODE_RULE_OLDEST))
+        assertEquals(RuleOrder.MODE_RECORDING_NEWEST, RuleOrder.modeFromPreference(RuleOrder.MODE_RECORDING_NEWEST))
+    }
+
+    // --- 並び順ごとの結果 ---
+
+    @Test
+    fun ルールの新しい順はIDの降順になる() {
+        // EPGStation は rule.id の昇順で返すので、新しいルールは末尾にいる
+        val order = RuleOrder.orderedRuleIds(
+            RuleOrder.MODE_RULE_NEWEST,
+            listOf(1L, 2L, 3L),
+            emptyMap()
+        )
+        assertEquals(listOf(3L, 2L, 1L), order)
+    }
+
+    @Test
+    fun ルールの古い順はEPGStationが返した順のまま() {
+        val ids = listOf(5L, 9L, 2L)
+        val order = RuleOrder.orderedRuleIds(RuleOrder.MODE_RULE_OLDEST, ids, emptyMap())
+        assertEquals(ids, order)
+    }
+
+    @Test
+    fun 録画の新しい順では録画実績のないルールが末尾に回る() {
+        val order = RuleOrder.orderedRuleIds(
+            RuleOrder.MODE_RECORDING_NEWEST,
+            listOf(1L, 2L, 3L),
+            mapOf(2L to 500L)
+        )
+        assertEquals(listOf(2L, 1L, 3L), order)
+    }
+
     @Test
     fun 要素の過不足がない() {
         val provisional = (1L..600L).toList()
