@@ -295,15 +295,14 @@ class MainFragment : BrowseSupportFragment() {
              * 扱う（HeadersSupportFragment.onRowSelected）。素の DividerPresenter は汎用の
              * Presenter.ViewHolder を返すため、区切り行が選ばれた瞬間に ClassCastException で落ちる
              * （実機で発生。行が増減する読み込み中に起きやすい）。
-             * 見た目は区切り線のまま、ViewHolder の型だけ RowHeaderPresenter に合わせる。
-             * 区切り線のレイアウトには RowHeaderView が無いので、それを触る既定処理は差し替える。
+             *
+             * さらに RowHeaderPresenter.ViewHolder の生成時には、渡された view 配下の
+             * R.id.row_header が RowHeaderView であることが要求される。leanback の lb_divider.xml は
+             * 根が素の View なので、その view をそのまま包むと今度はそこで ClassCastException になる
+             * （実機で発生）。そのため区切り線の見た目はそのまま、根を RowHeaderView にした
+             * R.layout.sidebar_divider を使う。
              */
-            private val dividerPresenter = object : RowHeaderPresenter() {
-                override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
-                    val divider = DividerPresenter().onCreateViewHolder(parent)
-                    return RowHeaderPresenter.ViewHolder(divider.view)
-                }
-
+            private val dividerPresenter = object : RowHeaderPresenter(R.layout.sidebar_divider) {
                 override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
                     // 区切り線なので何も表示しない
                 }

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    サイドバーの区切り線。
+
+    見た目は leanback の lb_divider.xml（1dp の区切り線）と同じだが、根だけは RowHeaderView にしている。
+    Leanback は選択されたヘッダー行の ViewHolder を RowHeaderPresenter.ViewHolder として扱い、
+    その生成時に「渡された view 配下の R.id.row_header が RowHeaderView であること」を要求する。
+    lb_divider.xml の根は素の View なので、そのまま包むと ClassCastException になる。
+-->
+<androidx.leanback.widget.RowHeaderView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_header"
+    android:layout_width="match_parent"
+    android:layout_height="1dp"
+    android:layout_marginEnd="12dp"
+    android:background="?android:attr/listDivider"
+    android:focusable="false"
+    android:focusableInTouchMode="false"
+    android:importantForAccessibility="no" />
