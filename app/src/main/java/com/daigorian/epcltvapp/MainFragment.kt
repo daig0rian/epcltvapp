@@ -14,6 +14,7 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -64,6 +65,9 @@ class MainFragment : BrowseSupportFragment() {
     /** 設定画面から戻ったときに、手元のデータだけでルール行を並べ直すか（通信は増やさない）。 */
     private var mNeedsReorderRulesOnResume = false
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
+
+    /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
+    private var mSearchOrb: View? = null
 
     /**
      * いま表示に使っている「録画ルールの並び」収集器。
@@ -1023,11 +1027,15 @@ class MainFragment : BrowseSupportFragment() {
         val searchOrb = titleBar.searchAffordanceView as? SearchOrbView ?: return
 
         val gearOrb = SearchOrbView(requireContext()).apply {
+            id = R.id.epg_settings_orb
             tag = SETTINGS_BUTTON_TAG
             contentDescription = getString(R.string.settings)
             searchOrb.orbColors?.let { setOrbColors(it) }
             setOrbIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_settings))
             setOnOrbClickedListener { openSettingsScreen() }
+            // アイコンの ImageView にはレイアウト由来の「検索」の説明が入っている。
+            // 歯車ボタンの説明は親の FrameLayout が持っているので、二重に読まれないよう消す。
+            firstImageView(this)?.contentDescription = null
         }
         titleBar.addView(
             gearOrb,
@@ -1038,14 +1046,41 @@ class MainFragment : BrowseSupportFragment() {
             )
         )
 
+        // 横並びの2つのボタンは、座標任せにせずキーで直接行き来させる。
+        // nextFocusRightId / nextFocusLeftId はこの画面では効かなかった（実機で確認。
+        // 検索ボタンは Leanback が表示を切り替えるため、座標による探索の対象から外れることがある）。
+        searchOrb.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && event.action == KeyEvent.ACTION_DOWN) {
+                Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
+                gearOrb.requestFocus()
+                true
+            } else {
+                false
+            }
+        }
+        gearOrb.setOnKeyListener { _, keyCode, event ->
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.action == KeyEvent.ACTION_DOWN) {
+                Log.i(TAG, "タイトル行: 設定ボタンの←で検索ボタンへ")
+                searchOrb.requestFocus()
+                true
+            } else {
+                false
+            }
+        }
+
         // 置き場所は検索ボタンの実測値から決める。余白はテーマ任せなので決め打ちしない。
         // gravity=start の子の left は「親の padding + 自分の margin」なので、親の padding ぶんを
         // 引いてから margin に入れる。
+        // オーブはフォーカスで少し大きくなるので、右端は「実測した最大値」を使う。
+        // そのままだと検索ボタンを選ぶたびに設定ボタンの位置が動いてしまう。
         val gap = (SETTINGS_BUTTON_GAP_DP * resources.displayMetrics.density).toInt()
+        var maxOrbRight = 0
         val alignNextToSearchOrb = Runnable {
             val params = gearOrb.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
             if (searchOrb.width == 0) return@Runnable
-            val left = (searchOrb.left - titleBar.paddingLeft) + searchOrb.width + gap
+            val right = searchOrb.left + searchOrb.width
+            if (right > maxOrbRight) maxOrbRight = right
+            val left = (maxOrbRight - titleBar.paddingLeft) + gap
             if (params.leftMargin != left) {
                 params.leftMargin = left
                 gearOrb.layoutParams = params
@@ -1054,6 +1089,73 @@ class MainFragment : BrowseSupportFragment() {
         // 画面の回転やテーマ変更で検索ボタンの位置が変わっても追従させる
         searchOrb.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignNextToSearchOrb.run() }
         alignNextToSearchOrb.run()
+
+        mSearchOrb = searchOrb
+        installSearchOrbUpFromSidebar()
+    }
+
+    /** グループ直下の ImageView を1つ返す（[SearchOrbView] のアイコンを取り出す用）。 */
+    private fun firstImageView(group: ViewGroup): ImageView? {
+        for (i in 0 until group.childCount) {
+            (group.getChildAt(i) as? ImageView)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * サイドバーの一番上の行で↑を押したとき、検索ボタンへ移るようにする。
+     *
+     * Leanback はフォーカス移動を座標で決める。設定ボタン（歯車）は検索ボタンの右隣にあり、
+     * サイドバーの行と x 座標が重なるため、何もしないと「より近い」設定ボタンへ飛んでしまい、
+     * 検索ボタンには入れなくなる（実機で発生）。
+     * 一番上かどうかは「上にフォーカスできる行があるか」で見るので、区切り行が先頭にあっても壊れない。
+     */
+    private fun installSearchOrbUpFromSidebar() {
+        val grid = findHeadersGridView()
+        if (grid == null) {
+            Log.i(TAG, "サイドバーの↑フック: グリッドが見つからないため見送り")
+            return
+        }
+        // グリッド自身が扱わなかったキーだけを受け取る。通常の D-pad 移動には割り込まない。
+        grid.setOnUnhandledKeyListener { event ->
+            if (event.keyCode != KeyEvent.KEYCODE_DPAD_UP || event.action != KeyEvent.ACTION_DOWN) {
+                return@setOnUnhandledKeyListener false
+            }
+            // 上にまだフォーカスできる行があるなら、既定の移動に任せる
+            if (hasFocusableHeaderAbove(grid)) return@setOnUnhandledKeyListener false
+            val orb = mSearchOrb ?: return@setOnUnhandledKeyListener false
+            Log.i(TAG, "サイドバー最上位の↑ → 検索ボタンへ")
+            orb.requestFocus()
+            true
+        }
+        Log.i(TAG, "サイドバーの↑フックを設定")
+    }
+
+    /** フォーカス中の行より上に、フォーカスできる行があるか。分からないときは true（既定の移動に任せる）。 */
+    private fun hasFocusableHeaderAbove(grid: ViewGroup): Boolean {
+        val focused = grid.focusedChild ?: return true
+        for (i in 0 until grid.childCount) {
+            val child = grid.getChildAt(i)
+            if (child === focused) return false
+            if (child.visibility == View.VISIBLE && child.isFocusable) return true
+        }
+        return true
+    }
+
+    /** サイドバーの RecyclerView（[VerticalGridView]）。ID は leanback 側の持ち物なので型で探す。 */
+    private fun findHeadersGridView(): VerticalGridView? {
+        val root = getHeadersSupportFragment()?.view ?: return null
+        return findVerticalGridViewIn(root)
+    }
+
+    private fun findVerticalGridViewIn(view: View): VerticalGridView? {
+        if (view is VerticalGridView) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                findVerticalGridViewIn(view.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
     }
 
     /**
@@ -1836,7 +1938,7 @@ class MainFragment : BrowseSupportFragment() {
         private const val SETTINGS_BUTTON_TAG = "settings_orb"
 
         /** 検索ボタンと設定ボタンの間隔（dp）。 */
-        private const val SETTINGS_BUTTON_GAP_DP = 8
+        private const val SETTINGS_BUTTON_GAP_DP = 24
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
