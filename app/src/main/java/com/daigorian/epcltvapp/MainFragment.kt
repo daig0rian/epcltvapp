@@ -1056,8 +1056,11 @@ class MainFragment : BrowseSupportFragment() {
                 // タイトル行の上には何も無い。既定の探索だと横の設定ボタンへ飛んでしまうので動かさない
                 KeyEvent.KEYCODE_DPAD_UP -> true
                 KeyEvent.KEYCODE_DPAD_RIGHT -> {
-                    Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
-                    gearOrb.requestFocus()
+                    // 設定ボタンはサイドバーが出ているときだけ出している。隠れているときは動かさない
+                    if (gearOrb.isFocusable) {
+                        Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
+                        gearOrb.requestFocus()
+                    }
                     true
                 }
                 else -> false
@@ -1104,8 +1107,68 @@ class MainFragment : BrowseSupportFragment() {
         searchOrb.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignNextToSearchOrb.run() }
         alignNextToSearchOrb.run()
 
+        // サイドバーが出ているときだけ、検索ボタンの横へ設定ボタンを出す。
+        // 出ていないとき（起動直後でサイドバーがまだ細いときや、中身の列を見ているとき）は
+        // 検索ボタンの裏へ隠しておく。そうしないと内容の上に浮いて「サイドバーからはみ出して」見える。
+        // 隠す位置は幅が測れてから決まるので、レイアウトのたびに見る。
+        var headersRoot: View? = getHeadersSupportFragment()?.view
+        var settingsShown = false
+        val applySidebarState = Runnable {
+            if (headersRoot == null) headersRoot = getHeadersSupportFragment()?.view
+            val open = isSidebarCoveringSettingsButton(headersRoot, searchOrb, gap)
+            if (!open && gearOrb.width > 0) {
+                // 検索ボタンの裏（左）へずらす。幅の分だけ左に寄せれば完全に隠れる。
+                gearOrb.translationX = -(gearOrb.width + gap).toFloat()
+            }
+            if (open == settingsShown) return@Runnable
+            settingsShown = open
+            gearOrb.isFocusable = open
+            gearOrb.isFocusableInTouchMode = open
+            if (!open && gearOrb.hasFocus()) {
+                // 隠れるときに設定ボタンへフォーカスが残らないようにする
+                searchOrb.requestFocus()
+            }
+            gearOrb.animate().cancel()
+            if (open) {
+                gearOrb.animate()
+                    .translationX(0f)
+                    .alpha(1f)
+                    .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                    .start()
+            } else {
+                gearOrb.alpha = 0f
+            }
+        }
+        // 最初のフレームで出てしまわないよう、先に隠しておく
+        gearOrb.alpha = 0f
+        gearOrb.isFocusable = false
+        gearOrb.isFocusableInTouchMode = false
+        titleBar.viewTreeObserver.addOnGlobalLayoutListener { applySidebarState.run() }
+        applySidebarState.run()
+
         mSearchOrb = searchOrb
         installSearchOrbUpFromSidebar()
+    }
+
+    /**
+     * サイドバーの帯が、設定ボタンの置き場所まで来ているか。
+     *
+     * 起動直後やサイドバーを畳んだ状態では帯が細い（実測48px）ので、そこへ設定ボタンだけが浮くと
+     * 「サイドバーからはみ出して」見える。幅ではなく座標で見て、帯が設定ボタンの位置まで
+     * 来てから横へ出す。動きに追従するので、スライド中も不自然にならない。
+     */
+    private fun isSidebarCoveringSettingsButton(headersRoot: View?, searchOrb: View, gap: Int): Boolean {
+        if (headersRoot == null || headersRoot.width == 0) return false
+        val headersLoc = IntArray(2)
+        headersRoot.getLocationOnScreen(headersLoc)
+        val sidebarRight = headersLoc[0] + headersRoot.width
+
+        val orbLoc = IntArray(2)
+        searchOrb.getLocationOnScreen(orbLoc)
+        // 設定ボタンの最終的な左端（検索ボタンの右端 + 間隔）
+        val settingsLeft = orbLoc[0] + searchOrb.width + gap
+
+        return sidebarRight >= settingsLeft
     }
 
     /** グループ直下の ImageView を1つ返す（[SearchOrbView] のアイコンを取り出す用）。 */
@@ -1955,6 +2018,9 @@ class MainFragment : BrowseSupportFragment() {
 
         /** 検索ボタンと設定ボタンの間隔（dp）。 */
         private const val SETTINGS_BUTTON_GAP_DP = 24
+
+        /** 設定ボタンが横へ出るまでの時間（ms）。 */
+        private const val SETTINGS_BUTTON_SLIDE_MS = 260L
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
