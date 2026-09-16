@@ -1486,7 +1486,10 @@ class MainFragment : BrowseSupportFragment() {
 
                     //APIで続きを取得して続きに加えていく
                     // EPGStation V2.x.x
-                    EpgStationV2.api?.getRecorded(
+                    // 利用者が待っている要求なので、ルール一覧の一斉取得とは待ち行列を分けた方を使う。
+                    // 同じクライアントだと数百件の後ろに並んで、いつまでも返ってこない。
+                    Log.i(TAG, "続き読み込み: 要求 offset=${item.offset} limit=${item.limit}")
+                    (EpgStationV2.priorityApi ?: EpgStationV2.api)?.getRecorded(
                         isHalfWidth = item.isHalfWidth,
                         offset = item.offset,
                         limit = item.limit,
@@ -1499,6 +1502,7 @@ class MainFragment : BrowseSupportFragment() {
                     )?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
                             if (!isUiAlive) return
+                            Log.i(TAG, "続き読み込み: 応答 ${response.body()?.records?.size ?: 0}件 offset=${item.offset}")
                             response.body()?.let { responseRoot ->
                                 // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
                                 // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
