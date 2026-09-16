@@ -1049,22 +1049,30 @@ class MainFragment : BrowseSupportFragment() {
         // 横並びの2つのボタンは、座標任せにせずキーで直接行き来させる。
         // nextFocusRightId / nextFocusLeftId はこの画面では効かなかった（実機で確認。
         // 検索ボタンは Leanback が表示を切り替えるため、座標による探索の対象から外れることがある）。
+        // （OnKeyListener は、そのビュー自身にフォーカスがあるときだけ呼ばれる。子は持たないので取り違えない）
         searchOrb.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && event.action == KeyEvent.ACTION_DOWN) {
-                Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
-                gearOrb.requestFocus()
-                true
-            } else {
-                false
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                // タイトル行の上には何も無い。既定の探索だと横の設定ボタンへ飛んでしまうので動かさない
+                KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
+                    gearOrb.requestFocus()
+                    true
+                }
+                else -> false
             }
         }
         gearOrb.setOnKeyListener { _, keyCode, event ->
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && event.action == KeyEvent.ACTION_DOWN) {
-                Log.i(TAG, "タイトル行: 設定ボタンの←で検索ボタンへ")
-                searchOrb.requestFocus()
-                true
-            } else {
-                false
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    Log.i(TAG, "タイトル行: 設定ボタンの←で検索ボタンへ")
+                    searchOrb.requestFocus()
+                    true
+                }
+                else -> false
             }
         }
 
@@ -1076,6 +1084,12 @@ class MainFragment : BrowseSupportFragment() {
         val gap = (SETTINGS_BUTTON_GAP_DP * resources.displayMetrics.density).toInt()
         var maxOrbRight = 0
         val alignNextToSearchOrb = Runnable {
+            // 検索ボタンが隠れる状態では設定ボタンも一緒に隠す。
+            // Leanback はタイトル行を残したまま検索ボタンだけを GONE にすることがある
+            // （updateComponentsVisibility / updateSearchOrbViewVisiblity）。歯車だけ残ると不自然なので合わせる。
+            if (gearOrb.visibility != searchOrb.visibility) {
+                gearOrb.visibility = searchOrb.visibility
+            }
             val params = gearOrb.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
             if (searchOrb.width == 0) return@Runnable
             val right = searchOrb.left + searchOrb.width
@@ -1124,8 +1138,10 @@ class MainFragment : BrowseSupportFragment() {
             // 上にまだフォーカスできる行があるなら、既定の移動に任せる
             if (hasFocusableHeaderAbove(grid)) return@setOnUnhandledKeyListener false
             val orb = mSearchOrb ?: return@setOnUnhandledKeyListener false
+            // タイトル行が隠れているときは検索ボタンへ移れない。何もせず既定の移動に任せる
+            if (!orb.isShown || !orb.isFocusable) return@setOnUnhandledKeyListener false
+            if (!orb.requestFocus()) return@setOnUnhandledKeyListener false
             Log.i(TAG, "サイドバー最上位の↑ → 検索ボタンへ")
-            orb.requestFocus()
             true
         }
         Log.i(TAG, "サイドバーの↑フックを設定")
