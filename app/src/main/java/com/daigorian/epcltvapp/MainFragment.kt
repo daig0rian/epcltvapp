@@ -279,7 +279,6 @@ class MainFragment : BrowseSupportFragment() {
         // onCreateViewHolder でフォーカス不可を設定することで再利用時も安全に非フォーカスを維持できる。
         setHeaderPresenterSelector(object : PresenterSelector() {
             private val iconPresenter = IconRowHeaderPresenter()
-            private val dividerPresenter = DividerPresenter()
             private val sectionPresenter = object : IconRowHeaderPresenter() {
                 override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
                     return super.onCreateViewHolder(parent).also { vh ->
@@ -288,6 +287,36 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
             }
+
+            /**
+             * サイドバーの区切り線。
+             *
+             * Leanback は「選択されたヘッダー」の ViewHolder を RowHeaderPresenter.ViewHolder として
+             * 扱う（HeadersSupportFragment.onRowSelected）。素の DividerPresenter は汎用の
+             * Presenter.ViewHolder を返すため、区切り行が選ばれた瞬間に ClassCastException で落ちる
+             * （実機で発生。行が増減する読み込み中に起きやすい）。
+             * 見た目は区切り線のまま、ViewHolder の型だけ RowHeaderPresenter に合わせる。
+             * 区切り線のレイアウトには RowHeaderView が無いので、それを触る既定処理は差し替える。
+             */
+            private val dividerPresenter = object : RowHeaderPresenter() {
+                override fun onCreateViewHolder(parent: ViewGroup): Presenter.ViewHolder {
+                    val divider = DividerPresenter().onCreateViewHolder(parent)
+                    return RowHeaderPresenter.ViewHolder(divider.view)
+                }
+
+                override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
+                    // 区切り線なので何も表示しない
+                }
+
+                override fun onUnbindViewHolder(viewHolder: Presenter.ViewHolder) {
+                    // 同上
+                }
+
+                override fun onSelectLevelChanged(viewHolder: RowHeaderPresenter.ViewHolder) {
+                    // 同上（既定の実装は mTitleView を触るため、ここでは何もしない）
+                }
+            }
+
             override fun getPresenter(item: Any?): Presenter = when (item) {
                 is DividerRow -> dividerPresenter
                 is SectionRow -> sectionPresenter
@@ -460,35 +489,47 @@ class MainFragment : BrowseSupportFragment() {
                 response.body()?.let{ it ->
                     // 受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
                     val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
-                    // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
-                    val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
-                    // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
+                    // 最新録画日時を集める収集器。下ごしらえの結果もここへ入れ、1ルール分の応答で上書きする。
                     val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
-                    // 足す順も orderedIds に合わせる（上に来るルールの録画を先に取りに行くため）
-                    val ruleById = it.associateBy { rule -> rule.id }
-                    addRuleRowsChunked(orderedIds) { ruleId ->
-                        val rule = ruleById[ruleId]
-                        if (rule == null) {
-                            Log.i(TAG, "addRows: ルール $ruleId の定義が見つからないので飛ばす")
-                            return@addRuleRowsChunked
-                        }
 
-                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                        val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
-                            getString(R.string.rule_id_is_x, rule.id.toString())
-                        }else{
-                            rule.keyword
+                    // 行を足していく処理。足す順も orderedIds に合わせる
+                    //（行を足すと同時にそのルールの録画を取りに行くので、上に来るルールの録画が先に届く）
+                    val ruleById = it.associateBy { rule -> rule.id }
+                    val addRows: (List<Long>) -> Unit = { orderedIds ->
+                        addRuleRowsChunked(orderedIds) { ruleId ->
+                            val rule = ruleById[ruleId]
+                            if (rule == null) {
+                                Log.i(TAG, "addRows: ルール $ruleId の定義が見つからないので飛ばす")
+                                return@addRuleRowsChunked
+                            }
+
+                            //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                            val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
+                                getString(R.string.rule_id_is_x, rule.id.toString())
+                            }else{
+                                rule.keyword
+                            }
+                            mMainMenuAdapter.updateContentsListRowWithCategory(
+                                GetRecordedParam(rule= rule.id),
+                                GetRecordedParamV2(ruleId= rule.id),
+                                keyword,
+                                Category.RECORDED_BY_RULES,
+                                rule.id,
+                                orderedIds,
+                                ruleOrder
+                            )
                         }
-                        mMainMenuAdapter.updateContentsListRowWithCategory(
-                            GetRecordedParam(rule= rule.id),
-                            GetRecordedParamV2(ruleId= rule.id),
-                            keyword,
-                            Category.RECORDED_BY_RULES,
-                            rule.id,
-                            orderedIds,
-                            ruleOrder
-                        )
+                    }
+
+                    if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
+                        // v1 も同じ下ごしらえを使う。1ルール1回の取得を待たずに上位の並びを確定させる。
+                        fetchLatestRecordedSeed { seed ->
+                            ruleOrder.seedRecordedAt(seed)
+                            addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                        }
+                    } else {
+                        addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
                     }
                 }
             }
@@ -729,41 +770,65 @@ class MainFragment : BrowseSupportFragment() {
      */
     private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>) -> Unit) {
         val seed = HashMap<Long, Long>()
-        val api = EpgStationV2.api
-        if (api == null) {
-            onReady(seed)
-            return
+
+        /** 1ページ取り、(ruleId, startAt) の組と「ページが埋まっていたか」を返す。 */
+        fun requestPage(page: Int, onPage: (List<Pair<Long, Long>>, Boolean) -> Unit) {
+            val offset = page.toLong() * AGGREGATE_PAGE_LIMIT
+            val limit = AGGREGATE_PAGE_LIMIT.toLong()
+
+            val apiV2 = EpgStationV2.api
+            if (apiV2 != null) {
+                apiV2.getRecorded(isHalfWidth = true, offset = offset, limit = limit, isReverse = false)
+                    .enqueue(object : Callback<Records> {
+                        override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                            if (!isUiAlive) return
+                            val records = response.body()?.records.orEmpty()
+                            onPage(
+                                records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
+                                records.size >= AGGREGATE_PAGE_LIMIT
+                            )
+                        }
+
+                        override fun onFailure(call: Call<Records>, t: Throwable) {
+                            Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
+                            if (isUiAlive) onPage(emptyList(), false)
+                        }
+                    })
+                return
+            }
+
+            // EPGStation v1 も /api/recorded の形が違うだけで考え方は同じ
+            val apiV1 = EpgStation.api
+            if (apiV1 == null) {
+                onPage(emptyList(), false)
+                return
+            }
+            apiV1.getRecorded(limit = limit, offset = offset, reverse = false)
+                .enqueue(object : Callback<GetRecordedResponse> {
+                    override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                        if (!isUiAlive) return
+                        val records = response.body()?.recorded.orEmpty()
+                        onPage(
+                            records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
+                            records.size >= AGGREGATE_PAGE_LIMIT
+                        )
+                    }
+
+                    override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                        Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
+                        if (isUiAlive) onPage(emptyList(), false)
+                    }
+                })
         }
 
         fun fetchPage(page: Int) {
-            api.getRecorded(
-                isHalfWidth = true,
-                offset = page.toLong() * AGGREGATE_PAGE_LIMIT,
-                limit = AGGREGATE_PAGE_LIMIT.toLong(),
-                isReverse = false
-            ).enqueue(object : Callback<Records> {
-                override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                    if (!isUiAlive) return
-                    val records = response.body()?.records.orEmpty()
-                    // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
-                    records.forEach { record ->
-                        val ruleId = record.ruleId
-                        if (ruleId != null && !seed.containsKey(ruleId)) seed[ruleId] = record.startAt
-                    }
-                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${records.size}件 累計ルール=${seed.size}")
-                    // ページが埋まっていて、上限にも達していなければ次のページを読む
-                    if (records.size >= AGGREGATE_PAGE_LIMIT && page + 1 < AGGREGATE_MAX_PAGES) {
-                        fetchPage(page + 1)
-                    } else {
-                        onReady(seed)
-                    }
-                }
-
-                override fun onFailure(call: Call<Records>, t: Throwable) {
-                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
-                    if (isUiAlive) onReady(seed)
-                }
-            })
+            requestPage(page) { pairs, pageFull ->
+                // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
+                pairs.forEach { (ruleId, startAt) -> if (!seed.containsKey(ruleId)) seed[ruleId] = startAt }
+                Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${pairs.size}件 累計ルール=${seed.size}")
+                // ページが埋まっていて、上限にも達していなければ次のページを読む
+                if (pageFull && page + 1 < AGGREGATE_MAX_PAGES) fetchPage(page + 1) else onReady(seed)
+            }
         }
 
         fetchPage(0)
