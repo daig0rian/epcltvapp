@@ -63,6 +63,14 @@ class MainFragment : BrowseSupportFragment() {
      */
     private val isUiAlive: Boolean get() = isAdded
 
+    /**
+     * 一度でも [loadRows] で読み込んだか。
+     *
+     * 起動直後は onCreate の initEPGStationApi → loadRows と、onResume の軽い更新が
+     * 二重に走る（同じチャンネル・録画中・最近の録画・履歴を2回取っていた）。
+     * 初回は loadRows に任せ、軽い更新は走らせない。
+     */
+    private var mHasLoadedOnce = false
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
     /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
@@ -197,8 +205,13 @@ class MainFragment : BrowseSupportFragment() {
             }
             else -> {
                 // 録画中・最近の録画・検索履歴だけ取り直す。ルール行はそのまま残す。
-                Log.i(TAG, "onResume: branch=else → 軽い更新（ルール行は触らない）")
-                updateRows(includeRules = false)
+                if (!mHasLoadedOnce) {
+                    // 起動直後。このあと loadRows が全部読むので、ここで取ると同じものを二度取ることになる。
+                    Log.i(TAG, "onResume: 初回は loadRows に任せる（軽い更新はしない）")
+                } else {
+                    Log.i(TAG, "onResume: branch=else → 軽い更新（ルール行は触らない）")
+                    updateRows(includeRules = false)
+                }
             }
         }
         // 表示中のみ動かすため画面を離れたら止める。ポーズ中に終了時刻を迎えた番組があるかもしれないので、
@@ -542,9 +555,14 @@ class MainFragment : BrowseSupportFragment() {
 
                     if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
                         // v1 も同じ下ごしらえを使う。1ルール1回の取得を待たずに上位の並びを確定させる。
+                        // 行を足すのは1ページ目が返った時点。2ページ目以降は裏で読み続けて並べ替えの材料に足す。
+                        var rowsAdded = false
                         fetchLatestRecordedSeed { seed ->
                             ruleOrder.seedRecordedAt(seed)
-                            addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                            if (!rowsAdded) {
+                                rowsAdded = true
+                                addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                            }
                         }
                     } else {
                         addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
@@ -602,9 +620,14 @@ class MainFragment : BrowseSupportFragment() {
                     if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
                         // 1ルール1回の取得を待たずに上位の並びを確定させるため、先に下ごしらえを読む。
                         // 失敗しても seed は空のまま返ってくるので、従来どおり仮の並びで行を足す。
+                        // 行を足すのは1ページ目が返った時点。2ページ目以降は裏で読み続けて並べ替えの材料に足す。
+                        var rowsAdded = false
                         fetchLatestRecordedSeed { seed ->
                             ruleOrder.seedRecordedAt(seed)
-                            addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                            if (!rowsAdded) {
+                                rowsAdded = true
+                                addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                            }
                         }
                     } else {
                         addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
@@ -621,6 +644,7 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun loadRows() {
+        mHasLoadedOnce = true
 
         //内容クリア
         mMainMenuAdapter.clear()
@@ -784,7 +808,8 @@ class MainFragment : BrowseSupportFragment() {
      * 全ルールを覆えないこともある（録画が少ないルールは深いページにしか出てこない）。覆えなかったルールは、
      * あとから届く1ルール分の応答で埋まる。
      *
-     * @param onReady 下ごしらえが終わったら呼ぶ。失敗しても必ず呼ぶ。
+     * @param onReady ページが1枚返るたびに呼ぶ。1ページ目で行の追加を始められるようにするためで、
+     *        失敗したときも必ず一度は呼ぶ（呼ばれないと待っている側が動き出せない）。
      */
     private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>) -> Unit) {
         val seed = HashMap<Long, Long>()
@@ -844,8 +869,11 @@ class MainFragment : BrowseSupportFragment() {
                 // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
                 pairs.forEach { (ruleId, startAt) -> if (!seed.containsKey(ruleId)) seed[ruleId] = startAt }
                 Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${pairs.size}件 累計ルール=${seed.size}")
+                // 1ページ目が返った時点で呼び出し側へ渡す。ここで行の追加とそのルールの録画取得を始めさせ、
+                // 残りのページは裏で読み続けて、確定時の並べ替えの材料にする（表示を待たせない）。
+                onReady(seed)
                 // ページが埋まっていて、上限にも達していなければ次のページを読む
-                if (pageFull && page + 1 < AGGREGATE_MAX_PAGES) fetchPage(page + 1) else onReady(seed)
+                if (pageFull && page + 1 < AGGREGATE_MAX_PAGES) fetchPage(page + 1)
             }
         }
 
