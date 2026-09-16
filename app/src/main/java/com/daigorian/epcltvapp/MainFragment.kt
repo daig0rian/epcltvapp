@@ -13,8 +13,10 @@ import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -50,7 +52,6 @@ class MainFragment : BrowseSupportFragment() {
     private var mNeedsReloadHistoryOnResume = false
     private var mNeedsCheckConnectionOnResume = false
     private var mConnectionKeyBeforeSettings: String? = null
-
     /**
      * 画面がまだ生きているか。遅れて届いた API 応答を捨てるための門番。
      *
@@ -59,6 +60,9 @@ class MainFragment : BrowseSupportFragment() {
      * null になって落ちる（実機で発生）。応答を触る前にここで弾く。
      */
     private val isUiAlive: Boolean get() = isAdded
+
+    /** 設定画面から戻ったときに、手元のデータだけでルール行を並べ直すか（通信は増やさない）。 */
+    private var mNeedsReorderRulesOnResume = false
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
     /**
@@ -152,6 +156,12 @@ class MainFragment : BrowseSupportFragment() {
         setupEventListeners()
     }
 
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // タイトル行（検索ボタンがある行）は Leanback が組み立てるので、出来上がってから足す
+        view.post { addSettingsButton() }
+    }
+
     override fun onResume() {
         Log.i(TAG, "onResume adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition flags[reloadAll=$mNeedsReloadAllOnResume conn=$mNeedsCheckConnectionOnResume hist=$mNeedsReloadHistoryOnResume]")
         super.onResume()
@@ -167,7 +177,15 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "onResume: branch=checkConnection changed=$changed")
                 mNeedsCheckConnectionOnResume = false
                 if (changed) {
+                    // 取り直すので、並べ直しは揃った応答で行われる
+                    mNeedsReorderRulesOnResume = false
                     initEPGStationApi()
+                } else if (mNeedsReorderRulesOnResume) {
+                    // 設定を見て戻っただけのとき。並び順が変わっていれば、取得済みのデータだけで
+                    // 並べ直す（ルール行は取り直さないので通信は増えない）。
+                    mNeedsReorderRulesOnResume = false
+                    Log.d(TAG, "onResume: 設定から戻ったので並び順だけ反映（通信なし）")
+                    applyRuleOrder()
                 }
             }
             mNeedsReloadHistoryOnResume -> {
@@ -989,6 +1007,69 @@ class MainFragment : BrowseSupportFragment() {
         onItemViewSelectedListener = ItemViewSelectedListener()
     }
 
+    /**
+     * タイトル行の検索ボタンの右隣へ、同じ見た目の設定ボタン（歯車）を足す。
+     *
+     * サイドバーの一番下の「設定」まで行かなくても設定画面へ入れるようにするためのもの。
+     * 検索ボタンと同じ [SearchOrbView] を使うので大きさとフォーカス時の見え方が揃い、
+     * D-pad では検索ボタンから右へ移るだけになる。サイドバーの一覧や行の持ち方には触らない。
+     */
+    private fun addSettingsButton() {
+        if (!isAdded) return
+        // タイトル行はテーマで差し替えられることがあるので、期待した型でなければ何もしない
+        val titleBar = getTitleView() as? TitleView ?: return
+        // 画面を作り直したときに二重に足さない
+        if (titleBar.findViewWithTag<View>(SETTINGS_BUTTON_TAG) != null) return
+        val searchOrb = titleBar.searchAffordanceView as? SearchOrbView ?: return
+
+        val gearOrb = SearchOrbView(requireContext()).apply {
+            tag = SETTINGS_BUTTON_TAG
+            contentDescription = getString(R.string.settings)
+            searchOrb.orbColors?.let { setOrbColors(it) }
+            setOrbIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_settings))
+            setOnOrbClickedListener { openSettingsScreen() }
+        }
+        titleBar.addView(
+            gearOrb,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL or Gravity.START
+            )
+        )
+
+        // 置き場所は検索ボタンの実測値から決める。余白はテーマ任せなので決め打ちしない。
+        // gravity=start の子の left は「親の padding + 自分の margin」なので、親の padding ぶんを
+        // 引いてから margin に入れる。
+        val gap = (SETTINGS_BUTTON_GAP_DP * resources.displayMetrics.density).toInt()
+        val alignNextToSearchOrb = Runnable {
+            val params = gearOrb.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
+            if (searchOrb.width == 0) return@Runnable
+            val left = (searchOrb.left - titleBar.paddingLeft) + searchOrb.width + gap
+            if (params.leftMargin != left) {
+                params.leftMargin = left
+                gearOrb.layoutParams = params
+            }
+        }
+        // 画面の回転やテーマ変更で検索ボタンの位置が変わっても追従させる
+        searchOrb.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignNextToSearchOrb.run() }
+        alignNextToSearchOrb.run()
+    }
+
+    /**
+     * 設定画面を開く。歯車ボタンと、サイドバー最下段の「設定」から入るのと同じ画面。
+     *
+     * 戻ってきたときの扱いは、既にある「接続設定」カードと同じにする。接続先が変わっていれば
+     * API を取り直し、並び順だけが変わっていれば取得済みのデータだけで並べ直す（通信は増えない）。
+     */
+    private fun openSettingsScreen() {
+        val ctx = context ?: return
+        mConnectionKeyBeforeSettings = connectionKey()
+        mNeedsCheckConnectionOnResume = true
+        mNeedsReorderRulesOnResume = true
+        startActivity(Intent(ctx, SettingsActivity::class.java))
+    }
+
     private inner class ItemViewClickedListener : OnItemViewClickedListener {
         @SuppressLint("ApplySharedPref")
         override fun onItemClicked(
@@ -1750,6 +1831,12 @@ class MainFragment : BrowseSupportFragment() {
 
     companion object {
         private const val TAG = "MainFragment"
+
+        /** タイトル行に足した設定ボタンの目印。画面を作り直したときに二重に足さないために使う。 */
+        private const val SETTINGS_BUTTON_TAG = "settings_orb"
+
+        /** 検索ボタンと設定ボタンの間隔（dp）。 */
+        private const val SETTINGS_BUTTON_GAP_DP = 8
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
