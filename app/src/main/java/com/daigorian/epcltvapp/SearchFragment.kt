@@ -305,12 +305,19 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                     )?.enqueue(object : Callback<GetRecordedResponse> {
                         override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                             response.body()?.let { getRecordedResponse ->
+                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
+                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
+                                val replacePosition = adapter.indexOf(item)
+                                if (replacePosition < 0) {
+                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
+                                    return@let
+                                }
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
                                 getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
-                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                        adapter.replace(replacePosition,recordedProgram)
                                     }else{
                                         adapter.add(recordedProgram)
                                     }
@@ -348,12 +355,19 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                     )?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
                             response.body()?.let { responseBody ->
+                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
+                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
+                                val replacePosition = adapter.indexOf(item)
+                                if (replacePosition < 0) {
+                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
+                                    return@let
+                                }
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
                                 responseBody.records.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
-                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                        adapter.replace(replacePosition,recordedProgram)
                                     }else{
                                         adapter.add(recordedProgram)
                                     }

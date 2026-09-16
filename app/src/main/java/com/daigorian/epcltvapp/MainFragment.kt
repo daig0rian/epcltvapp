@@ -183,8 +183,9 @@ class MainFragment : BrowseSupportFragment() {
                 }
             }
             else -> {
-                Log.d(TAG, "onResume: branch=else → updateRows")
-                updateRows()
+                // 録画中・最近の録画・検索履歴だけ取り直す。ルール行はそのまま残す。
+                Log.i(TAG, "onResume: branch=else → 軽い更新（ルール行は触らない）")
+                updateRows(includeRules = false)
             }
         }
         // 表示中のみ動かすため画面を離れたら止める。ポーズ中に終了時刻を迎えた番組があるかもしれないので、
@@ -295,7 +296,14 @@ class MainFragment : BrowseSupportFragment() {
         })
     }
 
-    private fun updateRows() {
+    /**
+     * 各行を読み込む。
+     *
+     * @param includeRules 録画ルールの行も取り直すか。画面に戻ってきただけのときは false にする——
+     *        ルールが1125件ある環境では全件の取り直しに1分近くかかり、その間ずっと「読み込み中」になるため。
+     *        ルールの録画を取り直したいときは設定の「録画の再読み込み」（reloadContentRows）を使う。
+     */
+    private fun updateRows(includeRules: Boolean = true) {
 
         EpgStationV2.api?.let { api ->
             // EPGStation V2.x.x　の場合だけ「ライブ視聴」列を作る
@@ -436,6 +444,12 @@ class MainFragment : BrowseSupportFragment() {
         //履歴行の追加。並び順は既存キー（履歴専用）を見る。
         refreshSearchHistoryRows()
 
+        // 画面に戻っただけのときはここで止める。ルール行は前回の内容のまま残す。
+        if (!includeRules) {
+            Log.i(TAG, "updateRows: ルール行は取り直さない（戻ってきただけ）")
+            return
+        }
+
         //ルール一覧の並び順。既定は「ルールの新しい順」。
         val ruleSortMode = currentRuleSortMode()
 
@@ -444,14 +458,21 @@ class MainFragment : BrowseSupportFragment() {
             override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
                 if (!isUiAlive) return
                 response.body()?.let{ it ->
-                    // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
+                    // 受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
                     val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
                     // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
                     val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
                     // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
                     val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
                     mActiveRuleOrderCollector = ruleOrder
-                    it.forEach { rule ->
+                    // 足す順も orderedIds に合わせる（上に来るルールの録画を先に取りに行くため）
+                    val ruleById = it.associateBy { rule -> rule.id }
+                    addRuleRowsChunked(orderedIds) { ruleId ->
+                        val rule = ruleById[ruleId]
+                        if (rule == null) {
+                            Log.i(TAG, "addRows: ルール $ruleId の定義が見つからないので飛ばす")
+                            return@addRuleRowsChunked
+                        }
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
                         val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
@@ -488,8 +509,18 @@ class MainFragment : BrowseSupportFragment() {
                     mActiveRuleOrderCollector = ruleOrder
 
                     // 行を足していく処理。orderedIds は行を足すときの並び。
+                    // 足す順も orderedIds に合わせる。行を足すと同時にそのルールの録画を取りに行くので、
+                    // 上に来るルール（最近録画されたもの）の録画が先に届き、開いてすぐ見られる。
+                    val ruleById = rules.associateBy { rule -> rule.id }
                     val addRows: (List<Long>) -> Unit = { orderedIds ->
-                        rules.forEach { rule ->
+                        // 一度に1125行を足すと main スレッドが数秒占有されて画面が固まる。
+                        // 少しずつ足して main ループに戻し、上の列から先に表示・取得されるようにする。
+                        addRuleRowsChunked(orderedIds) { ruleId ->
+                            val rule = ruleById[ruleId]
+                            if (rule == null) {
+                                Log.i(TAG, "addRows: ルール $ruleId の定義が見つからないので飛ばす")
+                                return@addRuleRowsChunked
+                            }
 
                             //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
                             val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
@@ -584,6 +615,30 @@ class MainFragment : BrowseSupportFragment() {
         listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
         updateRows()
+    }
+
+    /**
+     * ルール行を ids の順に、少しずつ足す。
+     *
+     * 1125件を一度に足すと、行の生成と1ルール分の取得依頼だけで main スレッドが数秒占有され、
+     * その間は画面がまったく更新されない（上の方の列の録画も出てこない）。
+     * 小さく区切って main ループに戻すことで、上の列から先に表示・取得される。
+     */
+    private fun addRuleRowsChunked(ids: List<Long>, addOne: (Long) -> Unit) {
+        var index = 0
+        val step = object : Runnable {
+            override fun run() {
+                // 画面から離れた後に続きを足さない
+                if (!isUiAlive) return
+                val end = minOf(index + RULE_ROW_CHUNK_SIZE, ids.size)
+                while (index < end) {
+                    addOne(ids[index])
+                    index++
+                }
+                if (index < ids.size) mHandler.post(this)
+            }
+        }
+        step.run()
     }
 
     /**
@@ -985,12 +1040,19 @@ class MainFragment : BrowseSupportFragment() {
                         override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
                             if (!isUiAlive) return
                             response.body()?.let { getRecordedResponse ->
+                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
+                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
+                                val replacePosition = adapter.indexOf(item)
+                                if (replacePosition < 0) {
+                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
+                                    return@let
+                                }
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
                                 getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
-                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                        adapter.replace(replacePosition,recordedProgram)
                                     }else{
                                         adapter.add(recordedProgram)
                                     }
@@ -1030,12 +1092,19 @@ class MainFragment : BrowseSupportFragment() {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
                             if (!isUiAlive) return
                             response.body()?.let { responseRoot ->
+                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
+                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
+                                val replacePosition = adapter.indexOf(item)
+                                if (replacePosition < 0) {
+                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
+                                    return@let
+                                }
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
                                 //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
                                 responseRoot.records.forEachIndexed {  index, recordedProgram ->
                                     if(index == 0) {
-                                        adapter.replace(adapter.indexOf(item),recordedProgram)
+                                        adapter.replace(replacePosition,recordedProgram)
                                     }else{
                                         adapter.add(recordedProgram)
                                     }
@@ -1625,6 +1694,9 @@ class MainFragment : BrowseSupportFragment() {
 
         /** ルール一覧の読み込みが長引くときに、進み具合をログへ出す間隔（件数） */
         private const val RULE_LOAD_LOG_INTERVAL = 100
+
+        /** ルール行を一度に足す件数。main スレッドを長時間占有しないよう小さく区切る */
+        private const val RULE_ROW_CHUNK_SIZE = 20
 
         /** 「録画の新しい順」の下ごしらえで、1ページに頼む件数 */
         private const val AGGREGATE_PAGE_LIMIT = 1000
