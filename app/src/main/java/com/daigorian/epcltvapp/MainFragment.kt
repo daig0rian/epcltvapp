@@ -61,6 +61,14 @@ class MainFragment : BrowseSupportFragment() {
     private val isUiAlive: Boolean get() = isAdded
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
+    /**
+     * いま表示に使っている「録画ルールの並び」収集器。
+     *
+     * ルール一覧を取り直すたびに差し替える。前回のロードがまだ飛んでいる間に新しいロードが
+     * 始まった場合、古い応答で並べ替えてしまわないよう、収集器側でこの値と自分を照合する。
+     */
+    private var mActiveRuleOrderCollector: RuleOrderCollector? = null
+
     private val mCardPresenter = OriginalCardPresenter()
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
@@ -71,14 +79,17 @@ class MainFragment : BrowseSupportFragment() {
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
+            getString(R.string.pref_key_rules_order_mode) -> {
+                // ルールの並び順。並びは取得済みのデータだけで決まるので、行は取り直さずに並べ替える。
+                Log.d(TAG, "prefChanged: rules_order_mode → applyRuleOrder (行の再取得なし)")
+                applyRuleOrder()
+            }
             getString(R.string.pref_key_rules_order_is_newest_first) -> {
-                Log.d(TAG, "prefChanged: rules_order → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
-                Log.d(TAG, "prefChanged: rules_order → deleteCategory(RECORDED_BY_RULES+SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                mMainMenuAdapter.deleteCategory(Category.RECORDED_BY_RULES)
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                Log.d(TAG, "prefChanged: rules_order → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                updateRows()
+                // こちらは検索履歴の並び順。履歴の行だけを作り直す（ルール行の再取得は起こさない）。
+                Log.d(TAG, "prefChanged: history_newest_first → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
             getString(R.string.pref_key_show_thumbnail_background) -> {
                 startBackgroundTimer()
@@ -90,18 +101,17 @@ class MainFragment : BrowseSupportFragment() {
                 if (showEmptyRules) updateRows() else mMainMenuAdapter.removeEmptyRuleRows()
             }
             getString(R.string.pref_key_num_of_history) -> {
-                Log.d(TAG, "prefChanged: num_of_history → setSelectedPosition(0) + deleteCategory(SEARCH_HISTORY)")
-                setSelectedPosition(0, false)
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                updateRows()
+                // 件数が変わっただけなので、履歴の行だけを作り直す
+                Log.d(TAG, "prefChanged: num_of_history → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
             "pref_key_search_histories" -> {
-                Log.d(TAG, "prefChanged: search_histories → setSelectedPosition(0) before deleteCategory")
-                setSelectedPosition(0, false)
-                Log.d(TAG, "prefChanged: search_histories cleared → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                Log.d(TAG, "prefChanged: search_histories after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                updateRows()
+                Log.d(TAG, "prefChanged: search_histories cleared → refreshSearchHistoryRows")
+                val selectedRowId = selectedRowHeaderId()
+                refreshSearchHistoryRows()
+                restoreSelection(selectedRowId)
             }
         }
     }
@@ -164,12 +174,12 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "onResume: branch=reloadHistory → deferring to view.post")
                 mNeedsReloadHistoryOnResume = false
                 view?.post {
-                    Log.d(TAG, "onResume: reloadHistory deferred → setSelectedPosition(0) adapterSize=${mMainMenuAdapter.size()}")
-                    setSelectedPosition(0, false)
-                    Log.d(TAG, "onResume: reloadHistory deferred → deleteCategory(SEARCH_HISTORY) before=${mMainMenuAdapter.size()}")
-                    mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-                    Log.d(TAG, "onResume: reloadHistory deferred → after deleteCategory adapterSize=${mMainMenuAdapter.size()}")
-                    updateRows()
+                    // 検索から戻ったときは履歴の行だけを作り直す。以前は updateRows() を呼んでいたため、
+                    // ここでも録画ルール全件の getRecorded() が走っていた。
+                    Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
+                    val selectedRowId = selectedRowHeaderId()
+                    refreshSearchHistoryRows()
+                    restoreSelection(selectedRowId)
                 }
             }
             else -> {
@@ -214,6 +224,8 @@ class MainFragment : BrowseSupportFragment() {
         //受け口(DeepLinkActivity)が同じ初期化を必要とするため共通化してある。
         //一覧の取得はここに残す——画面によって要るものが違うため。
         EpgStationApiInitializer.initialize(requireContext()) { result ->
+            // 接続先が応答しないと初期化は数秒かかる。画面を離れた後に返ってきた場合は何もしない。
+            if (!isUiAlive) return@initialize
             when (result) {
                 is EpgStationApiInitializer.Result.V2 -> {
                     EpgStationV2.fetchChannels()
@@ -421,30 +433,25 @@ class MainFragment : BrowseSupportFragment() {
         )
 
 
-        //ルール・履歴の並び順を表すフラグ。デフォルトfalse。
-        val isNewestFirst = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(getString(R.string.pref_key_rules_order_is_newest_first),false)
+        //履歴行の追加。並び順は既存キー（履歴専用）を見る。
+        refreshSearchHistoryRows()
 
-        //履歴行の追加
-        val historyList = SearchFragment.getHistory(requireContext())
-        val orderedHistory = if (isNewestFirst) historyList.asReversed() else historyList
-        orderedHistory.forEachIndexed { index, it ->
-            mMainMenuAdapter.updateContentsListRowWithCategory(
-                GetRecordedParam(keyword = it),
-                GetRecordedParamV2(keyword = it),
-                it,
-                Category.SEARCH_HISTORY,
-                index.toLong()
-            )
-        }
+        //ルール一覧の並び順。既定は「ルールの新しい順」。
+        val ruleSortMode = currentRuleSortMode()
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
         EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {
             override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
                 if (!isUiAlive) return
                 response.body()?.let{ it ->
-                    val rules = if(isNewestFirst){it.reversed()}else{it}
-                    val orderedIds = rules.map { rule -> rule.id.toLong() }
-                    rules.forEach { rule ->
+                    // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
+                    val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
+                    // 行を足していく間の仮の並び。録画順は全ルール分の応答が揃ってから確定する。
+                    val orderedIds = RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder)
+                    // 全ルール分の応答から最新録画日時を集める収集器。並べ替えの追加リクエストは出さない。
+                    val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
+                    mActiveRuleOrderCollector = ruleOrder
+                    it.forEach { rule ->
 
                         //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
                         val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
@@ -458,7 +465,8 @@ class MainFragment : BrowseSupportFragment() {
                             keyword,
                             Category.RECORDED_BY_RULES,
                             rule.id,
-                            orderedIds
+                            orderedIds,
+                            ruleOrder
                         )
                     }
                 }
@@ -472,25 +480,44 @@ class MainFragment : BrowseSupportFragment() {
         EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 if (!isUiAlive) return
-                response.body()?.rules?.let{ it ->
-                    val rules = if(isNewestFirst){it.reversed()}else{it}
-                    val orderedIds = rules.map { rule -> rule.id.toLong() }
-                    rules.forEach { rule ->
+                response.body()?.rules?.let{ rules ->
+                    // EPGStation は rule.id の昇順で返す。受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
+                    val ruleIdsInServerOrder = rules.map { rule -> rule.id.toLong() }
+                    // 最新録画日時を集める収集器。下ごしらえの結果もここへ入れ、1ルール分の応答で上書きする。
+                    val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
+                    mActiveRuleOrderCollector = ruleOrder
 
-                        //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                        val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
-                            getString(R.string.rule_id_is_x, rule.id.toString())
-                        }else{
-                            rule.searchOption?.keyword!!
+                    // 行を足していく処理。orderedIds は行を足すときの並び。
+                    val addRows: (List<Long>) -> Unit = { orderedIds ->
+                        rules.forEach { rule ->
+
+                            //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
+                            val keyword:String = if ( rule.searchOption?.keyword.isNullOrEmpty() ){
+                                getString(R.string.rule_id_is_x, rule.id.toString())
+                            }else{
+                                rule.searchOption?.keyword!!
+                            }
+                            mMainMenuAdapter.updateContentsListRowWithCategory(
+                                GetRecordedParam(rule= rule.id),
+                                GetRecordedParamV2(ruleId= rule.id),
+                                keyword,
+                                Category.RECORDED_BY_RULES,
+                                rule.id,
+                                orderedIds,
+                                ruleOrder
+                            )
                         }
-                        mMainMenuAdapter.updateContentsListRowWithCategory(
-                            GetRecordedParam(rule= rule.id),
-                            GetRecordedParamV2(ruleId= rule.id),
-                            keyword,
-                            Category.RECORDED_BY_RULES,
-                            rule.id,
-                            orderedIds
-                        )
+                    }
+
+                    if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
+                        // 1ルール1回の取得を待たずに上位の並びを確定させるため、先に下ごしらえを読む。
+                        // 失敗しても seed は空のまま返ってくるので、従来どおり仮の並びで行を足す。
+                        fetchLatestRecordedSeed { seed ->
+                            ruleOrder.seedRecordedAt(seed)
+                            addRows(ruleOrder.orderedRuleIds(ruleSortMode))
+                        }
+                    } else {
+                        addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
                     }
                 }
             }
@@ -557,6 +584,185 @@ class MainFragment : BrowseSupportFragment() {
         listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
         updateRows()
+    }
+
+    /**
+     * 録画ルール行を、いま設定されている並び順へ並べ直す。
+     *
+     * [RuleOrderCollector] が全ルール分の応答を受け取ったときに加えて、並び順の設定を変えたときにも
+     * 呼ぶ。どちらも既に手元にあるデータだけで並びが決まるので、ここで通信は起きない。応答が1件
+     * 返るたびに並べ直すと600件の環境では一覧全体の再配置が繰り返し走るため、確定はこの1回に絞る。
+     * 並びが既に目標と同じときは何もしない（並べ替えのための再描画も起きない）。
+     */
+    private fun applyRuleOrder() {
+        val collector = mActiveRuleOrderCollector ?: return
+        val mode = currentRuleSortMode()
+        val orderedIds = collector.orderedRuleIds(mode)
+        // 並べ替えで行が動いても、いま選んでいる行が別のルールにすり替わらないよう控えておく
+        val selectedRowId = selectedRowHeaderId()
+        val changed = mMainMenuAdapter.reorderCategory(Category.RECORDED_BY_RULES, orderedIds)
+        // 実機で並びを確かめられるように、確定した先頭と末尾だけ残す（番組名は出さない）
+        Log.i(TAG, "applyRuleOrder: mode=$mode 並べ替え=$changed 先頭=${orderedIds.take(5).map { it to collector.latestRecordedAtOf(it) }} 末尾=${orderedIds.takeLast(3).map { it to collector.latestRecordedAtOf(it) }}")
+        if (changed) {
+            restoreSelection(selectedRowId)
+        }
+    }
+
+    /** 設定に保存されているルール一覧の並び順。未設定・不正値は既定へ倒れる。 */
+    private fun currentRuleSortMode(): String = RuleOrder.modeFromPreference(
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .getString(getString(R.string.pref_key_rules_order_mode), null)
+    )
+
+    /** 検索履歴の並び順（既存キーの真偽値）。true で新しい順。 */
+    private fun isHistoryNewestFirst(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean(getString(R.string.pref_key_rules_order_is_newest_first), false)
+
+    /** いま選んでいる行の headerId。並べ替えや作り直しの前後で選択を保つために控える。 */
+    private fun selectedRowHeaderId(): Long? =
+        if (selectedPosition in 0 until mMainMenuAdapter.size()) {
+            (mMainMenuAdapter.get(selectedPosition) as? ListRow)?.headerItem?.id
+        } else {
+            null
+        }
+
+    /** 控えておいた行が、作り直した後も同じ行として選ばれるように選択位置を合わせ直す。 */
+    private fun restoreSelection(headerId: Long?) {
+        if (headerId == null) return
+        val newPosition = mMainMenuAdapter.indexOfListRowByHeaderId(headerId)
+        if (newPosition >= 0 && newPosition != selectedPosition) {
+            // 同じ行を選んだままにするだけ。先頭へ飛ばしたりスクロール位置を戻したりはしない。
+            setSelectedPosition(newPosition, false)
+        }
+    }
+
+    /**
+     * 検索履歴の行だけを作り直す。
+     *
+     * 以前は履歴に関わる設定が変わるたびに updateRows() を呼んでいた。updateRows() は全カテゴリを
+     * 作り直すため、履歴の並びを変えただけで録画ルール全件の getRecorded() も走っていた
+     * （600件の環境なら600リクエスト）。ここでは履歴カテゴリしか触らない。
+     */
+    private fun refreshSearchHistoryRows() {
+        mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+
+        val historyList = SearchFragment.getHistory(requireContext())
+        val orderedHistory = if (isHistoryNewestFirst()) historyList.asReversed() else historyList
+        orderedHistory.forEachIndexed { index, it ->
+            mMainMenuAdapter.updateContentsListRowWithCategory(
+                GetRecordedParam(keyword = it),
+                GetRecordedParamV2(keyword = it),
+                it,
+                Category.SEARCH_HISTORY,
+                index.toLong()
+            )
+        }
+    }
+
+    /**
+     * 「録画の新しい順」の下ごしらえ。
+     *
+     * `/api/recorded` を ruleId なし・startAt 降順で数ページ読み、ruleId → 最後に録画された startAt を作る。
+     * 行を作るために元から走る1ルール1回の取得が全部返るのを待たず、上位の並びを先に確定させるためのもの。
+     * ページ数と1ページの件数はここで上限を切る（サーバーへの負荷を増やしすぎないため）。
+     *
+     * 全ルールを覆えないこともある（録画が少ないルールは深いページにしか出てこない）。覆えなかったルールは、
+     * あとから届く1ルール分の応答で埋まる。
+     *
+     * @param onReady 下ごしらえが終わったら呼ぶ。失敗しても必ず呼ぶ。
+     */
+    private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>) -> Unit) {
+        val seed = HashMap<Long, Long>()
+        val api = EpgStationV2.api
+        if (api == null) {
+            onReady(seed)
+            return
+        }
+
+        fun fetchPage(page: Int) {
+            api.getRecorded(
+                isHalfWidth = true,
+                offset = page.toLong() * AGGREGATE_PAGE_LIMIT,
+                limit = AGGREGATE_PAGE_LIMIT.toLong(),
+                isReverse = false
+            ).enqueue(object : Callback<Records> {
+                override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    if (!isUiAlive) return
+                    val records = response.body()?.records.orEmpty()
+                    // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
+                    records.forEach { record ->
+                        val ruleId = record.ruleId
+                        if (ruleId != null && !seed.containsKey(ruleId)) seed[ruleId] = record.startAt
+                    }
+                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${records.size}件 累計ルール=${seed.size}")
+                    // ページが埋まっていて、上限にも達していなければ次のページを読む
+                    if (records.size >= AGGREGATE_PAGE_LIMIT && page + 1 < AGGREGATE_MAX_PAGES) {
+                        fetchPage(page + 1)
+                    } else {
+                        onReady(seed)
+                    }
+                }
+
+                override fun onFailure(call: Call<Records>, t: Throwable) {
+                    Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
+                    if (isUiAlive) onReady(seed)
+                }
+            })
+        }
+
+        fetchPage(0)
+    }
+
+    /**
+     * 録画ルール一覧の並びを決めるための、1ロード分の収集状態。
+     *
+     * 各行の内容を作るために元から走っている `getRecorded(ruleId = ...)` の応答から
+     * 「そのルールで最後に録画された番組の startAt」を集めるだけで、並べ替えのための追加の
+     * API 呼び出しは行わない。応答が1件返るたびに並べ替えるのではなく、全ルール分が揃ってから
+     * [applyRuleOrder] を1回だけ呼ぶ。
+     */
+    private inner class RuleOrderCollector(private val ruleIdsInServerOrder: List<Long>) {
+
+        /** ruleId → そのルールで最後に録画された番組の startAt (ms)。録画実績がないルールは入らない。 */
+        private val latestRecordedAt = HashMap<Long, Long>()
+
+        /** 応答が返ってきた ruleId。同じルールを二重に数えないためのもの。 */
+        private val reportedRuleIds = HashSet<Long>()
+
+        private var settled = false
+
+        /**
+         * ルール1件分の getRecorded が完了したときに呼ぶ。成功・失敗のどちらの経路でも必ず1回だけ
+         * 呼ぶこと。呼ばれないルールがあると一覧の並びが確定しない。
+         */
+        fun report(ruleId: Long, latestStartAt: Long?) {
+            // 新しいロードが始まっていたら、遅れて返ってきた古い応答は捨てる
+            if (settled || this !== mActiveRuleOrderCollector) return
+
+            if (latestStartAt != null) latestRecordedAt[ruleId] = latestStartAt
+            reportedRuleIds.add(ruleId)
+            if (reportedRuleIds.size % RULE_LOAD_LOG_INTERVAL == 0) {
+                Log.i(TAG, "ruleOrder: ${reportedRuleIds.size}/${ruleIdsInServerOrder.size} 件の応答を回収")
+            }
+            if (reportedRuleIds.size < ruleIdsInServerOrder.size) return
+
+            Log.i(TAG, "ruleOrder: ${ruleIdsInServerOrder.size} 件すべての応答が揃った（録画実績あり=${latestRecordedAt.size}件）")
+            settled = true
+            applyRuleOrder()
+        }
+
+        /** 指定された並び順に並べたルール ID の一覧。 */
+        fun orderedRuleIds(mode: String): List<Long> =
+            RuleOrder.orderedRuleIds(mode, ruleIdsInServerOrder, latestRecordedAt)
+
+        /** 下ごしらえで分かった ruleId → 最新 startAt を取り込む。あとから届く1ルール分の応答が上書きする。 */
+        fun seedRecordedAt(seed: Map<Long, Long>) {
+            latestRecordedAt.putAll(seed)
+        }
+
+        /** 診断ログ用。この ruleId の最終録画日時。録画実績が無ければ null。 */
+        fun latestRecordedAtOf(ruleId: Long): Long? = latestRecordedAt[ruleId]
     }
 
     /**
@@ -1008,7 +1214,13 @@ class MainFragment : BrowseSupportFragment() {
             }
         }
 
-        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long,orderedIds:List<Long>?=null){
+        /**
+         * @param orderedIds 行を並べる順（ruleId の並び）。null なら従来どおりカテゴリ末尾へ追加する。
+         * @param ruleOrder 録画ルール行のときだけ渡す並び順の収集器。全ルールの getRecorded が
+         *                  返ってきた時点で、この収集器が [applyRuleOrder] を1回だけ呼ぶ。
+         *                  null のカテゴリ（最近の録画・検索履歴）の挙動は変わらない。
+         */
+        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long,orderedIds:List<Long>?=null,ruleOrder:RuleOrderCollector?=null){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
@@ -1028,7 +1240,14 @@ class MainFragment : BrowseSupportFragment() {
             val addedUpfront = if (listRow == null) {
                 val deferred = category == Category.RECORDED_BY_RULES && !showEmptyRulesPref
                 if (!deferred) {
-                    addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
+                    // 行を作った順（サーバー順）に末尾へ足すのではなく、orderedIds の位置へ差し込む。
+                    // ここを末尾追加にしていたため、「0件ルールの表示」がONだと並び順の指定が無視されていた。
+                    val row = ListRow(HeaderItem(headerId, title), listRowAdapter)
+                    if (orderedIds != null) {
+                        addToCategoryOrdered(category, row, idInCategory, orderedIds)
+                    } else {
+                        addToCategory(category, row)
+                    }
                 }
                 !deferred
             } else {
@@ -1115,10 +1334,14 @@ class MainFragment : BrowseSupportFragment() {
                         }
 
                     }
+                    // いま取れた録画のうち最新の startAt を並べ替え用に報告する。このための追加リクエストはしない。
+                    // body が null（APIエラー応答）でも必ず1回報告し、収集器が待ち続けないようにする。
+                    ruleOrder?.report(idInCategory, response.body()?.let { it.recorded.maxOfOrNull { r -> r.startAt } })
                 }
                 override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                     if (!isUiAlive) return
                     Log.d(TAG,"loadRows() getRecorded API Failure")
+                    ruleOrder?.report(idInCategory, null)
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
             })
@@ -1193,10 +1416,14 @@ class MainFragment : BrowseSupportFragment() {
                         }
 
                     }
+                    // いま取れた録画のうち最新の startAt を並べ替え用に報告する。このための追加リクエストはしない。
+                    // body が null（APIエラー応答）でも必ず1回報告し、収集器が待ち続けないようにする。
+                    ruleOrder?.report(idInCategory, response.body()?.let { it.records.maxOfOrNull { r -> r.startAt } })
                 }
                 override fun onFailure(call: Call<Records>, t: Throwable) {
                     if (!isUiAlive) return
                     Log.d(TAG,"loadRows() getRecorded API Failure")
+                    ruleOrder?.report(idInCategory, null)
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
             })
@@ -1223,13 +1450,33 @@ class MainFragment : BrowseSupportFragment() {
             emptyIds.forEach { removeRowFromCategory(Category.RECORDED_BY_RULES, it) }
         }
 
+        /**
+         * orderedIds の位置引き。
+         *
+         * 行を1つ足すたびに orderedIds.indexOf で線形探索すると、1回の挿入が O(件数²) になり、
+         * 1125行では挿入を積み上げるだけで main スレッドが何分も止まる（ANR になる）。
+         * 同じリストを使い回している間は、一度作った位置表を再利用する。
+         */
+        private var mOrderIndexSource: List<Long>? = null
+        private var mOrderIndex: HashMap<Long, Int> = HashMap()
+
+        private fun orderIndexOf(orderedIds: List<Long>, id: Long): Int {
+            if (mOrderIndexSource !== orderedIds) {
+                val map = HashMap<Long, Int>(orderedIds.size * 2)
+                orderedIds.forEachIndexed { index, value -> map[value] = index }
+                mOrderIndexSource = orderedIds
+                mOrderIndex = map
+            }
+            return mOrderIndex[id] ?: -1
+        }
+
         fun addToCategoryOrdered(cat: Category, item: Any, idInCategory: Long, orderedIds: List<Long>) {
             synchronized(this) {
                 if (numOfRowInCategory[cat.ordinal] == 0) {
                     addToCategory(cat, item)
                     return
                 }
-                val myOrderIndex = orderedIds.indexOf(idInCategory)
+                val myOrderIndex = orderIndexOf(orderedIds, idInCategory)
                 val catStart = numOfRowInCategory.copyOfRange(0, cat.ordinal).sum()
                 val headerRows = 2 // DividerRow + SectionRow
                 val ruleStart = catStart + headerRows
@@ -1238,7 +1485,7 @@ class MainFragment : BrowseSupportFragment() {
                 for (i in ruleStart until ruleEnd) {
                     val row = get(i) as? ListRow ?: continue
                     val existingId = row.headerItem.id - cat.ordinal.toLong() * 10000
-                    val existingOrderIndex = orderedIds.indexOf(existingId)
+                    val existingOrderIndex = orderIndexOf(orderedIds, existingId)
                     if (myOrderIndex != -1 && (existingOrderIndex == -1 || existingOrderIndex > myOrderIndex)) {
                         insertPos = i
                         break
@@ -1247,6 +1494,58 @@ class MainFragment : BrowseSupportFragment() {
                 super.add(insertPos, item)
                 numOfRowInCategory[cat.ordinal]++
             }
+        }
+
+        /**
+         * カテゴリ内の行を orderedIds の順に並べ直す。
+         *
+         * - 行の集合は変えず、順番だけを変える（同じ行が増えたり消えたりしない）。
+         * - 既に目標の並びになっていれば何もせず false を返す。並べ替える必要がないときに
+         *   余計な再配置・再描画を起こさないための判定。
+         * - orderedIds に無い行は順位を付けず末尾へ回し、その中では元の相対順を保つ。
+         *
+         * @return 実際に並びを変えた場合だけ true
+         */
+        fun reorderCategory(cat: Category, orderedIds: List<Long>): Boolean {
+            synchronized(this) {
+                val catOrdinal = cat.ordinal
+                val headerRows = 2 // DividerRow + SectionRow
+                val totalInCat = numOfRowInCategory[catOrdinal]
+                // 見出し2行しかない、または中身が1行以下なら並べ替える余地がない
+                if (totalInCat <= headerRows + 1) return false
+
+                val catStart = numOfRowInCategory.copyOfRange(0, catOrdinal).sum()
+                val first = catStart + headerRows
+                val last = catStart + totalInCat // この位置は含まない
+
+                val rows = ArrayList<ListRow>(last - first)
+                for (i in first until last) {
+                    val row = get(i) as? ListRow ?: return false
+                    rows.add(row)
+                }
+
+                val weight = HashMap<Long, Int>(orderedIds.size * 2)
+                orderedIds.forEachIndexed { index, id -> weight[id] = index }
+
+                // sortedBy は安定ソートなので、順位を持たない行は元の相対順のまま末尾へ回る
+                val sorted = rows.sortedBy {
+                    weight[it.headerItem.id - catOrdinal.toLong() * 10000] ?: Int.MAX_VALUE
+                }
+                if (sorted == rows) return false
+
+                super.removeItems(first, rows.size)
+                sorted.forEachIndexed { index, row -> super.add(first + index, row) }
+                return true
+            }
+        }
+
+        /** headerId を持つ行の位置。無ければ -1。並べ替えの後に選択位置を合わせ直すために使う。 */
+        fun indexOfListRowByHeaderId(headerId: Long): Int {
+            for (i in 0 until size()) {
+                val row = get(i)
+                if (row is ListRow && row.headerItem.id == headerId) return i
+            }
+            return -1
         }
 
 
@@ -1323,6 +1622,15 @@ class MainFragment : BrowseSupportFragment() {
 
         /** 自動更新タイマーの最小間隔（連続発火を防ぐ下限） */
         private const val MIN_PROGRAM_REFRESH_DELAY_MS = 1000L
+
+        /** ルール一覧の読み込みが長引くときに、進み具合をログへ出す間隔（件数） */
+        private const val RULE_LOAD_LOG_INTERVAL = 100
+
+        /** 「録画の新しい順」の下ごしらえで、1ページに頼む件数 */
+        private const val AGGREGATE_PAGE_LIMIT = 1000
+
+        /** 同じく下ごしらえで読む最大ページ数。サーバーへの負荷を抑えるための上限 */
+        private const val AGGREGATE_MAX_PAGES = 3
     }
 
 

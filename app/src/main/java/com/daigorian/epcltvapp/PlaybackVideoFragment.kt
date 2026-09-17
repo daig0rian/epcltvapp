@@ -1850,6 +1850,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (liveChannelId < 0) return
         EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                if (!isAdded) return
                 if (!response.isSuccessful) {
                     mTransportControlGlue.resetRecordActionLabel()
                     showRecordErrorDialog("${getString(R.string.schedule_fetch_error)}\nHTTP${response.code()}: ${response.errorBody()?.string()}")
@@ -1874,6 +1875,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 EpgStationV2.api?.addReserve(ManualReserveOption(programId = programId))
                     ?.enqueue(object : Callback<okhttp3.ResponseBody> {
                         override fun onResponse(call: Call<okhttp3.ResponseBody>, response: Response<okhttp3.ResponseBody>) {
+                            if (!isAdded) return
                             mTransportControlGlue.resetRecordActionLabel()
                             if (response.isSuccessful) {
                                 activity?.runOnUiThread {
@@ -1884,12 +1886,14 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                             }
                         }
                         override fun onFailure(call: Call<okhttp3.ResponseBody>, t: Throwable) {
+                            if (!isAdded) return
                             mTransportControlGlue.resetRecordActionLabel()
                             showRecordErrorDialog("${getString(R.string.record_reserve_network_error)}\nprogramId=$programId: ${t.javaClass.simpleName} ${t.message}")
                         }
                     })
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                if (!isAdded) return
                 mTransportControlGlue.resetRecordActionLabel()
                 showRecordErrorDialog("${getString(R.string.schedule_fetch_network_error)}\n${t.javaClass.simpleName} ${t.message}")
             }
@@ -1900,6 +1904,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (liveChannelId < 0) return
         EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                if (!isAdded) return
                 val program = response.body()
                     ?.firstOrNull { it.channel.id == liveChannelId }
                     ?.programs?.firstOrNull()
@@ -1933,6 +1938,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 }
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                if (!isAdded) return
                 Log.e(TAG, "showCurrentProgramInfo: getScheduleOnAir failed", t)
                 activity?.runOnUiThread {
                     Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
