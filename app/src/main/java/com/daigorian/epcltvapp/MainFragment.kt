@@ -718,7 +718,9 @@ class MainFragment : BrowseSupportFragment() {
                     addOne(ids[index])
                     index++
                 }
-                if (index < ids.size) mHandler.post(this)
+                // 続きは少し間を空けて頼む。1チャンクの仕事でフレームを落としたぶんを、
+                // 次のフレームに返してやる（そのままだと 1126 行を作る間ずっと引っかかる）。
+                if (index < ids.size) mHandler.postDelayed(this, RULE_ROW_CHUNK_INTERVAL_MS)
             }
         }
         step.run()
@@ -2128,8 +2130,17 @@ class MainFragment : BrowseSupportFragment() {
         /** ルール一覧の読み込みが長引くときに、進み具合をログへ出す間隔（件数） */
         private const val RULE_LOAD_LOG_INTERVAL = 100
 
-        /** ルール行を一度に足す件数。main スレッドを長時間占有しないよう小さく区切る */
-        private const val RULE_ROW_CHUNK_SIZE = 20
+        /**
+         * ルール行を一度に足す件数。
+         *
+         * 1126行を一気に、あるいは20件ずつでも足すと、そのひとかたまりの間フレームが落ちる
+         * （実機で Skipped frames が 57〜197 件出ていた）。1チャンクを小さくして、
+         * 合間にフレームを返す。
+         */
+        private const val RULE_ROW_CHUNK_SIZE = 5
+
+        /** ルール行を足すチャンクの間隔。1フレームぶん空けて描画に返す */
+        private const val RULE_ROW_CHUNK_INTERVAL_MS = 16L
 
         /** 「録画の新しい順」の下ごしらえで、1ページに頼む件数 */
         private const val AGGREGATE_PAGE_LIMIT = 1000
