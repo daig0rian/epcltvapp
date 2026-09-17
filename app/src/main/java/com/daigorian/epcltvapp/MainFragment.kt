@@ -542,8 +542,8 @@ class MainFragment : BrowseSupportFragment() {
                                 rule.keyword
                             }
                             mMainMenuAdapter.updateContentsListRowWithCategory(
-                                GetRecordedParam(rule= rule.id),
-                                GetRecordedParamV2(ruleId= rule.id),
+                                GetRecordedParam(rule = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
+                                GetRecordedParamV2(ruleId = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
                                 keyword,
                                 Category.RECORDED_BY_RULES,
                                 rule.id,
@@ -606,8 +606,8 @@ class MainFragment : BrowseSupportFragment() {
                                 rule.searchOption?.keyword!!
                             }
                             mMainMenuAdapter.updateContentsListRowWithCategory(
-                                GetRecordedParam(rule= rule.id),
-                                GetRecordedParamV2(ruleId= rule.id),
+                                GetRecordedParam(rule = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
+                                GetRecordedParamV2(ruleId = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
                                 keyword,
                                 Category.RECORDED_BY_RULES,
                                 rule.id,
@@ -2141,6 +2141,15 @@ class MainFragment : BrowseSupportFragment() {
 
         /** ルール行を足すチャンクの間隔。1フレームぶん空けて描画に返す */
         private const val RULE_ROW_CHUNK_INTERVAL_MS = 16L
+
+        /**
+         * ルール行の初回取得件数。
+         *
+         * 1126ルールで24件ずつ取ると 27000件ぶんの応答になり、起動直後の負荷と通信量が大きい。
+         * まず12件だけ取って、続きは利用者が「続きを読み込む」を押したときに取る
+         * （その要求はルール一覧の取得より優先して通る）。
+         */
+        private const val RULE_ROW_INITIAL_LIMIT = 12L
 
         /** 「録画の新しい順」の下ごしらえで、1ページに頼む件数 */
         private const val AGGREGATE_PAGE_LIMIT = 1000
