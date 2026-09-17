@@ -1124,56 +1124,63 @@ class MainFragment : BrowseSupportFragment() {
         var wantedSince = 0L
         /** 検索ボタンが一度きちんと表示されたか。表示される前は設定ボタンを出さない。 */
         var searchOrbReady = false
-        val applySettingsButtonState = Runnable {
-            if (!isAdded) return@Runnable
-            if (headersRoot == null) headersRoot = getHeadersSupportFragment()?.view
-            val now = SystemClock.uptimeMillis()
+        val applySettingsButtonState = object : Runnable {
+            override fun run() {
+                if (!isAdded) return
+                if (headersRoot == null) headersRoot = getHeadersSupportFragment()?.view
+                val now = SystemClock.uptimeMillis()
 
-            if (!searchOrbReady) {
-                searchOrbReady = searchOrb.visibility == View.VISIBLE && searchOrb.isShown &&
-                    searchOrb.alpha >= SETTINGS_BUTTON_ORB_READY_ALPHA && searchOrb.width > 0
-            }
-            val wanted = searchOrbReady && isSidebarCoveringSettingsButton(headersRoot, searchOrb, gap)
+                if (!searchOrbReady) {
+                    searchOrbReady = searchOrb.visibility == View.VISIBLE && searchOrb.isShown &&
+                        searchOrb.alpha >= SETTINGS_BUTTON_ORB_READY_ALPHA && searchOrb.width > 0
+                }
+                val wanted = searchOrbReady && isSidebarCoveringSettingsButton(headersRoot, searchOrb, gap)
 
-            // 出す条件は少しの間続いてから効かせる（遷移中の一瞬の揺れで出さない）
-            if (wanted) {
-                if (wantedSince == 0L) wantedSince = now
-            } else {
-                wantedSince = 0L
-            }
-            val show = wanted && now - wantedSince >= SETTINGS_BUTTON_SHOW_DELAY_MS
+                // 出す条件は少しの間続いてから効かせる（遷移中の一瞬の揺れで出さない）。
+                // 画面が止まっていると描画が来ないので、時間が来たら自分を呼び直して確かめる。
+                // （描画待ちにすると、サイドバーを開き直して静止したときに取りこぼす）
+                if (wanted) {
+                    if (wantedSince == 0L) {
+                        wantedSince = now
+                        mHandler.postDelayed(this, SETTINGS_BUTTON_SHOW_DELAY_MS)
+                    }
+                } else {
+                    wantedSince = 0L
+                }
+                val show = wanted && now - wantedSince >= SETTINGS_BUTTON_SHOW_DELAY_MS
 
-            if (show == settingsShown) {
-                // 隠れているはずなのに見えていたら、その場で隠す（アニメーションの取りこぼし対策）
-                if (!show && !hiding) hideSettingsButton(gearOrb, gap)
-                return@Runnable
-            }
-            settingsShown = show
-            gearOrb.animate().cancel()
-            if (show) {
-                // 検索ボタンの裏から横へ出てくる
-                hiding = false
-                gearOrb.translationX = -(gearOrb.width + gap).toFloat()
-                gearOrb.alpha = 0f
-                gearOrb.isFocusable = true
-                gearOrb.isFocusableInTouchMode = true
-                gearOrb.animate()
-                    .translationX(0f)
-                    .alpha(1f)
-                    .setDuration(SETTINGS_BUTTON_SLIDE_MS)
-                    .start()
-            } else {
-                // 検索ボタンの裏へスッと隠れる（位置と透明度の両方を動かす）
-                hiding = true
-                gearOrb.isFocusable = false
-                gearOrb.isFocusableInTouchMode = false
-                if (gearOrb.hasFocus()) searchOrb.requestFocus()
-                gearOrb.animate()
-                    .translationX(-(gearOrb.width + gap).toFloat())
-                    .alpha(0f)
-                    .setDuration(SETTINGS_BUTTON_SLIDE_MS)
-                    .withEndAction { hiding = false }
-                    .start()
+                if (show == settingsShown) {
+                    // 隠れているはずなのに見えていたら、その場で隠す（アニメーションの取りこぼし対策）
+                    if (!show && !hiding) hideSettingsButton(gearOrb, gap)
+                    return
+                }
+                settingsShown = show
+                gearOrb.animate().cancel()
+                if (show) {
+                    // 検索ボタンの裏から横へ出てくる
+                    hiding = false
+                    gearOrb.translationX = -(gearOrb.width + gap).toFloat()
+                    gearOrb.alpha = 0f
+                    gearOrb.isFocusable = true
+                    gearOrb.isFocusableInTouchMode = true
+                    gearOrb.animate()
+                        .translationX(0f)
+                        .alpha(1f)
+                        .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                        .start()
+                } else {
+                    // 検索ボタンの裏へスッと隠れる（位置と透明度の両方を動かす）
+                    hiding = true
+                    gearOrb.isFocusable = false
+                    gearOrb.isFocusableInTouchMode = false
+                    if (gearOrb.hasFocus()) searchOrb.requestFocus()
+                    gearOrb.animate()
+                        .translationX(-(gearOrb.width + gap).toFloat())
+                        .alpha(0f)
+                        .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                        .withEndAction { hiding = false }
+                        .start()
+                }
             }
         }
         // 最初のフレームで出てしまわないよう、先に隠しておく
