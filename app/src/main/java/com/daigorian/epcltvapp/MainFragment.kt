@@ -1107,58 +1107,71 @@ class MainFragment : BrowseSupportFragment() {
         searchOrb.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignNextToSearchOrb.run() }
         alignNextToSearchOrb.run()
 
-        // サイドバーが出ているときだけ、検索ボタンの横へ設定ボタンを出す。
-        // 出ていないとき（起動直後でサイドバーがまだ細いときや、中身の列を見ているとき）は
-        // 検索ボタンの裏へ隠しておく。そうしないと内容の上に浮いて「サイドバーからはみ出して」見える。
-        // 隠す位置は幅が測れてから決まるので、レイアウトのたびに見る。
+        // 設定ボタンの出し入れ。
+        //   出す   : 検索ボタンの右隣（サイドバーの帯がその位置まで来ているときだけ）
+        //   隠す   : 検索ボタンの裏へ回り込んで透明（閉じたときにスッと隠れる）
+        // 起動直後は検索ボタンより先に歯車が出てしまい、内容の上に浮いて見えていた。
+        // また Leanback はタイトル行もサイドバーもアニメーションで出すため、レイアウトの通知だけでは
+        // 途中の状態を取りこぼす。描画のたびに状態を見て、変わったときだけ動かす。
         var headersRoot: View? = getHeadersSupportFragment()?.view
         var settingsShown = false
-        val applySidebarState = Runnable {
+        val applySettingsButtonState = Runnable {
+            if (!isAdded) return@Runnable
             if (headersRoot == null) headersRoot = getHeadersSupportFragment()?.view
-            val open = isSidebarCoveringSettingsButton(headersRoot, searchOrb, gap)
-            if (!open && gearOrb.width > 0) {
-                // 検索ボタンの裏（左）へずらす。幅の分だけ左に寄せれば完全に隠れる。
-                gearOrb.translationX = -(gearOrb.width + gap).toFloat()
-            }
-            if (open == settingsShown) return@Runnable
-            settingsShown = open
-            gearOrb.isFocusable = open
-            gearOrb.isFocusableInTouchMode = open
-            if (!open && gearOrb.hasFocus()) {
-                // 隠れるときに設定ボタンへフォーカスが残らないようにする
-                searchOrb.requestFocus()
-            }
+            val wanted = shouldShowSettingsButton(headersRoot, searchOrb, gap)
+            if (wanted == settingsShown) return@Runnable
+            settingsShown = wanted
             gearOrb.animate().cancel()
-            if (open) {
+            if (wanted) {
+                // 検索ボタンの裏から横へ出てくる
+                gearOrb.translationX = -(gearOrb.width + gap).toFloat()
+                gearOrb.alpha = 0f
+                gearOrb.isFocusable = true
+                gearOrb.isFocusableInTouchMode = true
                 gearOrb.animate()
                     .translationX(0f)
                     .alpha(1f)
                     .setDuration(SETTINGS_BUTTON_SLIDE_MS)
                     .start()
             } else {
-                gearOrb.alpha = 0f
+                // 検索ボタンの裏へスッと隠れる（位置と透明度の両方を動かす）
+                gearOrb.isFocusable = false
+                gearOrb.isFocusableInTouchMode = false
+                if (gearOrb.hasFocus()) searchOrb.requestFocus()
+                gearOrb.animate()
+                    .translationX(-(gearOrb.width + gap).toFloat())
+                    .alpha(0f)
+                    .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                    .start()
             }
         }
         // 最初のフレームで出てしまわないよう、先に隠しておく
         gearOrb.alpha = 0f
         gearOrb.isFocusable = false
         gearOrb.isFocusableInTouchMode = false
-        titleBar.viewTreeObserver.addOnGlobalLayoutListener { applySidebarState.run() }
-        applySidebarState.run()
+        titleBar.viewTreeObserver.addOnPreDrawListener {
+            applySettingsButtonState.run()
+            true
+        }
+        applySettingsButtonState.run()
 
         mSearchOrb = searchOrb
         installSearchOrbUpFromSidebar()
     }
 
     /**
-     * サイドバーの帯が、設定ボタンの置き場所まで来ているか。
+     * 設定ボタンを出してよいか。
      *
-     * 起動直後やサイドバーを畳んだ状態では帯が細い（実測48px）ので、そこへ設定ボタンだけが浮くと
-     * 「サイドバーからはみ出して」見える。幅ではなく座標で見て、帯が設定ボタンの位置まで
-     * 来てから横へ出す。動きに追従するので、スライド中も不自然にならない。
+     * 検索ボタンが実際に描かれていて、サイドバーの帯が設定ボタンの置き場所まで来ているときだけ true。
+     * 起動直後はどちらもまだ用意できていない（検索ボタンがまだ描かれていない、帯が細いまま）ので false になり、
+     * 歯車だけが先に浮くのを防げる。位置で見るので、帯がスライドしてくる間も不自然にならない。
      */
-    private fun isSidebarCoveringSettingsButton(headersRoot: View?, searchOrb: View, gap: Int): Boolean {
-        if (headersRoot == null || headersRoot.width == 0) return false
+    private fun shouldShowSettingsButton(headersRoot: View?, searchOrb: View, gap: Int): Boolean {
+        // 検索ボタンがまだ出ていない（タイトル行がフェードイン中など）ときは、設定ボタンだけ出さない
+        if (searchOrb.visibility != View.VISIBLE || !searchOrb.isShown || searchOrb.alpha <= 0f) return false
+        if (searchOrb.width == 0) return false
+        if (headersRoot == null || headersRoot.width == 0 || !headersRoot.isShown) return false
+
         val headersLoc = IntArray(2)
         headersRoot.getLocationOnScreen(headersLoc)
         val sidebarRight = headersLoc[0] + headersRoot.width
