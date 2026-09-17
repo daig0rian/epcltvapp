@@ -207,7 +207,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                         // 結果行は消す
                         mRowsAdapter.remove(newResultRow)
                         // 見つからなかったよメッセージを出す。
-                        if(showErrorToast) {
+                        if(showErrorToast && isAdded) {
                             Toast.makeText(
                                 context!!,
                                 getString(R.string.programs_not_found, query),
@@ -220,7 +220,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
             }
             override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                 // 通信エラーなどで応答がなかったら接続できませんでしたメッセージを出す
-                if(showErrorToast) {
+                if(showErrorToast && isAdded) {
                     Toast.makeText(
                         context!!,
                         R.string.connect_epgstation_failed,
@@ -256,7 +256,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
                         // 結果行は消す
                         mRowsAdapter.remove(newResultRow)
                         // 見つからなかったよメッセージを出す。
-                        if(showErrorToast) {
+                        if(showErrorToast && isAdded) {
                             Toast.makeText(
                                 context!!,
                                 getString(R.string.programs_not_found, query),
@@ -268,7 +268,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
             }
             override fun onFailure(call: Call<Records>, t: Throwable) {
                 // 通信エラーなどで応答がなかったら接続できませんでしたメッセージを出す
-                if(showErrorToast) {
+                if(showErrorToast && isAdded) {
                     Toast.makeText(
                         context!!,
                         R.string.connect_epgstation_failed,

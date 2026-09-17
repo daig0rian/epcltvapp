@@ -564,7 +564,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                         }
                         override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                             Log.d(TAG,"onItemSelected() getRecorded API Failure")
-                            Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                            if (isAdded) Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                         }
                     })
                 }
@@ -607,7 +607,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                         }
                         override fun onFailure(call: Call<Records>, t: Throwable) {
                             Log.d(TAG,"onItemSelected() getRecorded API Failure")
-                            Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
+                            if (isAdded) Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                         }
                     })
                 }
