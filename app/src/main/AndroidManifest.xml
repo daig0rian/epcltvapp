@@ -20,11 +20,16 @@
         android:required="false" />
 
 
+    <!-- largeHeap: エンコード済み動画/HLSの再生では media3 既定のロードコントロールが
+         50秒ぶんのサンプルをJavaヒープに抱える(約12Mbpsで約75MB)。録画ルールが多い環境では
+         一覧だけで40MB前後使うため、Fire TV Stickの通常上限128MBでは再生中にヒープが埋まり、
+         わずかな確保でOutOfMemoryErrorになる。この端末では上限が256MBになる(挙動は変えない)。 -->
     <application
         android:name=".EpgTvApplication"
         android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:largeHeap="true"
         android:supportsRtl="true"
         android:theme="@style/Theme.Epcltvapp"
         android:usesCleartextTraffic="true">
