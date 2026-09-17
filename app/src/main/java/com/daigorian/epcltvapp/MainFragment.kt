@@ -50,6 +50,15 @@ class MainFragment : BrowseSupportFragment() {
     private var mNeedsReloadHistoryOnResume = false
     private var mNeedsCheckConnectionOnResume = false
     private var mConnectionKeyBeforeSettings: String? = null
+
+    /**
+     * 画面がまだ生きているか。遅れて届いた API 応答を捨てるための門番。
+     *
+     * ルールの数だけ getRecorded を投げるので、応答が返るまでに秒単位かかることがある。
+     * その間に画面を離れてフラグメントが破棄されると、コールバックの中の context / getString が
+     * null になって落ちる（実機で発生）。応答を触る前にここで弾く。
+     */
+    private val isUiAlive: Boolean get() = isAdded
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
     private val mCardPresenter = OriginalCardPresenter()
@@ -283,6 +292,7 @@ class MainFragment : BrowseSupportFragment() {
 
             api.getChannels().enqueue(object : Callback<List<ChannelItem>> {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
+                    if (!isUiAlive) return
                     response.body()?.let { rawChannels ->
                         // データ放送専用サービス等（映像・音声を伴わないチャンネル）を除外する
                         val channels = rawChannels.filter { ChannelItem.isAudioVideoService(it.type) }
@@ -328,6 +338,7 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
                 override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {
+                    if (!isUiAlive) return
                     Log.d(TAG, "loadRows() getChannels API Failure")
                 }
             })
@@ -350,6 +361,7 @@ class MainFragment : BrowseSupportFragment() {
 
             api.getRecording(limit = apiLimit).enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    if (!isUiAlive) return
                     response.body()?.let { getRecordingResponse ->
                         if (getRecordingResponse.records.isEmpty()) {
                             // 録画中アイテムがなければ行を削除する
@@ -392,6 +404,7 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
                 override fun onFailure(call: Call<Records>, t: Throwable) {
+                    if (!isUiAlive) return
                     Log.d(TAG,"loadRows() getRecorded API Failure")
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
@@ -427,6 +440,7 @@ class MainFragment : BrowseSupportFragment() {
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
         EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {
             override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
+                if (!isUiAlive) return
                 response.body()?.let{ it ->
                     val rules = if(isNewestFirst){it.reversed()}else{it}
                     val orderedIds = rules.map { rule -> rule.id.toLong() }
@@ -450,12 +464,14 @@ class MainFragment : BrowseSupportFragment() {
                 }
             }
             override fun onFailure(call: Call<List<RuleList>>, t: Throwable) {
+                if (!isUiAlive) return
                 Log.d(TAG,"loadRows() getRulesList API Failure")
                 Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
             }
         })
         EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
+                if (!isUiAlive) return
                 response.body()?.rules?.let{ it ->
                     val rules = if(isNewestFirst){it.reversed()}else{it}
                     val orderedIds = rules.map { rule -> rule.id.toLong() }
@@ -479,6 +495,7 @@ class MainFragment : BrowseSupportFragment() {
                 }
             }
             override fun onFailure(call: Call<Rules>, t: Throwable) {
+                if (!isUiAlive) return
                 Log.d(TAG,"loadRows() getRulesList API Failure")
                 Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
             }
@@ -553,6 +570,7 @@ class MainFragment : BrowseSupportFragment() {
 
         EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
+                if (!isUiAlive) return
                 val programByChannelId = response.body()
                     ?.associate { it.channel.id to it.programs.firstOrNull() }
                     ?: return
@@ -581,6 +599,7 @@ class MainFragment : BrowseSupportFragment() {
                 scheduleNextProgramRefresh(nextProgramEndAt)
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
+                if (!isUiAlive) return
                 Log.d(TAG,"refreshLiveProgramNames() getScheduleOnAir API Failure")
                 // 失敗時もフォールバック間隔でリトライする
                 scheduleNextProgramRefresh(Long.MAX_VALUE)
@@ -758,6 +777,7 @@ class MainFragment : BrowseSupportFragment() {
                         recording = item.recording
                     )?.enqueue(object : Callback<GetRecordedResponse> {
                         override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                            if (!isUiAlive) return
                             response.body()?.let { getRecordedResponse ->
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
@@ -778,6 +798,7 @@ class MainFragment : BrowseSupportFragment() {
                             }
                         }
                         override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                            if (!isUiAlive) return
                             Log.d(TAG,"loadRows() getRecorded API Failure")
                             Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                         }
@@ -801,6 +822,7 @@ class MainFragment : BrowseSupportFragment() {
                         hasOriginalFile = item.hasOriginalFile
                     )?.enqueue(object : Callback<Records> {
                         override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                            if (!isUiAlive) return
                             response.body()?.let { responseRoot ->
 
                                 //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
@@ -821,6 +843,7 @@ class MainFragment : BrowseSupportFragment() {
                             }
                         }
                         override fun onFailure(call: Call<Records>, t: Throwable) {
+                            if (!isUiAlive) return
                             Log.d(TAG,"loadRows() getRecorded API Failure")
                             Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                         }
@@ -1032,6 +1055,7 @@ class MainFragment : BrowseSupportFragment() {
                 recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
 
                 override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+                    if (!isUiAlive) return
                     response.body()?.let { getRecordedResponse ->
 
                         //既存のリストにあって、レスポンスにないアイテムの削除
@@ -1093,6 +1117,7 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
                 override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    if (!isUiAlive) return
                     Log.d(TAG,"loadRows() getRecorded API Failure")
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
@@ -1108,6 +1133,7 @@ class MainFragment : BrowseSupportFragment() {
                 keyword = v2Param.keyword,
                 hasOriginalFile = v2Param.hasOriginalFile )?.enqueue(object : Callback<Records> {
                 override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                    if (!isUiAlive) return
                     response.body()?.let { getRecordedResponse ->
 
                         //既存のリストにあって、レスポンスにないアイテムの削除
@@ -1169,6 +1195,7 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
                 override fun onFailure(call: Call<Records>, t: Throwable) {
+                    if (!isUiAlive) return
                     Log.d(TAG,"loadRows() getRecorded API Failure")
                     Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
                 }
