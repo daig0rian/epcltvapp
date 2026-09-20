@@ -71,6 +71,24 @@ class MainFragment : BrowseSupportFragment() {
      * 初回は loadRows に任せ、軽い更新は走らせない。
      */
     private var mHasLoadedOnce = false
+
+    /**
+     * 再生画面や詳細画面へ移る直前に選んでいた行。
+     *
+     * 戻ってきたときに Leanback が別の行へ復元してしまうことがある（一覧がまだ空だと、位置が
+     * 末尾の設定行へ丸まる）。控えておいて、必要なら選び直す。
+     */
+    private var mRowIdBeforePause: Long? = null
+
+    /** 画面が作り直されたときに、行が揃ってから選び直したい行。onSaveInstanceState で保存したもの。 */
+    private var mPendingRestoreRowId: Long? = null
+
+    /** 選択行を戻すのを待っている最中か。この間だけ利用者操作を見て中止する。 */
+    private var mRestorePending = false
+
+    /** 待っている間に利用者が操作したか。操作されたら復元しない。 */
+    private var mUserInteractedWhileRestorePending = false
+
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
     /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
@@ -135,6 +153,13 @@ class MainFragment : BrowseSupportFragment() {
         Log.i(TAG, "onCreate")
         super.onCreate(savedInstanceState)
 
+        // 画面が作り直された場合、Leanback は選んでいた行の「位置」だけを復元する。行がまだ無いと
+        // 位置が末尾（設定行）へ丸まり、そのまま居座る。行の id を控えて、行が揃ってから選び直す。
+        mPendingRestoreRowId = savedInstanceState
+            ?.takeIf { it.containsKey(STATE_SELECTED_ROW_ID) }
+            ?.getLong(STATE_SELECTED_ROW_ID)
+        Log.i(TAG, "onCreate: 作り直し=${savedInstanceState != null} 復元待ちの行=$mPendingRestoreRowId")
+
         showPreviousCrashIfAny()
 
         adapter = mMainMenuAdapter
@@ -174,7 +199,7 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     override fun onResume() {
-        Log.i(TAG, "onResume adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition flags[reloadAll=$mNeedsReloadAllOnResume conn=$mNeedsCheckConnectionOnResume hist=$mNeedsReloadHistoryOnResume]")
+        Log.i(TAG, "onResume adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition 選択行=${selectedRowHeaderId()} 復元待ち=$mPendingRestoreRowId 直前=$mRowIdBeforePause flags[reloadAll=$mNeedsReloadAllOnResume conn=$mNeedsCheckConnectionOnResume hist=$mNeedsReloadHistoryOnResume]")
         super.onResume()
         Log.d(TAG, "onResume after super: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when {
@@ -217,12 +242,22 @@ class MainFragment : BrowseSupportFragment() {
         // 表示中のみ動かすため画面を離れたら止める。ポーズ中に終了時刻を迎えた番組があるかもしれないので、
         // 再開時は都度スケジュールし直すのではなく、最新情報を取り直してから次のタイマーを仕掛け直す。
         refreshLiveProgramNames()
+        // Leanback の復元は onResume より後（レイアウト時）なので、少し待ってから選択行を見る。
+        scheduleSelectionRestore()
     }
 
     override fun onPause() {
         super.onPause()
         mHandler.removeCallbacks(mProgramRefreshRunnable)
-        Log.d(TAG, "onPause: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
+        mRowIdBeforePause = selectedRowHeaderId()
+        Log.i(TAG, "onPause: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition 選択行=$mRowIdBeforePause")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        // 画面が作り直されても、選んでいた行へ戻せるように控える。
+        selectedRowHeaderId()?.let { outState.putLong(STATE_SELECTED_ROW_ID, it) }
+        Log.i(TAG, "onSaveInstanceState: 選択行=${selectedRowHeaderId()} adapterSize=${mMainMenuAdapter.size()}")
     }
 
     override fun onStart() {
@@ -775,6 +810,60 @@ class MainFragment : BrowseSupportFragment() {
             // 同じ行を選んだままにするだけ。先頭へ飛ばしたりスクロール位置を戻したりはしない。
             setSelectedPosition(newPosition, false)
         }
+    }
+
+    /**
+     * 画面に戻ってきたとき、Leanback が選んでいた行とは違う行へ復元してしまうのを戻す。
+     *
+     * 復元は「行の位置」で行われるため、一覧がまだ空だと位置が別の行（最後に足された行＝設定行など）へ
+     * 丸まり、そこに居座る。控えておいた行が現れるのを待って選び直す。
+     *
+     * 待っている間に利用者が自分で動かしたら、そちらを優先して復元はやめる（[onUserInteractionByUser]）。
+     */
+    private fun scheduleSelectionRestore() {
+        val want = mPendingRestoreRowId ?: mRowIdBeforePause ?: return
+        mPendingRestoreRowId = null
+        mRestorePending = true
+        mUserInteractedWhileRestorePending = false
+        var tries = 0
+        val step = object : Runnable {
+            override fun run() {
+                if (!isUiAlive) {
+                    mRestorePending = false
+                    return
+                }
+                if (mUserInteractedWhileRestorePending) {
+                    mRestorePending = false
+                    Log.i(TAG, "選択行を戻すのをやめる: 利用者が操作した（控え=$want）")
+                    return
+                }
+                val current = selectedRowHeaderId()
+                if (current == want) {
+                    mRestorePending = false
+                    return
+                }
+                val position = mMainMenuAdapter.indexOfListRowByHeaderId(want)
+                if (position >= 0) {
+                    mRestorePending = false
+                    Log.i(TAG, "選択行を戻す: 行=$want 位置=$position （直前=$current 試行=$tries）")
+                    setSelectedPosition(position, false)
+                    return
+                }
+                if (tries < SELECTION_RESTORE_MAX_TRIES) {
+                    tries++
+                    mHandler.postDelayed(this, SELECTION_RESTORE_RETRY_MS)
+                } else {
+                    mRestorePending = false
+                    Log.i(TAG, "選択行を戻せなかった: 行=$want が現れない（adapterSize=${mMainMenuAdapter.size()}）")
+                }
+            }
+        }
+        mHandler.postDelayed(step, SELECTION_RESTORE_RETRY_MS)
+    }
+
+    /** [scheduleSelectionRestore] が待っている間に、利用者が自分で操作したことを伝える。 */
+    fun onUserInteractionByUser() {
+        if (mRestorePending) mUserInteractedWhileRestorePending = true
     }
 
     /**
@@ -2094,6 +2183,15 @@ class MainFragment : BrowseSupportFragment() {
 
     companion object {
         private const val TAG = "MainFragment"
+
+        /** 選んでいた行を保存しておくキー。画面が作り直されたときに使う。 */
+        private const val STATE_SELECTED_ROW_ID = "main_selected_row_id"
+
+        /** 控えていた行が現れるのを待つ間隔（ms）。ルール行は読み込みが遅いので気長に待つ。 */
+        private const val SELECTION_RESTORE_RETRY_MS = 250L
+
+        /** 同・上限回数。250ms × 120 = 30秒。ルール一覧の読み込みが終わるころまで待つ。 */
+        private const val SELECTION_RESTORE_MAX_TRIES = 120
 
         /** タイトル行に足した設定ボタンの目印。画面を作り直したときに二重に足さないために使う。 */
         private const val SETTINGS_BUTTON_TAG = "settings_orb"
