@@ -13,7 +13,7 @@
     <string name="record_reserve_network_error">予約通信失敗</string>
     <string name="schedule_fetch_network_error">番組表取得通信失敗</string>
     <string name="recent_videos">最近の録画</string>
-    <string name="manual_recorded">番組表からの予約</string>
+    <string name="manual_recorded">番組表からの録画</string>
     <string name="rule_id_is_x">ルールID %1$s</string>
     <string name="play_ts">簡易追いかけ再生(TS)</string>
     <string name="play_original_ts">TSを再生</string>

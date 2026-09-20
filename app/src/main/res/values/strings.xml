@@ -9,7 +9,7 @@
     <string name="previous_crash_title">Previous Crash Details</string>
     <string name="now_on_recording">Now On Recording</string>
     <string name="recent_videos">Recent videos</string>
-    <string name="manual_recorded">Manual reservations</string>
+    <string name="manual_recorded">Recorded from the guide</string>
     <string name="rule_id_is_x">Rule ID %1$s</string>
     <string name="play_ts">Simple Catch-up Playback (TS)</string>
     <string name="play_original_ts">Play TS</string>

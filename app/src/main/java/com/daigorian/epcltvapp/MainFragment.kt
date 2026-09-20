@@ -1137,11 +1137,12 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
-     * 「番組表からの予約」で録画されたものだけの行を、取得済みのアイテムから作る。
+     * 「番組表からの録画」の行を、取得済みのアイテムから作る。
      *
      * EPGStation は録画に予約元のルール id を残すので、ruleId が付いていない録画が
-     * 番組表から直接予約したものになる（実サーバーで確認）。一覧は並び順の下ごしらえで読む
-     * `/api/recorded` をそのまま使い回すため、この行のための追加リクエストは発生しない。
+     * 番組表から直接予約したものになる（実サーバーで確認）。材料は既存の取得をそのまま使い回す
+     * ——「最近の録画」の最初の1ページと、並び順の下ごしらえで読む `/api/recorded`——
+     * ため、この行のための追加リクエストは発生しない。
      */
     private fun updateManualRecordedRow(items: List<Any>) {
         if (!isUiAlive) return
@@ -2090,6 +2091,16 @@ class MainFragment : BrowseSupportFragment() {
                             }
                         }
 
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）も拾って行に出す。
+                        // ここで拾えるのは最初の1ページ分だけなので、あとから下ごしらえの結果で上書きされる。
+                        if (category == Category.RECENTLY_RECORDED) {
+                            val manual = getRecordedResponse.recorded.filter { it.ruleId == null }
+                            if (manual.isNotEmpty()) {
+                                Log.i(TAG, "番組表からの録画: 最近の録画の最初の取得から ${manual.size}件")
+                                updateManualRecordedRow(manual)
+                            }
+                        }
+
                         //続きがあるなら"次を読み込む"を置く。
                         val numOfItem = getRecordedResponse.recorded.count().toLong()
                         if (numOfItem < getRecordedResponse.total) {
@@ -2171,6 +2182,16 @@ class MainFragment : BrowseSupportFragment() {
                                 listRowAdapter.add(index,it)
                             }
                         }
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）も拾って行に出す。
+                        // ここで拾えるのは最初の1ページ分だけなので、あとから下ごしらえの結果で上書きされる。
+                        if (category == Category.RECENTLY_RECORDED) {
+                            val manual = getRecordedResponse.records.filter { it.ruleId == null }
+                            if (manual.isNotEmpty()) {
+                                Log.i(TAG, "番組表からの録画: 最近の録画の最初の取得から ${manual.size}件")
+                                updateManualRecordedRow(manual)
+                            }
+                        }
+
                         //続きがあるなら"次を読み込む"を置く。
                         val numOfItem = getRecordedResponse.records.count().toLong()
                         if (numOfItem < getRecordedResponse.total) {
