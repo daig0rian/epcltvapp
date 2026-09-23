@@ -312,7 +312,9 @@ class MainFragment : BrowseSupportFragment() {
                 }
 
                 override fun onSelectLevelChanged(viewHolder: RowHeaderPresenter.ViewHolder) {
-                    // 同上（既定の実装は mTitleView を触るため、ここでは何もしない）
+                    // 既定の実装は選択の度合いに応じて view の alpha を変える
+                    // （未選択時は lb_browse_header_unselect_alpha まで薄くなる）。区切り線は
+                    // 選択状態によらず同じ濃さにしたいので何もしない。
                 }
             }
 
