@@ -16,4 +16,9 @@
          一緒に見直すこと。 -->
     <dimen name="lb_playback_controls_child_margin_default">32dp</dimen>
 
+    <!-- 設定画面のヘッダ（decor_title）に付けるアイコンと、タイトル文字との間隔。
+         leanback 側にアイコン用の枠が無いため compound drawable で置いている。 -->
+    <dimen name="settings_header_icon_size">28dp</dimen>
+    <dimen name="settings_header_icon_padding">16dp</dimen>
+
 </resources>

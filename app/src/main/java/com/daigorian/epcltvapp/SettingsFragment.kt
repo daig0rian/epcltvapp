@@ -3,7 +3,10 @@ package com.daigorian.epcltvapp
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.widget.TextView
 import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 import androidx.leanback.preference.LeanbackPreferenceFragment
 import androidx.leanback.preference.LeanbackSettingsFragment
 import androidx.preference.*
@@ -79,6 +82,32 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
     }
 
     class PrefFragment : LeanbackPreferenceFragment() {
+
+        /**
+         * 画面のヘッダにも、その画面のアイコンを出す。
+         *
+         * leanback のヘッダ（`decor_title`）はアイコン用の枠を持たない素の TextView で、
+         * [LeanbackPreferenceFragment.onViewCreated] が文字を入れるだけ。そこで文字の左へ
+         * compound drawable として置く。
+         *
+         * 絵柄は `preferenceScreen.icon` から取るので、XML 側で `app:icon` を書いた画面は
+         * 何もしなくてもヘッダに出る（対応表を持たずに済む）。
+         * 色はタイトル文字に合わせる。同じ drawable が一覧の項目側でも使われているため、
+         * 色を変える前に [android.graphics.drawable.Drawable.mutate] で切り離す。
+         */
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            val decorTitle = view.findViewById<TextView>(androidx.leanback.preference.R.id.decor_title)
+                ?: return
+            val icon = preferenceScreen?.icon?.mutate() ?: return
+            val size = resources.getDimensionPixelSize(R.dimen.settings_header_icon_size)
+            icon.setTint(decorTitle.currentTextColor)
+            icon.setBounds(0, 0, size, size)
+            decorTitle.setCompoundDrawablesRelative(icon, null, null, null)
+            decorTitle.compoundDrawablePadding =
+                resources.getDimensionPixelSize(R.dimen.settings_header_icon_padding)
+        }
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             val root = arguments.getString(PREFERENCE_ROOT, null)
             val prefResId = arguments.getInt(PREFERENCE_RESOURCE_ID)
@@ -130,6 +159,35 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 updateInternalPlayerOnlyUI(newValue as? String)
                 true
             }
+
+            // 「録画の再読み込み」。実処理はメイン画面が持っているので、合図だけ置いて帰る。
+            // SettingsActivity は windowIsTranslucent なので設定画面を開いても MainActivity は
+            // PAUSED 止まりで onStop が呼ばれず、MainFragment のリスナーは登録されたまま。
+            // そのためこの書き込みはその場で届く。毎回必ず値が変わるよう時刻を入れる
+            // （同じ値だとリスナーが呼ばれない）。
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_reload_action))
+                ?.setOnPreferenceClickListener {
+                    Log.i(TAG, "pref reload clicked")
+                    PreferenceManager.getDefaultSharedPreferences(activity!!)
+                        .edit()
+                        .putLong(getString(R.string.pref_key_reload_request), System.currentTimeMillis())
+                        .apply()
+                    Toast.makeText(activity, getString(R.string.reload_started), Toast.LENGTH_SHORT).show()
+                    true
+                }
+
+            // 「アップデートを確認」。サイドバー最下段の同名カードと同じダイアログをここで出す。
+            // AppUpdateDialogFragment は androidx の DialogFragment なので supportFragmentManager が要る
+            // （SettingsActivity を FragmentActivity にしてあるのはこのため）。
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_check_update_action))
+                ?.setOnPreferenceClickListener {
+                    Log.i(TAG, "pref check_update clicked")
+                    (activity as? FragmentActivity)?.let { act ->
+                        AppUpdateDialogFragment.newInstance()
+                            .show(act.supportFragmentManager, AppUpdateDialogFragment.TAG)
+                    }
+                    true
+                }
 
             preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_clear_history))
                 ?.setOnPreferenceClickListener {

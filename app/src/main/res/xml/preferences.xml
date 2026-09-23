@@ -1,9 +1,11 @@
 <PreferenceScreen
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:icon="@drawable/ic_sidebar_settings"
     app:title="@string/settings_title">
 
     <PreferenceScreen
         app:key="@string/pref_key_screen_connection"
+        app:icon="@drawable/ic_settings_connection"
         app:title="@string/settings_connection">
 
         <EditTextPreference
@@ -39,6 +41,7 @@
 
     <PreferenceScreen
         app:key="@string/pref_key_screen_player"
+        app:icon="@drawable/ic_settings_player"
         app:title="@string/settings_player">
 
         <ListPreference
@@ -108,6 +111,7 @@
 
     <PreferenceScreen
         app:key="@string/pref_key_screen_display"
+        app:icon="@drawable/ic_settings_image"
         app:title="@string/settings_display">
 
         <PreferenceCategory
@@ -163,5 +167,25 @@
         </PreferenceCategory>
 
     </PreferenceScreen>
+
+    <!--
+        値を変える設定ではなく、押すとその場で何かが起きるもの。
+        設定項目と混ざらないよう見出しで区切る。サイドバー最下段の「設定」行にある
+        同名のカードと同じことをする。
+    -->
+    <PreferenceCategory
+        app:title="@string/pref_category_actions">
+
+        <Preference
+            app:key=  "@string/pref_key_reload_action"
+            app:icon= "@drawable/ic_settings_reload"
+            app:title="@string/reload" />
+
+        <Preference
+            app:key=  "@string/pref_key_check_update_action"
+            app:icon= "@drawable/ic_settings_update"
+            app:title="@string/settings_update" />
+
+    </PreferenceCategory>
 
 </PreferenceScreen>

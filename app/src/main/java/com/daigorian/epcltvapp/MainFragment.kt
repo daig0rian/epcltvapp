@@ -127,6 +127,12 @@ class MainFragment : BrowseSupportFragment() {
             getString(R.string.pref_key_show_thumbnail_background) -> {
                 startBackgroundTimer()
             }
+            getString(R.string.pref_key_reload_request) -> {
+                // 設定画面の「録画の再読み込み」が押された合図。サイドバー最下段の同名カードと
+                // 同じ処理をする。設定画面は translucent でこの画面は止まらないため、ここへ届く。
+                Log.i(TAG, "prefChanged: reload_request → reloadContentRows")
+                reloadContentRows()
+            }
             getString(R.string.pref_key_show_empty_rules) -> {
                 val showEmptyRules = prefs.getBoolean(getString(R.string.pref_key_show_empty_rules), true)
                 Log.d(TAG, "prefChanged: show_empty_rules=$showEmptyRules adapterSize=${mMainMenuAdapter.size()}")

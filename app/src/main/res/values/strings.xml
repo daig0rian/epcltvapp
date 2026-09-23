@@ -157,6 +157,14 @@
     <string name="pref_key_show_thumbnail_background" translatable="false">KEY_SHOW_THUMBNAIL_BACKGROUND</string>
     <string name="show_thumbnail_background">Thumbnail background</string>
 
+    <!-- Actions on the settings root screen -->
+    <string name="pref_key_reload_action" translatable="false">pref_key_reload_action</string>
+    <string name="pref_key_check_update_action" translatable="false">pref_key_check_update_action</string>
+    <!-- 設定画面からメイン画面へ「録画を再読み込みして」と伝えるための合図。時刻を書き込む -->
+    <string name="pref_key_reload_request" translatable="false">KEY_RELOAD_REQUESTED_AT</string>
+    <string name="pref_category_actions">Actions</string>
+    <string name="reload_started">Reloading recordings</string>
+
     <!-- History display -->
     <string name="pref_key_clear_history" translatable="false">pref_key_clear_history_action</string>
     <string name="clear_history">Search history clear</string>
