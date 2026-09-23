@@ -106,14 +106,21 @@ object EpgStationV2 {
 
     var api: ApiInterface? = null
 
+    private var priorityApiInstance: ApiInterface? = null
+
     /**
      * 利用者が待っている要求を通すためのクライアント。
      *
      * 録画ルール一覧の取得は数百〜1000件を一斉に投げるため、同じクライアントだと OkHttp の
      * 待ち行列が埋まり、「最近の録画」の続き取得などがその後ろに並んでしまう。
-     * 待ち行列だけを分けて先に通す（接続プールは共有するので、TCP接続は無駄に増えない）。
+     * 待ち行列だけを分けて先に通す（接続プールは [api] と共有する）。
+     *
+     * [api] が null のとき——接続先が v2 ではない、またはまだ確定していないとき——は必ず null を返す。
+     * 「EpgStationV2.api が null なら接続先は v2 ではない」という判定を、ここで迂回させないため。
      */
-    var priorityApi: ApiInterface? = null
+    val priorityApi: ApiInterface?
+        get() = if (api == null) null else priorityApiInstance
+
     var authForGlide : LazyHeaders? = null
     var channelMap: Map<Long, String> = emptyMap()
     var streamConfig: StreamConfig? = null
@@ -193,7 +200,7 @@ object EpgStationV2 {
             val password = userInfo.split(":")[1]
             val client = okHttpClientBuilder.addInterceptor(BasicAuthInterceptor(username, password)).build()
             api = buildApi(client)
-            priorityApi = buildApi(priorityClient(client))
+            priorityApiInstance = buildApi(priorityClient(client))
 
             //サムネ読み込みなどで使われるGlideのヘッダを準備してやる
             authForGlide = LazyHeaders.Builder()
@@ -203,7 +210,7 @@ object EpgStationV2 {
             //Basic認証情報を含まないURLである
             val client = okHttpClientBuilder.build()
             api = buildApi(client)
-            priorityApi = buildApi(priorityClient(client))
+            priorityApiInstance = buildApi(priorityClient(client))
         }
     }
 
