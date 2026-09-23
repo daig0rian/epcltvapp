@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- タイトル行に足す設定ボタン（歯車）。D-pad の移動先を明示するために ID が要る。 -->
+    <item name="epg_settings_orb" type="id" />
+</resources>

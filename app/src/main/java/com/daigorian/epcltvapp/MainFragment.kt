@@ -11,10 +11,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
+import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.TextView
 import android.widget.Toast
@@ -50,7 +54,6 @@ class MainFragment : BrowseSupportFragment() {
     private var mNeedsReloadHistoryOnResume = false
     private var mNeedsCheckConnectionOnResume = false
     private var mConnectionKeyBeforeSettings: String? = null
-
     /**
      * 画面がまだ生きているか。遅れて届いた API 応答を捨てるための門番。
      *
@@ -59,7 +62,11 @@ class MainFragment : BrowseSupportFragment() {
      * null になって落ちる（実機で発生）。応答を触る前にここで弾く。
      */
     private val isUiAlive: Boolean get() = isAdded
+
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
+
+    /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
+    private var mSearchOrb: View? = null
 
     /**
      * いま表示に使っている「録画ルールの並び」収集器。
@@ -150,6 +157,12 @@ class MainFragment : BrowseSupportFragment() {
         setupUIElements()
 
         setupEventListeners()
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // タイトル行（検索ボタンがある行）は Leanback が組み立てるので、出来上がってから足す
+        view.post { addSettingsButton() }
     }
 
     override fun onResume() {
@@ -989,6 +1002,303 @@ class MainFragment : BrowseSupportFragment() {
         onItemViewSelectedListener = ItemViewSelectedListener()
     }
 
+    /**
+     * タイトル行の検索ボタンの右隣へ、同じ見た目の設定ボタン（歯車）を足す。
+     *
+     * サイドバーの一番下の「設定」まで行かなくても設定画面へ入れるようにするためのもの。
+     * 検索ボタンと同じ [SearchOrbView] を使うので大きさとフォーカス時の見え方が揃い、
+     * D-pad では検索ボタンから右へ移るだけになる。サイドバーの一覧や行の持ち方には触らない。
+     */
+    private fun addSettingsButton() {
+        if (!isAdded) return
+        // タイトル行はテーマで差し替えられることがあるので、期待した型でなければ何もしない
+        val titleBar = getTitleView() as? TitleView ?: return
+        // 画面を作り直したときに二重に足さない
+        if (titleBar.findViewWithTag<View>(SETTINGS_BUTTON_TAG) != null) return
+        val searchOrb = titleBar.searchAffordanceView as? SearchOrbView ?: return
+
+        val gearOrb = SearchOrbView(requireContext()).apply {
+            id = R.id.epg_settings_orb
+            tag = SETTINGS_BUTTON_TAG
+            contentDescription = getString(R.string.settings)
+            searchOrb.orbColors?.let { setOrbColors(it) }
+            setOrbIcon(ContextCompat.getDrawable(requireContext(), R.drawable.ic_sidebar_settings))
+            setOnOrbClickedListener { openSettingsScreen() }
+            // アイコンの ImageView にはレイアウト由来の「検索」の説明が入っている。
+            // 歯車ボタンの説明は親の FrameLayout が持っているので、二重に読まれないよう消す。
+            firstImageView(this)?.contentDescription = null
+        }
+        titleBar.addView(
+            gearOrb,
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.CENTER_VERTICAL or Gravity.START
+            )
+        )
+
+        // 横並びの2つのボタンは、座標任せにせずキーで直接行き来させる。
+        // nextFocusRightId / nextFocusLeftId はこの画面では効かなかった（実機で確認。
+        // 検索ボタンは Leanback が表示を切り替えるため、座標による探索の対象から外れることがある）。
+        // （OnKeyListener は、そのビュー自身にフォーカスがあるときだけ呼ばれる。子は持たないので取り違えない）
+        searchOrb.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                // タイトル行の上には何も無い。既定の探索だと横の設定ボタンへ飛んでしまうので動かさない
+                KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_RIGHT -> {
+                    // 設定ボタンはサイドバーが出ているときだけ出している。隠れているときは動かさない
+                    if (gearOrb.isFocusable) {
+                        Log.i(TAG, "タイトル行: 検索ボタンの→で設定ボタンへ")
+                        gearOrb.requestFocus()
+                    }
+                    true
+                }
+                else -> false
+            }
+        }
+        gearOrb.setOnKeyListener { _, keyCode, event ->
+            if (event.action != KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                KeyEvent.KEYCODE_DPAD_UP -> true
+                KeyEvent.KEYCODE_DPAD_LEFT -> {
+                    Log.i(TAG, "タイトル行: 設定ボタンの←で検索ボタンへ")
+                    searchOrb.requestFocus()
+                    true
+                }
+                else -> false
+            }
+        }
+
+        // 置き場所は検索ボタンの実測値から決める。余白はテーマ任せなので決め打ちしない。
+        // gravity=start の子の left は「親の padding + 自分の margin」なので、親の padding ぶんを
+        // 引いてから margin に入れる。
+        // オーブはフォーカスで少し大きくなるので、右端は「実測した最大値」を使う。
+        // そのままだと検索ボタンを選ぶたびに設定ボタンの位置が動いてしまう。
+        val gap = (SETTINGS_BUTTON_GAP_DP * resources.displayMetrics.density).toInt()
+        var maxOrbRight = 0
+        val alignNextToSearchOrb = Runnable {
+            // 検索ボタンが隠れる状態では設定ボタンも一緒に隠す。
+            // Leanback はタイトル行を残したまま検索ボタンだけを GONE にすることがある
+            // （updateComponentsVisibility / updateSearchOrbViewVisiblity）。歯車だけ残ると不自然なので合わせる。
+            if (gearOrb.visibility != searchOrb.visibility) {
+                gearOrb.visibility = searchOrb.visibility
+            }
+            val params = gearOrb.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
+            if (searchOrb.width == 0) return@Runnable
+            val right = searchOrb.left + searchOrb.width
+            if (right > maxOrbRight) maxOrbRight = right
+            val left = (maxOrbRight - titleBar.paddingLeft) + gap
+            if (params.leftMargin != left) {
+                params.leftMargin = left
+                gearOrb.layoutParams = params
+            }
+        }
+        // 画面の回転やテーマ変更で検索ボタンの位置が変わっても追従させる
+        searchOrb.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignNextToSearchOrb.run() }
+        alignNextToSearchOrb.run()
+
+        // 設定ボタンの出し入れ。
+        //   出す   : 検索ボタンの右隣（サイドバーの帯がその位置まで来ているときだけ）
+        //   隠す   : 検索ボタンの裏へ回り込んで透明（閉じたときにスッと隠れる）
+        //
+        // 起動直後はタイトル行がまだフェードイン中で、歯車だけが先に描かれて内容の上に浮いていた。
+        // また Leanback はタイトル行もサイドバーもアニメーションで出すため、サイドバーを畳んだ直後に
+        // 状態が一瞬揺れ、「隠れる → うっすら出る → また隠れる」ように見えていた。
+        // そこで (1) 検索ボタンが実際に表示されるまでは出さない、
+        //        (2) 出す条件は少しの間続いてから効かせる（隠すのは即）、
+        //        (3) 隠れている間は毎フレーム隠し直す、の3つで揺れを吸収する。
+        var headersRoot: View? = getHeadersSupportFragment()?.view
+        var settingsShown = false
+        var hiding = false
+        var wantedSince = 0L
+        /** 検索ボタンが一度きちんと表示されたか。表示される前は設定ボタンを出さない。 */
+        var searchOrbReady = false
+        val applySettingsButtonState = object : Runnable {
+            override fun run() {
+                if (!isAdded) return
+                if (headersRoot == null) headersRoot = getHeadersSupportFragment()?.view
+                val now = SystemClock.uptimeMillis()
+
+                if (!searchOrbReady) {
+                    searchOrbReady = searchOrb.visibility == View.VISIBLE && searchOrb.isShown &&
+                        searchOrb.alpha >= SETTINGS_BUTTON_ORB_READY_ALPHA && searchOrb.width > 0
+                }
+                val wanted = searchOrbReady && isSidebarCoveringSettingsButton(headersRoot, searchOrb, gap)
+
+                // 出す条件は少しの間続いてから効かせる（遷移中の一瞬の揺れで出さない）。
+                // 画面が止まっていると描画が来ないので、時間が来たら自分を呼び直して確かめる。
+                // （描画待ちにすると、サイドバーを開き直して静止したときに取りこぼす）
+                if (wanted) {
+                    if (wantedSince == 0L) {
+                        wantedSince = now
+                        mHandler.postDelayed(this, SETTINGS_BUTTON_SHOW_DELAY_MS)
+                    }
+                } else {
+                    wantedSince = 0L
+                }
+                val show = wanted && now - wantedSince >= SETTINGS_BUTTON_SHOW_DELAY_MS
+
+                if (show == settingsShown) {
+                    // 隠れているはずなのに見えていたら、その場で隠す（アニメーションの取りこぼし対策）
+                    if (!show && !hiding) hideSettingsButton(gearOrb, gap)
+                    return
+                }
+                settingsShown = show
+                gearOrb.animate().cancel()
+                if (show) {
+                    // 検索ボタンの裏から横へ出てくる
+                    hiding = false
+                    gearOrb.translationX = -(gearOrb.width + gap).toFloat()
+                    gearOrb.alpha = 0f
+                    gearOrb.isFocusable = true
+                    gearOrb.isFocusableInTouchMode = true
+                    gearOrb.animate()
+                        .translationX(0f)
+                        .alpha(1f)
+                        .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                        .start()
+                } else {
+                    // 検索ボタンの裏へスッと隠れる（位置と透明度の両方を動かす）
+                    hiding = true
+                    gearOrb.isFocusable = false
+                    gearOrb.isFocusableInTouchMode = false
+                    if (gearOrb.hasFocus()) searchOrb.requestFocus()
+                    gearOrb.animate()
+                        .translationX(-(gearOrb.width + gap).toFloat())
+                        .alpha(0f)
+                        .setDuration(SETTINGS_BUTTON_SLIDE_MS)
+                        .withEndAction { hiding = false }
+                        .start()
+                }
+            }
+        }
+        // 最初のフレームで出てしまわないよう、先に隠しておく
+        gearOrb.alpha = 0f
+        gearOrb.isFocusable = false
+        gearOrb.isFocusableInTouchMode = false
+        titleBar.viewTreeObserver.addOnPreDrawListener {
+            applySettingsButtonState.run()
+            true
+        }
+        applySettingsButtonState.run()
+
+        mSearchOrb = searchOrb
+        installSearchOrbUpFromSidebar()
+    }
+
+    /**
+     * サイドバーの帯が、設定ボタンの置き場所まで来ているか。
+     *
+     * サイドバーを畳んだ状態では帯が細い（実測48px）ので、そこへ設定ボタンだけが残ると
+     * 「サイドバーからはみ出して」見える。幅ではなく位置で見て、帯が来てから横へ出す。
+     */
+    private fun isSidebarCoveringSettingsButton(headersRoot: View?, searchOrb: View, gap: Int): Boolean {
+        if (headersRoot == null || headersRoot.width == 0 || !headersRoot.isShown) return false
+
+        val headersLoc = IntArray(2)
+        headersRoot.getLocationOnScreen(headersLoc)
+        val sidebarRight = headersLoc[0] + headersRoot.width
+
+        val orbLoc = IntArray(2)
+        searchOrb.getLocationOnScreen(orbLoc)
+        // 設定ボタンの最終的な左端（検索ボタンの右端 + 間隔）
+        val settingsLeft = orbLoc[0] + searchOrb.width + gap
+
+        return sidebarRight >= settingsLeft
+    }
+
+    /** 設定ボタンを検索ボタンの裏へ回して隠す（アニメーション無し。隠れている間ずっと保つためのもの）。 */
+    private fun hideSettingsButton(gearOrb: View, gap: Int) {
+        gearOrb.isFocusable = false
+        gearOrb.isFocusableInTouchMode = false
+        if (gearOrb.width > 0) gearOrb.translationX = -(gearOrb.width + gap).toFloat()
+        gearOrb.alpha = 0f
+    }
+
+    /** グループ直下の ImageView を1つ返す（[SearchOrbView] のアイコンを取り出す用）。 */
+    private fun firstImageView(group: ViewGroup): ImageView? {
+        for (i in 0 until group.childCount) {
+            (group.getChildAt(i) as? ImageView)?.let { return it }
+        }
+        return null
+    }
+
+    /**
+     * サイドバーの一番上の行で↑を押したとき、検索ボタンへ移るようにする。
+     *
+     * Leanback はフォーカス移動を座標で決める。設定ボタン（歯車）は検索ボタンの右隣にあり、
+     * サイドバーの行と x 座標が重なるため、何もしないと「より近い」設定ボタンへ飛んでしまい、
+     * 検索ボタンには入れなくなる（実機で発生）。
+     * 一番上かどうかは「上にフォーカスできる行があるか」で見るので、区切り行が先頭にあっても壊れない。
+     */
+    private fun installSearchOrbUpFromSidebar() {
+        val grid = findHeadersGridView()
+        if (grid == null) {
+            Log.i(TAG, "サイドバーの↑フック: グリッドが見つからないため見送り")
+            return
+        }
+        // グリッド自身が扱わなかったキーだけを受け取る。通常の D-pad 移動には割り込まない。
+        grid.setOnUnhandledKeyListener { event ->
+            if (event.keyCode != KeyEvent.KEYCODE_DPAD_UP || event.action != KeyEvent.ACTION_DOWN) {
+                return@setOnUnhandledKeyListener false
+            }
+            // 上にまだフォーカスできる行があるなら、既定の移動に任せる
+            if (hasFocusableHeaderAbove(grid)) return@setOnUnhandledKeyListener false
+            val orb = mSearchOrb ?: return@setOnUnhandledKeyListener false
+            // タイトル行が隠れているときは検索ボタンへ移れない。何もせず既定の移動に任せる
+            if (!orb.isShown || !orb.isFocusable) return@setOnUnhandledKeyListener false
+            if (!orb.requestFocus()) return@setOnUnhandledKeyListener false
+            Log.i(TAG, "サイドバー最上位の↑ → 検索ボタンへ")
+            true
+        }
+        Log.i(TAG, "サイドバーの↑フックを設定")
+    }
+
+    /** フォーカス中の行より上に、フォーカスできる行があるか。分からないときは true（既定の移動に任せる）。 */
+    private fun hasFocusableHeaderAbove(grid: ViewGroup): Boolean {
+        val focused = grid.focusedChild ?: return true
+        for (i in 0 until grid.childCount) {
+            val child = grid.getChildAt(i)
+            if (child === focused) return false
+            if (child.visibility == View.VISIBLE && child.isFocusable) return true
+        }
+        return true
+    }
+
+    /** サイドバーの RecyclerView（[VerticalGridView]）。ID は leanback 側の持ち物なので型で探す。 */
+    private fun findHeadersGridView(): VerticalGridView? {
+        val root = getHeadersSupportFragment()?.view ?: return null
+        return findVerticalGridViewIn(root)
+    }
+
+    private fun findVerticalGridViewIn(view: View): VerticalGridView? {
+        if (view is VerticalGridView) return view
+        if (view is ViewGroup) {
+            for (i in 0 until view.childCount) {
+                findVerticalGridViewIn(view.getChildAt(i))?.let { return it }
+            }
+        }
+        return null
+    }
+
+    /**
+     * 設定画面を開く。歯車ボタンと、サイドバー最下段の「設定」から入るのと同じ画面。
+     *
+     * 戻ってきたときの扱いは、既にある「接続設定」カードと同じにする。接続先が変わっていれば
+     * API を取り直す。
+     *
+     * 表示の設定はここでは見ない。SettingsActivity のテーマは windowIsTranslucent なので設定画面を
+     * 開いても MainActivity は PAUSED 止まりで onStop が呼ばれず、mDisplayPrefChangeListener が
+     * 登録されたままになる。並び順の変更はその場で applyRuleOrder() まで済んでいる。
+     */
+    private fun openSettingsScreen() {
+        val ctx = context ?: return
+        mConnectionKeyBeforeSettings = connectionKey()
+        mNeedsCheckConnectionOnResume = true
+        startActivity(Intent(ctx, SettingsActivity::class.java))
+    }
+
     private inner class ItemViewClickedListener : OnItemViewClickedListener {
         @SuppressLint("ApplySharedPref")
         override fun onItemClicked(
@@ -1750,6 +2060,27 @@ class MainFragment : BrowseSupportFragment() {
 
     companion object {
         private const val TAG = "MainFragment"
+
+        /** タイトル行に足した設定ボタンの目印。画面を作り直したときに二重に足さないために使う。 */
+        private const val SETTINGS_BUTTON_TAG = "settings_orb"
+
+        /** 検索ボタンと設定ボタンの間隔（dp）。 */
+        private const val SETTINGS_BUTTON_GAP_DP = 24
+
+        /** 設定ボタンが横へ出るまでの時間（ms）。 */
+        private const val SETTINGS_BUTTON_SLIDE_MS = 260L
+
+        /**
+         * 検索ボタンがこの透明度まで表示されてから設定ボタンを出す。
+         * 起動直後はタイトル行のフェードイン中に歯車だけが先に描かれて浮いて見えたため。
+         */
+        private const val SETTINGS_BUTTON_ORB_READY_ALPHA = 0.9f
+
+        /**
+         * 出す条件がこの時間続いてから設定ボタンを出す。サイドバーを畳んだ直後は状態が一瞬揺れるので、
+         * そのまま追うと「隠れる → うっすら出る → また隠れる」に見えてしまう。隠す方は即おこなう。
+         */
+        private const val SETTINGS_BUTTON_SHOW_DELAY_MS = 250L
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
