@@ -34,15 +34,19 @@ Issue #103 / v1.40 リリース前に入れる。
   `AppCompatActivity` は使えないが、`FragmentActivity` は AppCompat を要求しない。
   既存の platform fragment（`LeanbackSettingsFragment`）はそのまま動く
 
+## 完了済み
+
+- [x] preferences.xml: 3画面に app:icon（サイドバーのカードと同じ drawable）
+- [x] preferences.xml: アクション2つを PreferenceCategory「操作」で追加
+- [x] strings.xml / values-ja-rJP: pref key とラベルを追加
+- [x] SettingsActivity を FragmentActivity へ
+- [x] SettingsFragment: 2つの setOnPreferenceClickListener
+- [x] MainFragment: 合図を拾って reloadContentRows()
+
 ## 残タスク
 
-- [ ] preferences.xml: 3画面に app:icon
-- [ ] preferences.xml: アクション2つを PreferenceCategory で追加
-- [ ] strings.xml / values-ja-rJP: 新しい pref key と、必要ならラベル
-- [ ] SettingsActivity を FragmentActivity へ
-- [ ] SettingsFragment: 2つの setOnPreferenceClickListener
-- [ ] MainFragment: 再読み込みの合図を拾う
 - [ ] 実機確認
+- [ ] WIP.md を削除してコミットしてから PR 作成
 
 ## 実機確認の観点
 

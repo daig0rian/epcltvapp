@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 import androidx.leanback.preference.LeanbackPreferenceFragment
 import androidx.leanback.preference.LeanbackSettingsFragment
 import androidx.preference.*
@@ -130,6 +131,35 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 updateInternalPlayerOnlyUI(newValue as? String)
                 true
             }
+
+            // 「録画の再読み込み」。実処理はメイン画面が持っているので、合図だけ置いて帰る。
+            // SettingsActivity は windowIsTranslucent なので設定画面を開いても MainActivity は
+            // PAUSED 止まりで onStop が呼ばれず、MainFragment のリスナーは登録されたまま。
+            // そのためこの書き込みはその場で届く。毎回必ず値が変わるよう時刻を入れる
+            // （同じ値だとリスナーが呼ばれない）。
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_reload_action))
+                ?.setOnPreferenceClickListener {
+                    Log.i(TAG, "pref reload clicked")
+                    PreferenceManager.getDefaultSharedPreferences(activity!!)
+                        .edit()
+                        .putLong(getString(R.string.pref_key_reload_request), System.currentTimeMillis())
+                        .apply()
+                    Toast.makeText(activity, getString(R.string.reload_started), Toast.LENGTH_SHORT).show()
+                    true
+                }
+
+            // 「アップデートを確認」。サイドバー最下段の同名カードと同じダイアログをここで出す。
+            // AppUpdateDialogFragment は androidx の DialogFragment なので supportFragmentManager が要る
+            // （SettingsActivity を FragmentActivity にしてあるのはこのため）。
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_check_update_action))
+                ?.setOnPreferenceClickListener {
+                    Log.i(TAG, "pref check_update clicked")
+                    (activity as? FragmentActivity)?.let { act ->
+                        AppUpdateDialogFragment.newInstance()
+                            .show(act.supportFragmentManager, AppUpdateDialogFragment.TAG)
+                    }
+                    true
+                }
 
             preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_clear_history))
                 ?.setOnPreferenceClickListener {
