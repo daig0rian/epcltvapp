@@ -28,6 +28,7 @@ import androidx.leanback.app.BackgroundManager
 import androidx.leanback.app.BrowseSupportFragment
 import androidx.leanback.widget.*
 import androidx.preference.PreferenceManager
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
@@ -88,6 +89,20 @@ class MainFragment : BrowseSupportFragment() {
 
     /** 待っている間に利用者が操作したか。操作されたら復元しない。 */
     private var mUserInteractedWhileRestorePending = false
+
+    /**
+     * ルール行の headerId → 最後にその行の録画を取り直した時刻 (elapsedRealtime)。
+     *
+     * 視界に入った行を取り直すとき、直前に取ったばかりの行を何度も取りに行かないための控え。
+     * 初回ロードで取った時刻もここへ入る（[MainMenuAdapter.updateContentsListRowWithCategory]）。
+     */
+    private val mRuleRowRefreshedAt = HashMap<Long, Long>()
+
+    /** 可視行の掃き出しを予約済みか。デバウンスではなくスロットルにするためのフラグ。 */
+    private var mVisibleSweepScheduled = false
+
+    /** 可視行の掃き出しを仕掛ける購読を、もう張ったか。 */
+    private var mVisibleSweepInstalled = false
 
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
@@ -202,6 +217,8 @@ class MainFragment : BrowseSupportFragment() {
         super.onViewCreated(view, savedInstanceState)
         // タイトル行（検索ボタンがある行）は Leanback が組み立てるので、出来上がってから足す
         view.post { addSettingsButton() }
+        // 行のグリッドも Leanback が組み立てるので同様。ここで張れなくても onResume が取りに来る。
+        view.post { installVisibleRowSweep() }
     }
 
     override fun onResume() {
@@ -250,6 +267,10 @@ class MainFragment : BrowseSupportFragment() {
         refreshLiveProgramNames()
         // Leanback の復元は onResume より後（レイアウト時）なので、少し待ってから選択行を見る。
         scheduleSelectionRestore()
+        // 復帰したときは行が既に attach 済みで attach イベントが来ないので、ここで1回掃く。
+        // 判定は sweep 側に集約してあるため、復帰専用の分岐は要らない。
+        installVisibleRowSweep()
+        scheduleVisibleSweep()
     }
 
     override fun onPause() {
@@ -689,6 +710,8 @@ class MainFragment : BrowseSupportFragment() {
 
         //内容クリア
         mMainMenuAdapter.clear()
+        // 行を作り直すので、取り直した時刻の控えも捨てる（消えたルールの分を残さない）
+        mRuleRowRefreshedAt.clear()
 
         //コンテンツをロード。
         updateRows()
@@ -738,6 +761,8 @@ class MainFragment : BrowseSupportFragment() {
     private fun reloadContentRows() {
         listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
+        // 行を作り直すので、取り直した時刻の控えも捨てる（消えたルールの分を残さない）
+        mRuleRowRefreshedAt.clear()
         updateRows()
     }
 
@@ -799,6 +824,125 @@ class MainFragment : BrowseSupportFragment() {
     private fun isHistoryNewestFirst(): Boolean =
         PreferenceManager.getDefaultSharedPreferences(context)
             .getBoolean(getString(R.string.pref_key_rules_order_is_newest_first), false)
+
+    /**
+     * 「視界に入った行を取り直す」仕掛けを張る。
+     *
+     * ルール行は画面に戻ってきたときにまとめて取り直すことをやめた（ルールが1125件ある環境では
+     * 1分近くかかるため）。代わりに、**行が視界に入った時点**でその行だけを取り直す。
+     * コストが「利用者が見た行数」に比例するので、ルールの総数と切り離せる。
+     *
+     * 行の選択ではなく可視化をトリガーにするのが要点。古い行は利用者にとって「選ぶ理由がない行」に
+     * 見えるので、選択を待つと選ばれないから更新されず更新されないから選ばれない、という
+     * 堂々巡りになる。
+     *
+     * [VerticalGridView] は RecyclerView なので、子ビューの attach/detach が「視界に入った／出た」の
+     * 信号になる。RecyclerView は表示の少し前に attach する（プリフェッチも効く）ため、
+     * 画面に入りきる前に問い合わせが始まる。
+     */
+    private fun installVisibleRowSweep(retriesLeft: Int = VISIBLE_SWEEP_INSTALL_RETRIES) {
+        if (mVisibleSweepInstalled) return
+        // 行のグリッドは Leanback が子フラグメントとして組み立てる。onViewCreated の post でも
+        // onResume でもまだ出来ていないことがある（実機で 500ms ほど遅れて現れた）。
+        // 現れるまで少しの間だけ待つ。
+        val grid = rowsSupportFragment?.verticalGridView
+        if (grid == null) {
+            if (retriesLeft > 0 && isUiAlive) {
+                mHandler.postDelayed(
+                    { installVisibleRowSweep(retriesLeft - 1) },
+                    VISIBLE_SWEEP_INSTALL_RETRY_MS
+                )
+            } else {
+                Log.i(TAG, "可視行の取り直し: 行のグリッドが現れないため仕掛けられなかった")
+            }
+            return
+        }
+        grid.addOnChildAttachStateChangeListener(
+            object : RecyclerView.OnChildAttachStateChangeListener {
+                override fun onChildViewAttachedToWindow(view: View) = scheduleVisibleSweep()
+                override fun onChildViewDetachedFromWindow(view: View) = scheduleVisibleSweep()
+            }
+        )
+        mVisibleSweepInstalled = true
+        Log.i(TAG, "可視行の取り直しを仕掛けた")
+    }
+
+    /**
+     * 可視行の掃き出しを予約する。
+     *
+     * **デバウンス（来るたびタイマーを張り直す）にはしないこと。** D-pad 長押しで行が連続的に
+     * 流れている間は attach が 200〜400ms おきに来るため、張り直し続けると手を離すまで一度も
+     * 発火しない。スロットルなら [VISIBLE_SWEEP_DELAY_MS] 間隔で必ず掃かれ、流れている最中でも
+     * 視界に追随する。
+     */
+    private fun scheduleVisibleSweep() {
+        if (mVisibleSweepScheduled) return
+        mVisibleSweepScheduled = true
+        mHandler.postDelayed({
+            mVisibleSweepScheduled = false
+            refreshVisibleRuleRows()
+        }, VISIBLE_SWEEP_DELAY_MS)
+    }
+
+    /**
+     * いま見えているルール行のうち、しばらく取っていないものを取り直す。
+     *
+     * 1回で飛ぶリクエストは可視行数（TV では3〜5行）が上限。ルール一覧（getRules）は取り直さない
+     * ——ruleId は headerId から戻せるし、タイトルは行が持っているため。
+     *
+     * 並び順は動かさない。「録画の新しい順」で本来なら上へ移るべきルールがあっても、見ている最中に
+     * 足元の行が動くほうが混乱するので、次の完全な読み込みまで位置はそのままにする。
+     */
+    private fun refreshVisibleRuleRows() {
+        if (!isUiAlive) return
+        val grid = rowsSupportFragment?.verticalGridView ?: return
+        // ここまで来たならグリッドはある。まだ仕掛けていなければこの機会に仕掛ける。
+        installVisibleRowSweep()
+        val now = SystemClock.elapsedRealtime()
+        val refreshedRuleIds = ArrayList<Long>()
+        var visibleRuleRows = 0
+        var keptByCooldown = 0
+        for (i in 0 until grid.childCount) {
+            val position = grid.getChildAdapterPosition(grid.getChildAt(i))
+            if (position < 0 || position >= mMainMenuAdapter.size()) continue
+            val row = mMainMenuAdapter.get(position) as? ListRow ?: continue
+            val headerId = row.headerItem.id
+            val ruleId = ruleIdFromHeaderId(headerId) ?: continue
+            visibleRuleRows++
+            val last = mRuleRowRefreshedAt[headerId]
+            if (last != null && now - last < RULE_ROW_REFRESH_COOLDOWN_MS) {
+                keptByCooldown++
+                continue
+            }
+            // 既存行の中身だけを差分更新する経路に乗せる（orderedIds / ruleOrder は渡さない）
+            mMainMenuAdapter.updateContentsListRowWithCategory(
+                GetRecordedParam(rule = ruleId, limit = RULE_ROW_INITIAL_LIMIT),
+                GetRecordedParamV2(ruleId = ruleId, limit = RULE_ROW_INITIAL_LIMIT),
+                row.headerItem.name,
+                Category.RECORDED_BY_RULES,
+                ruleId
+            )
+            refreshedRuleIds.add(ruleId)
+        }
+        // 掃くたびに出すと流している間ずっと出るので、実際に取りに行ったときだけ Log.i に残す。
+        // 毎回の内訳は Log.d 側（据え置きが効いているかを追えるようにするため）。
+        if (refreshedRuleIds.isNotEmpty()) {
+            Log.i(TAG, "可視行の取り直し: ${refreshedRuleIds.size}行 ルール=$refreshedRuleIds")
+        }
+        Log.d(TAG, "可視行の掃き出し: 可視ルール行=$visibleRuleRows 取り直し=${refreshedRuleIds.size} 据え置き=$keptByCooldown")
+    }
+
+    /**
+     * ルール行の headerId から ruleId を戻す。ルール行でなければ null。
+     *
+     * headerId は `カテゴリの序数 * 10000 + カテゴリ内のID`（[MainMenuAdapter.updateContentsListRowWithCategory]）。
+     * 1カテゴリ 10000 件までという前提は既存の採番がそのまま置いているもので、ここでも同じ前提に立つ。
+     */
+    private fun ruleIdFromHeaderId(headerId: Long): Long? {
+        val base = Category.RECORDED_BY_RULES.ordinal.toLong() * 10000
+        val ruleId = headerId - base
+        return if (ruleId in 0 until 10000) ruleId else null
+    }
 
     /** いま選んでいる行の headerId。並べ替えや作り直しの前後で選択を保つために控える。 */
     private fun selectedRowHeaderId(): Long? =
@@ -1802,6 +1946,12 @@ class MainFragment : BrowseSupportFragment() {
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
+            // ルール行を取りに行った時刻を控える。初回ロードもここを通るので、起動直後に
+            // 「視界に入った行の取り直し」が同じ問い合わせを二重に出さずに済む。
+            if (category == Category.RECORDED_BY_RULES) {
+                mRuleRowRefreshedAt[headerId] = SystemClock.elapsedRealtime()
+            }
+
             // 同じIDを持つ行が存在するかどうか確認する
             val listRow = getListRowByHeaderId(headerId)
 
@@ -2198,6 +2348,25 @@ class MainFragment : BrowseSupportFragment() {
 
         /** 同・上限回数。250ms × 120 = 30秒。ルール一覧の読み込みが終わるころまで待つ。 */
         private const val SELECTION_RESTORE_MAX_TRIES = 120
+
+        /**
+         * 可視行を掃く間隔（ms）。
+         *
+         * スロットルなので、行が流れ続けている間もこの間隔で必ず1回は掃かれる。
+         * 短くすると追随はよくなるが、流している最中の問い合わせが増える。
+         */
+        private const val VISIBLE_SWEEP_DELAY_MS = 300L
+
+        /** 行のグリッドが現れるのを待つ間隔と回数（200ms × 15 = 3秒）。 */
+        private const val VISIBLE_SWEEP_INSTALL_RETRY_MS = 200L
+        private const val VISIBLE_SWEEP_INSTALL_RETRIES = 15
+
+        /**
+         * 同じルール行を取り直すまでの最短間隔（ms）。
+         *
+         * これがないと、行を上下に跨ぐたびに同じ行を取りに行くことになる。
+         */
+        private const val RULE_ROW_REFRESH_COOLDOWN_MS = 60_000L
 
         /** タイトル行に足した設定ボタンの目印。画面を作り直したときに二重に足さないために使う。 */
         private const val SETTINGS_BUTTON_TAG = "settings_orb"
