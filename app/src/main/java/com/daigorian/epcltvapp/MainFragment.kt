@@ -63,8 +63,6 @@ class MainFragment : BrowseSupportFragment() {
      */
     private val isUiAlive: Boolean get() = isAdded
 
-    /** 設定画面から戻ったときに、手元のデータだけでルール行を並べ直すか（通信は増やさない）。 */
-    private var mNeedsReorderRulesOnResume = false
     private var mSettingsRowAdapter: ArrayObjectAdapter? = null
 
     /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
@@ -182,15 +180,7 @@ class MainFragment : BrowseSupportFragment() {
                 Log.d(TAG, "onResume: branch=checkConnection changed=$changed")
                 mNeedsCheckConnectionOnResume = false
                 if (changed) {
-                    // 取り直すので、並べ直しは揃った応答で行われる
-                    mNeedsReorderRulesOnResume = false
                     initEPGStationApi()
-                } else if (mNeedsReorderRulesOnResume) {
-                    // 設定を見て戻っただけのとき。並び順が変わっていれば、取得済みのデータだけで
-                    // 並べ直す（ルール行は取り直さないので通信は増えない）。
-                    mNeedsReorderRulesOnResume = false
-                    Log.d(TAG, "onResume: 設定から戻ったので並び順だけ反映（通信なし）")
-                    applyRuleOrder()
                 }
             }
             mNeedsReloadHistoryOnResume -> {
@@ -1296,13 +1286,16 @@ class MainFragment : BrowseSupportFragment() {
      * 設定画面を開く。歯車ボタンと、サイドバー最下段の「設定」から入るのと同じ画面。
      *
      * 戻ってきたときの扱いは、既にある「接続設定」カードと同じにする。接続先が変わっていれば
-     * API を取り直し、並び順だけが変わっていれば取得済みのデータだけで並べ直す（通信は増えない）。
+     * API を取り直す。
+     *
+     * 表示の設定はここでは見ない。SettingsActivity のテーマは windowIsTranslucent なので設定画面を
+     * 開いても MainActivity は PAUSED 止まりで onStop が呼ばれず、mDisplayPrefChangeListener が
+     * 登録されたままになる。並び順の変更はその場で applyRuleOrder() まで済んでいる。
      */
     private fun openSettingsScreen() {
         val ctx = context ?: return
         mConnectionKeyBeforeSettings = connectionKey()
         mNeedsCheckConnectionOnResume = true
-        mNeedsReorderRulesOnResume = true
         startActivity(Intent(ctx, SettingsActivity::class.java))
     }
 
