@@ -3,6 +3,7 @@ package com.daigorian.epcltvapp.epgstationv2caller
 import com.bumptech.glide.load.model.LazyHeaders
 import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import okhttp3.Credentials
+import okhttp3.Dispatcher
 import okhttp3.Interceptor
 import okhttp3.OkHttpClient
 import okhttp3.Response
@@ -104,6 +105,22 @@ object EpgStationV2 {
         .writeTimeout(5, TimeUnit.SECONDS)
 
     var api: ApiInterface? = null
+
+    private var priorityApiInstance: ApiInterface? = null
+
+    /**
+     * 利用者が待っている要求を通すためのクライアント。
+     *
+     * 録画ルール一覧の取得は数百〜1000件を一斉に投げるため、同じクライアントだと OkHttp の
+     * 待ち行列が埋まり、「最近の録画」の続き取得などがその後ろに並んでしまう。
+     * 待ち行列だけを分けて先に通す（接続プールは [api] と共有する）。
+     *
+     * [api] が null のとき——接続先が v2 ではない、またはまだ確定していないとき——は必ず null を返す。
+     * 「EpgStationV2.api が null なら接続先は v2 ではない」という判定を、ここで迂回させないため。
+     */
+    val priorityApi: ApiInterface?
+        get() = if (api == null) null else priorityApiInstance
+
     var authForGlide : LazyHeaders? = null
     var channelMap: Map<Long, String> = emptyMap()
     var streamConfig: StreamConfig? = null
@@ -181,11 +198,9 @@ object EpgStationV2 {
             //Basic認証情報を含むURLである
             val username = userInfo.split(":")[0]
             val password = userInfo.split(":")[1]
-            api = Builder()
-                .addConverterFactory(GsonConverterFactory.create())
-                .baseUrl(baseUrl)
-                .client(okHttpClientBuilder.addInterceptor(BasicAuthInterceptor(username, password)).build())
-                .build().create(ApiInterface::class.java)
+            val client = okHttpClientBuilder.addInterceptor(BasicAuthInterceptor(username, password)).build()
+            api = buildApi(client)
+            priorityApiInstance = buildApi(priorityClient(client))
 
             //サムネ読み込みなどで使われるGlideのヘッダを準備してやる
             authForGlide = LazyHeaders.Builder()
@@ -193,13 +208,31 @@ object EpgStationV2 {
                 .build()
         }else{
             //Basic認証情報を含まないURLである
-            api = Builder()
-                .addConverterFactory(GsonConverterFactory.create())
-                .baseUrl(baseUrl)
-                .client(okHttpClientBuilder.build())
-                .build().create(ApiInterface::class.java)
+            val client = okHttpClientBuilder.build()
+            api = buildApi(client)
+            priorityApiInstance = buildApi(priorityClient(client))
         }
     }
+
+    private fun buildApi(client: OkHttpClient): ApiInterface =
+        Builder()
+            .addConverterFactory(GsonConverterFactory.create())
+            .baseUrl(baseUrl)
+            .client(client)
+            .build().create(ApiInterface::class.java)
+
+    /** [priorityApi] 用のクライアント。待ち行列だけを分ける（接続プールは [base] と共有する）。 */
+    private fun priorityClient(base: OkHttpClient): OkHttpClient =
+        base.newBuilder()
+            .dispatcher(Dispatcher().apply {
+                maxRequests = PRIORITY_MAX_REQUESTS
+                maxRequestsPerHost = PRIORITY_MAX_REQUESTS
+            })
+            .build()
+
+    /** 割り込み用クライアントが同時に走らせる数。ルール一覧の取得に接続を割いておく。 */
+    private const val PRIORITY_MAX_REQUESTS = 2
+
     class BasicAuthInterceptor(user: String, password: String) : Interceptor {
         private val credentials: String = Credentials.basic(user, password)
 
