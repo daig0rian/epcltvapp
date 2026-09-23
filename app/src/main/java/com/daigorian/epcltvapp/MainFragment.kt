@@ -883,15 +883,21 @@ class MainFragment : BrowseSupportFragment() {
         if (!isUiAlive) return
         val grid = rowsSupportFragment?.verticalGridView ?: return
         val now = SystemClock.elapsedRealtime()
-        var refreshed = 0
+        val refreshedRuleIds = ArrayList<Long>()
+        var visibleRuleRows = 0
+        var keptByCooldown = 0
         for (i in 0 until grid.childCount) {
             val position = grid.getChildAdapterPosition(grid.getChildAt(i))
             if (position < 0 || position >= mMainMenuAdapter.size()) continue
             val row = mMainMenuAdapter.get(position) as? ListRow ?: continue
             val headerId = row.headerItem.id
             val ruleId = ruleIdFromHeaderId(headerId) ?: continue
+            visibleRuleRows++
             val last = mRuleRowRefreshedAt[headerId]
-            if (last != null && now - last < RULE_ROW_REFRESH_COOLDOWN_MS) continue
+            if (last != null && now - last < RULE_ROW_REFRESH_COOLDOWN_MS) {
+                keptByCooldown++
+                continue
+            }
             // 既存行の中身だけを差分更新する経路に乗せる（orderedIds / ruleOrder は渡さない）
             mMainMenuAdapter.updateContentsListRowWithCategory(
                 GetRecordedParam(rule = ruleId, limit = RULE_ROW_INITIAL_LIMIT),
@@ -900,9 +906,14 @@ class MainFragment : BrowseSupportFragment() {
                 Category.RECORDED_BY_RULES,
                 ruleId
             )
-            refreshed++
+            refreshedRuleIds.add(ruleId)
         }
-        if (refreshed > 0) Log.i(TAG, "可視行の取り直し: $refreshed 行")
+        // 掃くたびに出すと流している間ずっと出るので、実際に取りに行ったときだけ Log.i に残す。
+        // 毎回の内訳は Log.d 側（据え置きが効いているかを追えるようにするため）。
+        if (refreshedRuleIds.isNotEmpty()) {
+            Log.i(TAG, "可視行の取り直し: ${refreshedRuleIds.size}行 ルール=$refreshedRuleIds")
+        }
+        Log.d(TAG, "可視行の掃き出し: 可視ルール行=$visibleRuleRows 取り直し=${refreshedRuleIds.size} 据え置き=$keptByCooldown")
     }
 
     /**
