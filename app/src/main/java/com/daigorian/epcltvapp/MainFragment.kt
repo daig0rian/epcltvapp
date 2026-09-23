@@ -840,9 +840,23 @@ class MainFragment : BrowseSupportFragment() {
      * 信号になる。RecyclerView は表示の少し前に attach する（プリフェッチも効く）ため、
      * 画面に入りきる前に問い合わせが始まる。
      */
-    private fun installVisibleRowSweep() {
+    private fun installVisibleRowSweep(retriesLeft: Int = VISIBLE_SWEEP_INSTALL_RETRIES) {
         if (mVisibleSweepInstalled) return
-        val grid = rowsSupportFragment?.verticalGridView ?: return
+        // 行のグリッドは Leanback が子フラグメントとして組み立てる。onViewCreated の post でも
+        // onResume でもまだ出来ていないことがある（実機で 500ms ほど遅れて現れた）。
+        // 現れるまで少しの間だけ待つ。
+        val grid = rowsSupportFragment?.verticalGridView
+        if (grid == null) {
+            if (retriesLeft > 0 && isUiAlive) {
+                mHandler.postDelayed(
+                    { installVisibleRowSweep(retriesLeft - 1) },
+                    VISIBLE_SWEEP_INSTALL_RETRY_MS
+                )
+            } else {
+                Log.i(TAG, "可視行の取り直し: 行のグリッドが現れないため仕掛けられなかった")
+            }
+            return
+        }
         grid.addOnChildAttachStateChangeListener(
             object : RecyclerView.OnChildAttachStateChangeListener {
                 override fun onChildViewAttachedToWindow(view: View) = scheduleVisibleSweep()
@@ -882,6 +896,8 @@ class MainFragment : BrowseSupportFragment() {
     private fun refreshVisibleRuleRows() {
         if (!isUiAlive) return
         val grid = rowsSupportFragment?.verticalGridView ?: return
+        // ここまで来たならグリッドはある。まだ仕掛けていなければこの機会に仕掛ける。
+        installVisibleRowSweep()
         val now = SystemClock.elapsedRealtime()
         val refreshedRuleIds = ArrayList<Long>()
         var visibleRuleRows = 0
@@ -2340,6 +2356,10 @@ class MainFragment : BrowseSupportFragment() {
          * 短くすると追随はよくなるが、流している最中の問い合わせが増える。
          */
         private const val VISIBLE_SWEEP_DELAY_MS = 300L
+
+        /** 行のグリッドが現れるのを待つ間隔と回数（200ms × 15 = 3秒）。 */
+        private const val VISIBLE_SWEEP_INSTALL_RETRY_MS = 200L
+        private const val VISIBLE_SWEEP_INSTALL_RETRIES = 15
 
         /**
          * 同じルール行を取り直すまでの最短間隔（ms）。
