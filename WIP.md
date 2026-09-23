@@ -42,6 +42,7 @@ Issue #103 / v1.40 リリース前に入れる。
 - [x] SettingsActivity を FragmentActivity へ
 - [x] SettingsFragment: 2つの setOnPreferenceClickListener
 - [x] MainFragment: 合図を拾って reloadContentRows()
+- [x] 設定画面のヘッダにもアイコンを出す（`preferenceScreen.icon` を compound drawable で）
 
 ## 残タスク
 

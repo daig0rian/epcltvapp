@@ -1,5 +1,6 @@
 <PreferenceScreen
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    app:icon="@drawable/ic_sidebar_settings"
     app:title="@string/settings_title">
 
     <PreferenceScreen

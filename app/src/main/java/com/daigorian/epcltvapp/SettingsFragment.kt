@@ -3,6 +3,8 @@ package com.daigorian.epcltvapp
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.preference.LeanbackPreferenceFragment
@@ -80,6 +82,32 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
     }
 
     class PrefFragment : LeanbackPreferenceFragment() {
+
+        /**
+         * 画面のヘッダにも、その画面のアイコンを出す。
+         *
+         * leanback のヘッダ（`decor_title`）はアイコン用の枠を持たない素の TextView で、
+         * [LeanbackPreferenceFragment.onViewCreated] が文字を入れるだけ。そこで文字の左へ
+         * compound drawable として置く。
+         *
+         * 絵柄は `preferenceScreen.icon` から取るので、XML 側で `app:icon` を書いた画面は
+         * 何もしなくてもヘッダに出る（対応表を持たずに済む）。
+         * 色はタイトル文字に合わせる。同じ drawable が一覧の項目側でも使われているため、
+         * 色を変える前に [android.graphics.drawable.Drawable.mutate] で切り離す。
+         */
+        override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+            super.onViewCreated(view, savedInstanceState)
+            val decorTitle = view.findViewById<TextView>(androidx.leanback.preference.R.id.decor_title)
+                ?: return
+            val icon = preferenceScreen?.icon?.mutate() ?: return
+            val size = resources.getDimensionPixelSize(R.dimen.settings_header_icon_size)
+            icon.setTint(decorTitle.currentTextColor)
+            icon.setBounds(0, 0, size, size)
+            decorTitle.setCompoundDrawablesRelative(icon, null, null, null)
+            decorTitle.compoundDrawablePadding =
+                resources.getDimensionPixelSize(R.dimen.settings_header_icon_padding)
+        }
+
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
             val root = arguments.getString(PREFERENCE_ROOT, null)
             val prefResId = arguments.getInt(PREFERENCE_RESOURCE_ID)
