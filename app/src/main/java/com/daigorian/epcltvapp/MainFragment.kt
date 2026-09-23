@@ -301,7 +301,11 @@ class MainFragment : BrowseSupportFragment() {
              * 根が素の View なので、その view をそのまま包むと今度はそこで ClassCastException になる
              * （実機で発生）。そのため区切り線の見た目はそのまま、根を RowHeaderView にした
              * R.layout.sidebar_divider を使う。
+             *
+             * レイアウトを差し替える RowHeaderPresenter(int) は @RestrictTo(LIBRARY_GROUP) のため
+             * lint が RestrictedApi として咎めるが、上記のキャストを通すにはこの経路しかない。
              */
+            @SuppressLint("RestrictedApi")
             private val dividerPresenter = object : RowHeaderPresenter(R.layout.sidebar_divider) {
                 override fun onBindViewHolder(viewHolder: Presenter.ViewHolder, item: Any?) {
                     // 区切り線なので何も表示しない
