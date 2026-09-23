@@ -1056,7 +1056,9 @@ class MainFragment : BrowseSupportFragment() {
      * あとから届く1ルール分の応答で埋まる。
      *
      * ついでに、ruleId が付いていない録画（＝番組表から直接予約したもの）も同じページから拾って渡す。
-     * この一覧を作るための追加リクエストは発生しない。
+     * この行のための追加リクエストは、「録画の新しい順」では発生しない（元から走る並べ替えの取得を
+     * 使い回すため）。「ルールの新しい順」「ルールの古い順」では、この行のために新たに走る
+     * （最大 [AGGREGATE_MAX_PAGES] リクエスト・[AGGREGATE_MAX_PAGES] × [AGGREGATE_PAGE_LIMIT] 件）。
      *
      * @param onReady ページが1枚返るたびに呼ぶ。1ページ目で行の追加を始められるようにするためで、
      *        失敗したときも必ず一度は呼ぶ（呼ばれないと待っている側が動き出せない）。
@@ -1137,25 +1139,35 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
-     * 「番組表からの録画」の行を、取得済みのアイテムから作る。
+     * 「最近の録画」の応答から、「番組表からの録画」の行を出す。
      *
      * EPGStation は録画に予約元のルール id を残すので、ruleId が付いていない録画が
-     * 番組表から直接予約したものになる（実サーバーで確認）。材料は既存の取得をそのまま使い回す
-     * ——「最近の録画」の最初の1ページと、並び順の下ごしらえで読む `/api/recorded`——
-     * ため、この行のための追加リクエストは発生しない。
-     *
-     * サイドバーでの位置が決まっている行なので、中身が無くても消さずに出しておく（出たり消えたり
-     * しない方が落ち着く）。
+     * 番組表から直接予約したものになる（実サーバーで確認）。ここは**行を早く出すことだけ**を
+     * 担い、中身は下ごしらえ（[fetchLatestRecordedSeed]）が確定する。中身を入れ替えると、
+     * 復帰時（`updateRows(includeRules = false)`）に、深い走査で集めた行が最新24件に
+     * 含まれる数件まで縮んでしまう。すでに出ている行には触らない。
      */
-    private fun updateManualRecordedRow(items: List<Any>, keepContentsWhenEmpty: Boolean = false) {
+    private fun ensureManualRecordedRow() {
         if (!isUiAlive) return
-        mMainMenuAdapter.updateRowFromItems(
+        mMainMenuAdapter.ensureRow(
+            Category.MANUAL_RECORDED,
+            Category.MANUAL_RECORDED.ordinal.toLong() * 10000,
+            getString(R.string.manual_recorded)
+        )
+    }
+
+    /**
+     * 下ごしらえ（[fetchLatestRecordedSeed]）の応答から、「番組表からの録画」の行の中身を確定する。
+     *
+     * 深い走査で拾った番組表予約の録画が中身になる。0件なら空の行になる（行は残す）。
+     */
+    private fun updateManualRecordedRow(items: List<Any>) {
+        if (!isUiAlive) return
+        mMainMenuAdapter.replaceRowContents(
             Category.MANUAL_RECORDED,
             Category.MANUAL_RECORDED.ordinal.toLong() * 10000,
             getString(R.string.manual_recorded),
-            items,
-            keepWhenEmpty = true,
-            keepContentsWhenEmpty = keepContentsWhenEmpty
+            items
         )
     }
 
@@ -1949,37 +1961,13 @@ class MainFragment : BrowseSupportFragment() {
         }
 
         /**
-         * 取得済みのアイテムで行の中身を差し替える（通信しない）。
+         * 取得済みのアイテムで行の中身を差し替える（通信しない）。行が無ければ作る。
          *
-         * 中身が同じときは触らない（無駄な再描画を避ける）。
-         *
-         * @param keepWhenEmpty アイテムが無くても行を消さずに残すか。位置が決まっている行は true。
-         * @param keepContentsWhenEmpty items が空のときに、いま出ている中身をそのまま残すか。
-         *        「最初の1ページだけ見たら空だった」という理由で消さないために使う。
+         * 中身が同じときは触らない（無駄な再描画を避ける）。中身が空でも行は消さずに残す
+         * （位置が決まっている行は出たり消えたりしない方が落ち着く）。
          */
-        fun updateRowFromItems(
-            category: Category,
-            headerId: Long,
-            title: String,
-            items: List<Any>,
-            keepWhenEmpty: Boolean = false,
-            keepContentsWhenEmpty: Boolean = false
-        ) {
+        fun replaceRowContents(category: Category, headerId: Long, title: String, items: List<Any>) {
             synchronized(this) {
-                if (items.isEmpty()) {
-                    val current = getListRowByHeaderId(headerId)
-                    if (!keepWhenEmpty) {
-                        if (current != null) deleteCategory(category)
-                        return
-                    }
-                    if (current == null) {
-                        // 中身は無いが、位置が決まっている行なので出しておく
-                        addToCategory(category, ListRow(HeaderItem(headerId, title), ArrayObjectAdapter(mCardPresenter)))
-                    } else if (!keepContentsWhenEmpty) {
-                        (current.adapter as? ArrayObjectAdapter)?.clear()
-                    }
-                    return
-                }
                 val current = getListRowByHeaderId(headerId)
                 val adapter = if (current == null) {
                     ArrayObjectAdapter(mCardPresenter).also { created ->
@@ -1992,6 +1980,19 @@ class MainFragment : BrowseSupportFragment() {
                 if (adapter.size() == items.size && items.indices.all { adapter.get(it) == items[it] }) return
                 adapter.clear()
                 items.forEach { adapter.add(it) }
+            }
+        }
+
+        /**
+         * 行を、中身なしで出す。すでに出ていれば何もしない。
+         *
+         * 「番組表からの録画」の行を「最近の録画」の応答で早く出すために使う。中身は
+         * 下ごしらえ（[MainFragment.fetchLatestRecordedSeed]）が確定するので、ここでは触らない。
+         */
+        fun ensureRow(category: Category, headerId: Long, title: String) {
+            synchronized(this) {
+                if (getListRowByHeaderId(headerId) != null) return
+                addToCategory(category, ListRow(HeaderItem(headerId, title), ArrayObjectAdapter(mCardPresenter)))
             }
         }
 
@@ -2117,13 +2118,11 @@ class MainFragment : BrowseSupportFragment() {
                             }
                         }
 
-                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）も拾って行に出す。
-                        // 中身が無くても行は出す（位置が決まっている行なので出たり消えたりしない方が落ち着く）。
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）の行を出す。
+                        // 中身の確定は下ごしらえ（fetchLatestRecordedSeed）が担うので、ここは行を出すだけ。
                         if (category == Category.RECENTLY_RECORDED) {
-                            val manual = getRecordedResponse.recorded.filter { it.ruleId == null }
-                            Log.i(TAG, "番組表からの録画: 最近の録画の最初の取得から ${manual.size}件")
-                            // 空だったときは、いま出ている中身を消さない（最初の1ページだけ見て空でも後で増える）
-                            updateManualRecordedRow(manual, keepContentsWhenEmpty = manual.isEmpty())
+                            Log.i(TAG, "番組表からの録画: 最近の録画が取れたので行だけ出す")
+                            ensureManualRecordedRow()
                         }
 
                         //続きがあるなら"次を読み込む"を置く。
@@ -2207,13 +2206,11 @@ class MainFragment : BrowseSupportFragment() {
                                 listRowAdapter.add(index,it)
                             }
                         }
-                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）も拾って行に出す。
-                        // 中身が無くても行は出す（位置が決まっている行なので出たり消えたりしない方が落ち着く）。
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）の行を出す。
+                        // 中身の確定は下ごしらえ（fetchLatestRecordedSeed）が担うので、ここは行を出すだけ。
                         if (category == Category.RECENTLY_RECORDED) {
-                            val manual = getRecordedResponse.records.filter { it.ruleId == null }
-                            Log.i(TAG, "番組表からの録画: 最近の録画の最初の取得から ${manual.size}件")
-                            // 空だったときは、いま出ている中身を消さない（最初の1ページだけ見て空でも後で増える）
-                            updateManualRecordedRow(manual, keepContentsWhenEmpty = manual.isEmpty())
+                            Log.i(TAG, "番組表からの録画: 最近の録画が取れたので行だけ出す")
+                            ensureManualRecordedRow()
                         }
 
                         //続きがあるなら"次を読み込む"を置く。
