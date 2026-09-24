@@ -26,6 +26,20 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
         private const val IP_REGEX_PATTERN = """^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"""
         private const val PORT_REGEX_PATTERN = """^([1-9]|[1-9][0-9]{1,3}|[1-5][0-9]{4}|6[0-4][0-9]{3}|65[0-4][0-9]{2}|655[0-2][0-9]|6553[0-5])$"""
 
+        /**
+         * 接続先が設定済みか。未設定なら [MainFragment] が設定画面を自動で開く。
+         *
+         * IPアドレスが既定値のままのときは「未設定」とみなす。`MainFragment.onCreate()` が
+         * 呼ぶ `PreferenceManager.setDefaultValues()` が `preferences.xml` の `defaultValue` を
+         * 書き込むため、初回起動の時点で `192.168.0.0` が入る。これは正規表現を通ってしまうので、
+         * 形だけ見ると「設定済み」になり、設定画面が開かないまま空の一覧を見せることになる。
+         *
+         * 既定値はネットワークアドレスでホストアドレスとして成立しないため、これを未設定と
+         * みなして困る場面はない。リテラルではなく既定値のリソースと比べて、既定値を変えたときに
+         * 判定が追従するようにしている。
+         *
+         * ポートの既定値 (8888) は EPGStation の正規の既定値なので、判定には含めない。
+         */
         fun isPreferenceAllExists(context: Context): Boolean {
             val pref = PreferenceManager.getDefaultSharedPreferences(context)
             val useCustomUrl = pref.getBoolean(context.getString(R.string.pref_key_use_custom_base_url), false)
@@ -35,6 +49,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 val ipRegEx = Regex(pattern = IP_REGEX_PATTERN)
                 val ipString = pref.getString(context.getString(R.string.pref_key_ip_addr), "")
                 if (ipString?.matches(ipRegEx) != true) return false
+                if (ipString == context.getString(R.string.pref_val_ip_addr_default)) return false
 
                 val portRegEx = Regex(pattern = PORT_REGEX_PATTERN)
                 val portString = pref.getString(context.getString(R.string.pref_key_port_num), "")
