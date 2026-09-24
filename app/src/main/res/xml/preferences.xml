@@ -102,7 +102,7 @@
 
             <SwitchPreference
                 app:key=         "@string/pref_key_native_ts_processing"
-                app:defaultValue="false"
+                app:defaultValue="true"
                 app:title=       "@string/native_ts_processing" />
 
         </PreferenceCategory>
