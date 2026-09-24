@@ -562,7 +562,10 @@ class MainFragment : BrowseSupportFragment() {
 
 
         //履歴行の追加。並び順は既存キー（履歴専用）を見る。
+        // 一覧が変わって行が増減したときに、選んでいた行を見失わないよう他の呼び出し元と揃える。
+        val selectedRowId = selectedRowHeaderId()
         refreshSearchHistoryRows()
+        restoreSelection(selectedRowId)
 
         // 画面に戻っただけのときはここで止める。ルール行は前回の内容のまま残す。
         if (!includeRules) {
@@ -988,12 +991,27 @@ class MainFragment : BrowseSupportFragment() {
      * 以前は履歴に関わる設定が変わるたびに updateRows() を呼んでいた。updateRows() は全カテゴリを
      * 作り直すため、履歴の並びを変えただけで録画ルール全件の getRecorded() も走っていた
      * （600件の環境なら600リクエスト）。ここでは履歴カテゴリしか触らない。
+     *
+     * 並んでいる履歴（キーワードと並び順）が前回と同じなら、行は消さずに中身だけ取り直す。
+     * 画面に戻るたびに行が消えて作り直され、選択していた行が失われるのを避けるため。
+     * 履歴の行は headerId がカテゴリ内の位置で決まり、既存行を使い回すと見出しは書き換わらないので、
+     * 一覧が変わったときだけは消してから作り直す。
      */
     private fun refreshSearchHistoryRows() {
-        mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
-
         val historyList = SearchFragment.getHistory(requireContext())
         val orderedHistory = if (isHistoryNewestFirst()) historyList.asReversed() else historyList
+
+        val existing = mMainMenuAdapter.listRowsInCategory(Category.SEARCH_HISTORY)
+        val base = Category.SEARCH_HISTORY.ordinal.toLong() * 10000
+        val unchanged = existing.size == orderedHistory.size &&
+                existing.withIndex().all { (i, row) ->
+                    row.headerItem.id == base + i && row.headerItem.name == orderedHistory[i]
+                }
+        if (!unchanged) {
+            Log.i(TAG, "検索履歴: 一覧が変わったので行を作り直す ${existing.size}行 → ${orderedHistory.size}行")
+            mMainMenuAdapter.deleteCategory(Category.SEARCH_HISTORY)
+        }
+
         orderedHistory.forEachIndexed { index, it ->
             mMainMenuAdapter.updateContentsListRowWithCategory(
                 GetRecordedParam(keyword = it),
@@ -1929,6 +1947,15 @@ class MainFragment : BrowseSupportFragment() {
             synchronized(this) {
                 if (getListRowByHeaderId(headerId) != null) return
                 addToCategory(category, ListRow(HeaderItem(headerId, title), ArrayObjectAdapter(mCardPresenter)))
+            }
+        }
+
+        /** カテゴリに属する ListRow を、並んでいる順に返す（区切り線・見出し行は除く）。 */
+        fun listRowsInCategory(cat: Category): List<ListRow> {
+            synchronized(this) {
+                val start = numOfRowInCategory.copyOfRange(0, cat.ordinal).sum()
+                return (start until start + numOfRowInCategory[cat.ordinal])
+                    .mapNotNull { get(it) as? ListRow }
             }
         }
 
