@@ -350,10 +350,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val isRawTs = isRecordedTs ||
                 (isLiveMpegTs && liveM2tsProfiles.getOrNull(liveMpegTsMode)?.isUnconverted == true)
 
-        // ライブmpegts直送は#33のクラッシュ疑いにより長らくネイティブTS処理を強制バイパス
-        // していたが、Issue #34でユーザー切り替え可能な設定にした。#33が実機で未解決のため、
-        // デフォルトはOFF（従来通りバイパス）とし、必要な人だけONにする。
-        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), false)
+        // 既定はON。放送そのままのTSでも字幕・副音声・文字スーパーを扱えるようにするため。
+        // preferences.xml の defaultValue と揃えること（片方だけ変えると、設定を一度も
+        // 開いていない端末と開いた端末で挙動が分かれる）。
+        // 一部機種でONにすると落ちるという報告があり（#33。再現せず終了）、OFFへ退避できる
+        // 設定として残している。
+        val nativeTsProcessingPref = prefs.getBoolean(getString(R.string.pref_key_native_ts_processing), true)
         useNativeTsProcessing = isRawTs && nativeTsProcessingPref
 
         // Build ExoPlayer
