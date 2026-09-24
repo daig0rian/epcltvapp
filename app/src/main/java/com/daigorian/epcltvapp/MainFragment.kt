@@ -1765,6 +1765,16 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     private fun updateBackground(uri: String?) {
+        // まだ録画カードを一度も選んでいない（接続設定が無い・録画0件など）と uri は null のまま。
+        // GlideUrl は null と空文字を例外で弾くので、ここで起動直後と同じ背景色に戻して終える。
+        // サムネイルの無い録画に対してわざと作る無効な URL（getThumbnailURL("")）は空ではないので、
+        // これまでどおり Glide の .error() へ落ちる。
+        if (uri.isNullOrEmpty()) {
+            mBackgroundManager.color = ContextCompat.getColor(requireContext(), R.color.background_no_thumbnail)
+            mBackgroundTimer?.cancel()
+            return
+        }
+
         val width = mMetrics.widthPixels
         val height = mMetrics.heightPixels
 
