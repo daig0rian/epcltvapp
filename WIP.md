@@ -34,9 +34,25 @@ Issue の対応案のうち**「既定値のままなら未設定とみなす」
 
 ポート既定値の `8888` は EPGStation の正規の既定値なので判定に含めない。
 
+## 追加でやること（同じPRにまとめる）
+
+Issue #52 を直した結果、**接続先が未設定のときは設定行も出なくなった**（未設定だと
+`onCreate` が設定画面を開くだけで `loadRows()` へ進まないため）。どのみち消す行なので、
+引退まで同じPRでやる。
+
+- [x] `Category.SETTINGS` と `loadRows()` の行構築を削除
+- [x] クリック処理の `SettingsCardPresenter.Item` 分岐を削除
+- [x] `SettingsCardPresenter.kt` を削除（他から使われていない）
+- [x] `mSettingsRowAdapter`、サイドバーのアイコン対応表の該当行を削除
+- [x] MANUAL.md の記述を歯車からの導線に書き換え
+
+文字列・drawable はすべて `preferences.xml`（#105）が使っているので、未使用になったものは無い。
+
 ## 残タスク
 
-- [ ] `isPreferenceAllExists()` に既定値の判定を足す
+- [x] `isPreferenceAllExists()` に既定値の判定を足す
+- [ ] 行がゼロのときに歯車が出るかの確認（出ないなら手当てが要る）
+- [ ] screenshots/setup-1-settings-row.png と row-settings.png の撮り直し
 - [ ] 実機確認
 - [ ] WIP.md を削除してコミットしてから PR 作成
 

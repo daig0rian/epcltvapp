@@ -104,8 +104,6 @@ class MainFragment : BrowseSupportFragment() {
     /** 可視行の掃き出しを仕掛ける購読を、もう張ったか。 */
     private var mVisibleSweepInstalled = false
 
-    private var mSettingsRowAdapter: ArrayObjectAdapter? = null
-
     /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
     private var mSearchOrb: View? = null
 
@@ -720,50 +718,12 @@ class MainFragment : BrowseSupportFragment() {
         mRuleRowRefreshedAt.clear()
 
         //コンテンツをロード。
+        // 設定への入口はタイトル行の歯車（addSettingsButton）が担う。一覧の最下段に「設定」の行は置かない。
         updateRows()
-
-        //"設定"　のボタンが乗る行
-        val gridHeader = HeaderItem(-Category.SETTINGS.ordinal.toLong(), getString(R.string.settings))
-        val gridPresenter = SettingsCardPresenter()
-        val gridRowAdapter = ArrayObjectAdapter(gridPresenter)
-        mSettingsRowAdapter = gridRowAdapter
-
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_connection,
-            getString(R.string.settings_connection),
-            SettingsCardPresenter.Item.Action.CONNECTION
-        ))
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_player,
-            getString(R.string.settings_player),
-            SettingsCardPresenter.Item.Action.PLAYER
-        ))
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_image,
-            getString(R.string.settings_display),
-            SettingsCardPresenter.Item.Action.DISPLAY
-        ))
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_reload,
-            getString(R.string.reload),
-            SettingsCardPresenter.Item.Action.RELOAD
-        ))
-        // アップデート確認。カードの見た目は状態によらず常に同じで、押したときだけ確認しに行く。
-        // 起動時チェックは行わない (AppUpdateDialogFragment の KDoc を参照)。
-        gridRowAdapter.add(SettingsCardPresenter.Item(
-            R.drawable.ic_settings_update,
-            getString(R.string.settings_update),
-            SettingsCardPresenter.Item.Action.UPDATE
-        ))
-
-        mMainMenuAdapter.addToCategory(Category.SETTINGS, ListRow(gridHeader, gridRowAdapter))
-
-
-
     }
 
 
-    /** 設定行を保持したまま、コンテンツ行だけをクリアして再読み込みする */
+    /** コンテンツ行をクリアして再読み込みする */
     private fun reloadContentRows() {
         listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.MANUAL_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
@@ -1665,34 +1625,6 @@ class MainFragment : BrowseSupportFragment() {
                     intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
                     startActivity(intent)
                 }
-                is SettingsCardPresenter.Item -> {
-                    when (item.action) {
-                        SettingsCardPresenter.Item.Action.CONNECTION -> {
-                            mConnectionKeyBeforeSettings = connectionKey()
-                            mNeedsCheckConnectionOnResume = true
-                            val intent = Intent(context!!, SettingsActivity::class.java)
-                            intent.putExtra(SettingsActivity.EXTRA_START_SCREEN, getString(R.string.pref_key_screen_connection))
-                            startActivity(intent)
-                        }
-                        SettingsCardPresenter.Item.Action.PLAYER -> {
-                            val intent = Intent(context!!, SettingsActivity::class.java)
-                            intent.putExtra(SettingsActivity.EXTRA_START_SCREEN, getString(R.string.pref_key_screen_player))
-                            startActivity(intent)
-                        }
-                        SettingsCardPresenter.Item.Action.DISPLAY -> {
-                            val intent = Intent(context!!, SettingsActivity::class.java)
-                            intent.putExtra(SettingsActivity.EXTRA_START_SCREEN, getString(R.string.pref_key_screen_display))
-                            startActivity(intent)
-                        }
-                        SettingsCardPresenter.Item.Action.RELOAD -> {
-                            reloadContentRows()
-                        }
-                        SettingsCardPresenter.Item.Action.UPDATE -> {
-                            AppUpdateDialogFragment.newInstance()
-                                .show(childFragmentManager, AppUpdateDialogFragment.TAG)
-                        }
-                    }
-                }
             }
         }
     }
@@ -1889,8 +1821,7 @@ class MainFragment : BrowseSupportFragment() {
         /** 番組表から直接予約して録画したもの（ルール由来ではない録画）。 */
         MANUAL_RECORDED,
         SEARCH_HISTORY,
-        RECORDED_BY_RULES,
-        SETTINGS
+        RECORDED_BY_RULES
     }
 
     private inner class MainMenuAdapter(presenter: Presenter?) : DeleteEnabledArrayObjectAdapter(presenter) {
@@ -1947,11 +1878,6 @@ class MainFragment : BrowseSupportFragment() {
                             super.add(index, SectionRow(HeaderItem(-Category.RECORDED_BY_RULES.ordinal.toLong(), getString(R.string.by_rec_rules))))
                             numOfRowInCategory[cat.ordinal]++
                             //さらにその上に区切り線を乗せる。
-                            super.add(index,DividerRow())
-                            numOfRowInCategory[cat.ordinal]++
-                        }
-                        Category.SETTINGS->{
-                            //その上に区切り線を乗せる。
                             super.add(index,DividerRow())
                             numOfRowInCategory[cat.ordinal]++
                         }
@@ -2393,8 +2319,7 @@ class MainFragment : BrowseSupportFragment() {
             Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
             Category.MANUAL_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_bookmark,
             -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,
-            -Category.RECORDED_BY_RULES.ordinal.toLong() to R.drawable.ic_sidebar_calendar,
-            -Category.SETTINGS.ordinal.toLong() to R.drawable.ic_sidebar_settings
+            -Category.RECORDED_BY_RULES.ordinal.toLong() to R.drawable.ic_sidebar_calendar
         )
     }
 
