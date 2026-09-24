@@ -619,14 +619,17 @@ class MainFragment : BrowseSupportFragment() {
                         // v1 も同じ下ごしらえを使う。1ルール1回の取得を待たずに上位の並びを確定させる。
                         // 行を足すのは1ページ目が返った時点。2ページ目以降は裏で読み続けて並べ替えの材料に足す。
                         var rowsAdded = false
-                        fetchLatestRecordedSeed { seed ->
+                        fetchLatestRecordedSeed { seed, manualRecorded ->
                             ruleOrder.seedRecordedAt(seed)
+                            updateManualRecordedRow(manualRecorded)
                             if (!rowsAdded) {
                                 rowsAdded = true
                                 addRows(ruleOrder.orderedRuleIds(ruleSortMode))
                             }
                         }
                     } else {
+                        // 並びは仮のままでよいが、「番組表からの予約」の行は同じ取得から作る
+                        fetchLatestRecordedSeed { _, manualRecorded -> updateManualRecordedRow(manualRecorded) }
                         addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
                     }
                 }
@@ -684,14 +687,17 @@ class MainFragment : BrowseSupportFragment() {
                         // 失敗しても seed は空のまま返ってくるので、従来どおり仮の並びで行を足す。
                         // 行を足すのは1ページ目が返った時点。2ページ目以降は裏で読み続けて並べ替えの材料に足す。
                         var rowsAdded = false
-                        fetchLatestRecordedSeed { seed ->
+                        fetchLatestRecordedSeed { seed, manualRecorded ->
                             ruleOrder.seedRecordedAt(seed)
+                            updateManualRecordedRow(manualRecorded)
                             if (!rowsAdded) {
                                 rowsAdded = true
                                 addRows(ruleOrder.orderedRuleIds(ruleSortMode))
                             }
                         }
                     } else {
+                        // 並びは仮のままでよいが、「番組表からの予約」の行は同じ取得から作る
+                        fetchLatestRecordedSeed { _, manualRecorded -> updateManualRecordedRow(manualRecorded) }
                         addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
                     }
                 }
@@ -759,7 +765,7 @@ class MainFragment : BrowseSupportFragment() {
 
     /** 設定行を保持したまま、コンテンツ行だけをクリアして再読み込みする */
     private fun reloadContentRows() {
-        listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
+        listOf(Category.LIVE_CHANNELS, Category.ON_RECORDING, Category.RECENTLY_RECORDED, Category.MANUAL_RECORDED, Category.SEARCH_HISTORY, Category.RECORDED_BY_RULES)
             .forEach { mMainMenuAdapter.deleteCategory(it) }
         // 行を作り直すので、取り直した時刻の控えも捨てる（消えたルールの分を残さない）
         mRuleRowRefreshedAt.clear()
@@ -1049,14 +1055,22 @@ class MainFragment : BrowseSupportFragment() {
      * 全ルールを覆えないこともある（録画が少ないルールは深いページにしか出てこない）。覆えなかったルールは、
      * あとから届く1ルール分の応答で埋まる。
      *
+     * ついでに、ruleId が付いていない録画（＝番組表から直接予約したもの）も同じページから拾って渡す。
+     * この行のための追加リクエストは、「録画の新しい順」では発生しない（元から走る並べ替えの取得を
+     * 使い回すため）。「ルールの新しい順」「ルールの古い順」では、この行のために新たに走る
+     * （最大 [AGGREGATE_MAX_PAGES] リクエスト・[AGGREGATE_MAX_PAGES] × [AGGREGATE_PAGE_LIMIT] 件）。
+     *
      * @param onReady ページが1枚返るたびに呼ぶ。1ページ目で行の追加を始められるようにするためで、
      *        失敗したときも必ず一度は呼ぶ（呼ばれないと待っている側が動き出せない）。
+     *        第1引数は ruleId → 最新 startAt、第2引数はここまでに拾った番組表からの予約の録画。
      */
-    private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>) -> Unit) {
+    private fun fetchLatestRecordedSeed(onReady: (Map<Long, Long>, List<Any>) -> Unit) {
         val seed = HashMap<Long, Long>()
+        /** 番組表から直接予約して録画されたもの（ruleId なし）。ページをまたいで新しい順に貯める。 */
+        val manualRecorded = ArrayList<Any>()
 
-        /** 1ページ取り、(ruleId, startAt) の組と「ページが埋まっていたか」を返す。 */
-        fun requestPage(page: Int, onPage: (List<Pair<Long, Long>>, Boolean) -> Unit) {
+        /** 1ページ取り、(ruleId, startAt) の組・番組表予約の録画・「ページが埋まっていたか」を返す。 */
+        fun requestPage(page: Int, onPage: (List<Pair<Long, Long>>, List<Any>, Boolean) -> Unit) {
             val offset = page.toLong() * AGGREGATE_PAGE_LIMIT
             val limit = AGGREGATE_PAGE_LIMIT.toLong()
 
@@ -1069,13 +1083,14 @@ class MainFragment : BrowseSupportFragment() {
                             val records = response.body()?.records.orEmpty()
                             onPage(
                                 records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
+                                records.filter { it.ruleId == null },
                                 records.size >= AGGREGATE_PAGE_LIMIT
                             )
                         }
 
                         override fun onFailure(call: Call<Records>, t: Throwable) {
                             Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
-                            if (isUiAlive) onPage(emptyList(), false)
+                            if (isUiAlive) onPage(emptyList(), emptyList(), false)
                         }
                     })
                 return
@@ -1084,7 +1099,7 @@ class MainFragment : BrowseSupportFragment() {
             // EPGStation v1 も /api/recorded の形が違うだけで考え方は同じ
             val apiV1 = EpgStation.api
             if (apiV1 == null) {
-                onPage(emptyList(), false)
+                onPage(emptyList(), emptyList(), false)
                 return
             }
             apiV1.getRecorded(limit = limit, offset = offset, reverse = false)
@@ -1094,31 +1109,66 @@ class MainFragment : BrowseSupportFragment() {
                         val records = response.body()?.recorded.orEmpty()
                         onPage(
                             records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
+                            records.filter { it.ruleId == null },
                             records.size >= AGGREGATE_PAGE_LIMIT
                         )
                     }
 
                     override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
                         Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
-                        if (isUiAlive) onPage(emptyList(), false)
+                        if (isUiAlive) onPage(emptyList(), emptyList(), false)
                     }
                 })
         }
 
         fun fetchPage(page: Int) {
-            requestPage(page) { pairs, pageFull ->
+            requestPage(page) { pairs, manual, pageFull ->
                 // startAt の降順で返るので、まだ知らないルールにとっての最初の1件がそのルールの最新
                 pairs.forEach { (ruleId, startAt) -> if (!seed.containsKey(ruleId)) seed[ruleId] = startAt }
-                Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${pairs.size}件 累計ルール=${seed.size}")
+                manualRecorded.addAll(manual)
+                Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目 ${pairs.size}件 累計ルール=${seed.size} 番組表予約=${manualRecorded.size}件")
                 // 1ページ目が返った時点で呼び出し側へ渡す。ここで行の追加とそのルールの録画取得を始めさせ、
                 // 残りのページは裏で読み続けて、確定時の並べ替えの材料にする（表示を待たせない）。
-                onReady(seed)
+                onReady(seed, manualRecorded)
                 // ページが埋まっていて、上限にも達していなければ次のページを読む
                 if (pageFull && page + 1 < AGGREGATE_MAX_PAGES) fetchPage(page + 1)
             }
         }
 
         fetchPage(0)
+    }
+
+    /**
+     * 「最近の録画」の応答から、「番組表からの録画」の行を出す。
+     *
+     * EPGStation は録画に予約元のルール id を残すので、ruleId が付いていない録画が
+     * 番組表から直接予約したものになる（実サーバーで確認）。ここは**行を早く出すことだけ**を
+     * 担い、中身は下ごしらえ（[fetchLatestRecordedSeed]）が確定する。中身を入れ替えると、
+     * 復帰時（`updateRows(includeRules = false)`）に、深い走査で集めた行が最新24件に
+     * 含まれる数件まで縮んでしまう。すでに出ている行には触らない。
+     */
+    private fun ensureManualRecordedRow() {
+        if (!isUiAlive) return
+        mMainMenuAdapter.ensureRow(
+            Category.MANUAL_RECORDED,
+            Category.MANUAL_RECORDED.ordinal.toLong() * 10000,
+            getString(R.string.manual_recorded)
+        )
+    }
+
+    /**
+     * 下ごしらえ（[fetchLatestRecordedSeed]）の応答から、「番組表からの録画」の行の中身を確定する。
+     *
+     * 深い走査で拾った番組表予約の録画が中身になる。0件なら空の行になる（行は残す）。
+     */
+    private fun updateManualRecordedRow(items: List<Any>) {
+        if (!isUiAlive) return
+        mMainMenuAdapter.replaceRowContents(
+            Category.MANUAL_RECORDED,
+            Category.MANUAL_RECORDED.ordinal.toLong() * 10000,
+            getString(R.string.manual_recorded),
+            items
+        )
     }
 
     /**
@@ -1836,6 +1886,8 @@ class MainFragment : BrowseSupportFragment() {
         LIVE_CHANNELS,
         ON_RECORDING,
         RECENTLY_RECORDED,
+        /** 番組表から直接予約して録画したもの（ルール由来ではない録画）。 */
+        MANUAL_RECORDED,
         SEARCH_HISTORY,
         RECORDED_BY_RULES,
         SETTINGS
@@ -1878,6 +1930,10 @@ class MainFragment : BrowseSupportFragment() {
                             //一行しかないのでセクション行は入れない。
                             //録画中と最近の録画は一番上のグループなので区切り線は入れない。
                         }
+                        Category.MANUAL_RECORDED ->{
+                            //一行しかないのでセクション行は入れない。
+                            //最近の録画の並びに続けて置く。
+                        }
                         Category.SEARCH_HISTORY ->{
                             //検索履歴というセクション行を、さらに上に加える
                             super.add(index, SectionRow(HeaderItem(-Category.SEARCH_HISTORY.ordinal.toLong(), getString(R.string.search_history))))
@@ -1902,6 +1958,42 @@ class MainFragment : BrowseSupportFragment() {
                     }
                 }
             }//synchronized
+        }
+
+        /**
+         * 取得済みのアイテムで行の中身を差し替える（通信しない）。行が無ければ作る。
+         *
+         * 中身が同じときは触らない（無駄な再描画を避ける）。中身が空でも行は消さずに残す
+         * （位置が決まっている行は出たり消えたりしない方が落ち着く）。
+         */
+        fun replaceRowContents(category: Category, headerId: Long, title: String, items: List<Any>) {
+            synchronized(this) {
+                val current = getListRowByHeaderId(headerId)
+                val adapter = if (current == null) {
+                    ArrayObjectAdapter(mCardPresenter).also { created ->
+                        addToCategory(category, ListRow(HeaderItem(headerId, title), created))
+                    }
+                } else {
+                    current.adapter as ArrayObjectAdapter
+                }
+                // 同じ内容なら触らない
+                if (adapter.size() == items.size && items.indices.all { adapter.get(it) == items[it] }) return
+                adapter.clear()
+                items.forEach { adapter.add(it) }
+            }
+        }
+
+        /**
+         * 行を、中身なしで出す。すでに出ていれば何もしない。
+         *
+         * 「番組表からの録画」の行を「最近の録画」の応答で早く出すために使う。中身は
+         * 下ごしらえ（[MainFragment.fetchLatestRecordedSeed]）が確定するので、ここでは触らない。
+         */
+        fun ensureRow(category: Category, headerId: Long, title: String) {
+            synchronized(this) {
+                if (getListRowByHeaderId(headerId) != null) return
+                addToCategory(category, ListRow(HeaderItem(headerId, title), ArrayObjectAdapter(mCardPresenter)))
+            }
         }
 
         fun deleteCategory(cat:Category){
@@ -2026,6 +2118,13 @@ class MainFragment : BrowseSupportFragment() {
                             }
                         }
 
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）の行を出す。
+                        // 中身の確定は下ごしらえ（fetchLatestRecordedSeed）が担うので、ここは行を出すだけ。
+                        if (category == Category.RECENTLY_RECORDED) {
+                            Log.i(TAG, "番組表からの録画: 最近の録画が取れたので行だけ出す")
+                            ensureManualRecordedRow()
+                        }
+
                         //続きがあるなら"次を読み込む"を置く。
                         val numOfItem = getRecordedResponse.recorded.count().toLong()
                         if (numOfItem < getRecordedResponse.total) {
@@ -2107,6 +2206,13 @@ class MainFragment : BrowseSupportFragment() {
                                 listRowAdapter.add(index,it)
                             }
                         }
+                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）の行を出す。
+                        // 中身の確定は下ごしらえ（fetchLatestRecordedSeed）が担うので、ここは行を出すだけ。
+                        if (category == Category.RECENTLY_RECORDED) {
+                            Log.i(TAG, "番組表からの録画: 最近の録画が取れたので行だけ出す")
+                            ensureManualRecordedRow()
+                        }
+
                         //続きがあるなら"次を読み込む"を置く。
                         val numOfItem = getRecordedResponse.records.count().toLong()
                         if (numOfItem < getRecordedResponse.total) {
@@ -2285,6 +2391,7 @@ class MainFragment : BrowseSupportFragment() {
             Category.LIVE_CHANNELS.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_live,
             Category.ON_RECORDING.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_rec,
             Category.RECENTLY_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_clock,
+            Category.MANUAL_RECORDED.ordinal.toLong() * 10000 to R.drawable.ic_sidebar_bookmark,
             -Category.SEARCH_HISTORY.ordinal.toLong() to R.drawable.ic_sidebar_search,
             -Category.RECORDED_BY_RULES.ordinal.toLong() to R.drawable.ic_sidebar_calendar,
             -Category.SETTINGS.ordinal.toLong() to R.drawable.ic_sidebar_settings
