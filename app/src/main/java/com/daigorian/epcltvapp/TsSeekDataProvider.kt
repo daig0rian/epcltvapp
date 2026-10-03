@@ -33,7 +33,7 @@ internal class TsSeekDataProvider(
      * あったため、末尾からpointIntervalMs分の余裕を残す。真の終端までは通常再生で
      * 到達させる想定(そちらはTsSeekPlayerAdapter.play()のSTATE_ENDED処理で対応)。
      */
-    private val maxSeekableMs: Long = (durationMs - pointIntervalMs).coerceAtLeast(0)
+    val maxSeekableMs: Long = (durationMs - pointIntervalMs).coerceAtLeast(0)
 
     private val positions: LongArray = run {
         val pointCount = ((maxSeekableMs / pointIntervalMs) + 1).toInt().coerceIn(2, maxPointCount)

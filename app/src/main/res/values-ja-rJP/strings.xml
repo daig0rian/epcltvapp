@@ -89,6 +89,8 @@
     <string name="audio_main">主音声</string>
     <string name="audio_sub">副音声</string>
     <string name="no_sub_audio">副音声なし</string>
+    <string name="skip_backward">%1$d秒戻し</string>
+    <string name="skip_forward">%1$d秒送り</string>
     <string name="start_end_duration">%1$s ～ %2$s (%3$d分)</string>
     <string name="program_info">番組情報</string>
     <string name="close">閉じる</string>

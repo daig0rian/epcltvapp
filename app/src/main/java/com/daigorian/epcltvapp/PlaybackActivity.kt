@@ -2,6 +2,7 @@ package com.daigorian.epcltvapp
 
 import android.content.Intent
 import android.os.Bundle
+import android.view.KeyEvent
 import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.fragment.app.FragmentActivity
@@ -37,6 +38,16 @@ class PlaybackActivity : FragmentActivity() {
                 .commit()
         }
         onBackPressedDispatcher.addCallback(this, backToDetailsCallback)
+    }
+
+    /**
+     * リモコンの専用キー(字幕・音声切換・早戻し/早送り・前/次・停止)を、ビュー階層へ配る前に
+     * 再生中のフラグメントへ渡す。ここで受ける理由は [PlaybackVideoFragment.onRemoteKey] 参照。
+     */
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val playback = supportFragmentManager.findFragmentById(android.R.id.content) as? PlaybackVideoFragment
+        if (playback?.onRemoteKey(event) == true) return true
+        return super.dispatchKeyEvent(event)
     }
 
     /**
