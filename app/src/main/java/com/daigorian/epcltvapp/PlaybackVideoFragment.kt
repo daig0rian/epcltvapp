@@ -44,6 +44,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
@@ -156,6 +157,15 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // 使う([seekToByteOffsetGuess])。プローブ用のスレッドからも読むので @Volatile。
     @Volatile
     private var tsSeekGeneration = 0
+
+    // コマ送り(一時停止中の早戻し/早送り)。エンコード済み動画とHLSだけが対象([stepFrame])。
+    // 最後に画面へ出したコマの時刻(us)。再生スレッドから書かれるので @Volatile。
+    @Volatile
+    private var lastRenderedFrameTimeUs = C.TIME_UNSET
+    // 直前のコマ送りで出したコマの時刻(us)と、そのために飛んだ位置(ms)。続けて押されたとき、
+    // コマが描かれるのを待たずに次の起点を決めるために覚えておく。
+    private var frameStepAnchorUs = C.TIME_UNSET
+    private var frameStepSeekPositionMs = C.TIME_UNSET
 
     // TS追いかけ再生（Issue #42）: Details画面表示時点で収録中だったTSのみ有効化する。
     // 収録終了を確認した時点でfalseに固定し、以後は再プローブ/再確認を行わない。
@@ -383,6 +393,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             .setTrackSelector(trackSelector!!)
             .setLoadControl(loadControl)
             .build()
+
+        // コマ送りの起点にする「今出ているコマ」の時刻を拾う。再生位置は使えない——コマは
+        // 表示時刻より少し早めに描画へ回されるので、止めた時点で出ているコマは再生位置より
+        // 1〜2コマ先のことがある。
+        exoPlayer!!.setVideoFrameMetadataListener { presentationTimeUs, _, _, _ ->
+            lastRenderedFrameTimeUs = presentationTimeUs
+        }
 
         exoPlayer!!.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -738,8 +755,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         when (keyCode) {
             KeyEvent.KEYCODE_CAPTIONS -> mTransportControlGlue.toggleCaptionByKey()
             KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> mTransportControlGlue.toggleAudioByKey()
-            KeyEvent.KEYCODE_MEDIA_REWIND -> skipBy(-PlaybackSkip.BACKWARD_MS)
-            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> skipBy(PlaybackSkip.FORWARD_MS)
+            // 一時停止中は、コマ送りできる再生ならコマ送りにする。
+            KeyEvent.KEYCODE_MEDIA_REWIND ->
+                if (canStepFrame()) stepFrame(forward = false) else skipBy(-PlaybackSkip.BACKWARD_MS)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD ->
+                if (canStepFrame()) stepFrame(forward = true) else skipBy(PlaybackSkip.FORWARD_MS)
             // 前/次は画面の「最初から再生」「次のエピソード」と同じ。ボタンが出ない再生
             // (ライブ・HLS追いかけ再生)では効かせない。シークポイントを選んでいる最中も、
             // ボタン列が隠れていて押せないのに合わせて頭出しはしない。
@@ -769,6 +789,74 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         showQuickToast(
             getString(if (deltaMs < 0) R.string.skip_backward else R.string.skip_forward, seconds)
         )
+    }
+
+    /**
+     * 早戻し/早送りをコマ送りとして扱うか。一時停止中の、エンコード済み動画とHLSだけ。
+     *
+     * **録画TSは対象外。** 録画TSは長さの分からないストリームとして ExoPlayer に渡しており
+     * ([TsSeekPlayerAdapter] 参照)、ExoPlayer はそれを「シークできないメディア」として、どの
+     * 位置へのシークも先頭へのシークとして扱う(media3 1.3.1 の ProgressiveMediaPeriod.seekToUs)。
+     * 代わりに使っている疑似シークは着地が秒単位でずれるため、1コマを狙えない。
+     */
+    private fun canStepFrame(): Boolean {
+        val player = exoPlayer ?: return false
+        if (tsSeekAdapter != null || !mTransportControlGlue.isSeekEnabled) return false
+        if (player.playWhenReady) return false
+        return player.playbackState == Player.STATE_READY ||
+                player.playbackState == Player.STATE_BUFFERING
+    }
+
+    /**
+     * 一時停止したまま1コマだけ動かす。[forward] なら次のコマ、そうでなければ前のコマ。
+     *
+     * ExoPlayer は一時停止中でもシーク先以降で最初のコマを1枚描くので、出したいコマの少し手前へ
+     * 飛ぶことで実現する([FrameStep])。前のキーフレームからデコードし直すため、1回ごとに
+     * 少し時間がかかる。
+     *
+     * 起点は「今出ているコマ」の時刻。ただし続けて押している間は前回の計算結果を使う——コマが
+     * 実際に描かれるのを待たずに次が押されても、押した回数ぶん動くようにするため。再生位置が
+     * 前回飛んだ先から動いていたら(再生を挟んだ・別のシークをした)、出ているコマから数え直す。
+     */
+    private fun stepFrame(forward: Boolean) {
+        val player = exoPlayer ?: return
+        val positionMs = player.currentPosition
+        val anchorUs = if (frameStepAnchorUs != C.TIME_UNSET && positionMs == frameStepSeekPositionMs) {
+            frameStepAnchorUs
+        } else {
+            displayedFrameTimeUs(player, positionMs)
+        }
+        val durationMs = player.duration
+        val step = FrameStep.next(
+            anchorUs,
+            FrameStep.frameDurationUs(player.videoFormat?.frameRate ?: 0f),
+            forward,
+            if (durationMs == C.TIME_UNSET) -1L else durationMs * 1000,
+        ) ?: return
+        frameStepAnchorUs = step.anchorUs
+        frameStepSeekPositionMs = step.seekPositionMs
+        player.seekTo(step.seekPositionMs)
+    }
+
+    /**
+     * 今画面に出ているコマの時刻(us)。再生位置と同じ基準(ウィンドウ先頭から)に直して返す。
+     *
+     * 描画側が知らせてくる時刻はピリオド基準なので、ウィンドウとの差を足す(HLSではずれることが
+     * ある)。まだ1コマも描いていないときと、再生位置から大きく離れているとき(シークした直後で
+     * 移動先のコマがまだ描かれていない)は、再生位置で代用する。
+     */
+    private fun displayedFrameTimeUs(player: ExoPlayer, positionMs: Long): Long {
+        val positionUs = positionMs * 1000
+        val frameTimeUs = lastRenderedFrameTimeUs
+        val timeline = player.currentTimeline
+        if (frameTimeUs == C.TIME_UNSET || timeline.isEmpty) return positionUs
+        val period = timeline.getPeriod(player.currentPeriodIndex, Timeline.Period())
+        val frameTimeInWindowUs = frameTimeUs + period.positionInWindowUs
+        return if (abs(frameTimeInWindowUs - positionUs) <= FRAME_TIME_MAX_DRIFT_US) {
+            frameTimeInWindowUs
+        } else {
+            positionUs
+        }
     }
 
     /** シークで行ける上限。シークバーで選べる範囲の右端と同じ。分からなければ負の値。 */
@@ -2136,6 +2224,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // コマ送りの起点に「描画済みのコマの時刻」を使ってよい、再生位置とのずれの上限。
+        // 止めた時点のずれは1〜2コマ(早めに描画へ回される分)なので、それより十分大きく取る。
+        private const val FRAME_TIME_MAX_DRIFT_US = 500_000L
         // リモコンの専用キーのうち、この画面が受けるもの([onRemoteKey])。
         private val REMOTE_KEY_CODES = setOf(
             KeyEvent.KEYCODE_CAPTIONS,
