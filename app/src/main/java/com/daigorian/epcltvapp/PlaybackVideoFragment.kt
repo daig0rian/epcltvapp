@@ -127,6 +127,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // 速度ボタンの上に出す選択一覧。開いている間は上下キーをカーソル移動として横取りする。
     private var speedPickerView: PlaybackSpeedPickerView? = null
     private var speedPickerOpen = false
+    // 今出している短いトースト。次を出すときに消すために掴んでおく([showQuickToast])。
+    private var quickToast: Toast? = null
 
     // Text track state (加工済みTS/エンコード済み動画に埋め込まれた字幕)。
     // ARIB字幕は自前デコード(libaribcaption)なのでここには現れない——tsreadexを通す入力では
@@ -150,6 +152,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var tsSeekDataProvider: TsSeekDataProvider? = null
     private val tsProbeExecutor: java.util.concurrent.ExecutorService =
         java.util.concurrent.Executors.newSingleThreadExecutor()
+    // 疑似シークの通し番号。補正プローブの結果が戻る前に次のシークが来たら古い方を捨てるために
+    // 使う([seekToByteOffsetGuess])。プローブ用のスレッドからも読むので @Volatile。
+    @Volatile
+    private var tsSeekGeneration = 0
+    // 狙った時刻に着地するバイト位置を探す。読めた点を覚えて次のシークに使うので、再生の間
+    // 持ち続ける。プローブ用のスレッド(tsProbeExecutor)からだけ触ること。
+    private val tsSeekRefiner = TsSeekRefiner()
 
     // TS追いかけ再生（Issue #42）: Details画面表示時点で収録中だったTSのみ有効化する。
     // 収録終了を確認した時点でfalseに固定し、以後は再プローブ/再確認を行わない。
@@ -693,6 +702,87 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
+     * リモコンの専用キー(字幕・音声切換・早戻し/早送り・前/次・停止)を処理する。
+     *
+     * [PlaybackActivity.dispatchKeyEvent] から、ビュー階層へ配る前に呼ばれる。Leanback のキー処理
+     * (グルーの onKey)を通さないのは、あちらは消費したキーを「コントロールを開く合図」として
+     * 扱うため([androidx.leanback.app.PlaybackSupportFragment] の onInterceptInputEvent が
+     * tickle() を呼ぶ)。字幕を切り替えただけで映像の下側がコントロールに覆われてしまう。
+     *
+     * 再生/一時停止のキーはここでは受けない。Leanback が元から再生/一時停止ボタンに
+     * 結び付けて処理している。
+     *
+     * @return ここで受けたか。true ならキーはこれ以上どこにも流れない。
+     */
+    fun onRemoteKey(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        if (keyCode !in REMOTE_KEY_CODES) return false
+        val isSkipKey = keyCode == KeyEvent.KEYCODE_MEDIA_REWIND ||
+                keyCode == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+        // シークポイントを選んでいる最中の早戻し/早送りは Leanback に任せる。あちらはこの2つを
+        // シークバーの左右キーと同じ「目盛りを1つ動かす」として扱うので、選んでいる途中で
+        // 押したときの意味を変えない。
+        if (inSeekMode && isSkipKey) return false
+        // 動くのは押した瞬間だけ。離したとき・押しっぱなしの繰り返しは、受けるだけで何もしない。
+        // 繰り返しまで通すと、キーリピートの間隔(BRAVIAで50ms)で飛び続けて止めたい所で
+        // 止められず、録画TSではそのたびに MediaSource を開き直すことにもなる。
+        // 受けずに流すのもしない——アプリが扱わないメディアキーはシステムへ渡ってしまう。
+        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return true
+        Log.d(
+            TAG,
+            "onRemoteKey: ${KeyEvent.keyCodeToString(keyCode)} scanCode=${event.scanCode} device=${event.device?.name}"
+        )
+        if (keyCode == KeyEvent.KEYCODE_MEDIA_STOP) {
+            (activity as? PlaybackActivity)?.leavePlayback()
+            return true
+        }
+        // ここから下は再生中の画面に対する操作。番組の切り替え中や破棄の途中では受け流す。
+        if (view == null || exoPlayer == null || switchingProgram) return true
+        when (keyCode) {
+            KeyEvent.KEYCODE_CAPTIONS -> mTransportControlGlue.toggleCaptionByKey()
+            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK -> mTransportControlGlue.toggleAudioByKey()
+            KeyEvent.KEYCODE_MEDIA_REWIND -> skipBy(-PlaybackSkip.BACKWARD_MS)
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> skipBy(PlaybackSkip.FORWARD_MS)
+            // 前/次は画面の「最初から再生」「次のエピソード」と同じ。ボタンが出ない再生
+            // (ライブ・HLS追いかけ再生)では効かせない。シークポイントを選んでいる最中も、
+            // ボタン列が隠れていて押せないのに合わせて頭出しはしない。
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> if (seriesNavigationEnabled && !inSeekMode) onRestart()
+            KeyEvent.KEYCODE_MEDIA_NEXT -> if (seriesNavigationEnabled) onSkipNext()
+        }
+        return true
+    }
+
+    /**
+     * 今の位置から [deltaMs] だけ飛ぶ(負なら戻る)。リモコンの早戻し/早送りキー用。
+     *
+     * 飛べる範囲はシークバーで選べる範囲と同じ。シークできない再生(ライブ、シーク点の準備が
+     * 済んでいない録画TS)では何もしない。
+     *
+     * 起点はアダプタの位置を使う。録画TSでは疑似シークが着地するまで「着地予定の位置」を
+     * 返すので、続けて押したぶんがそのまま積み上がる([TsSeekPlayerAdapter.notifySeekPending])。
+     */
+    private fun skipBy(deltaMs: Long) {
+        if (!mTransportControlGlue.isSeekEnabled) return
+        val adapter = playerAdapter ?: return
+        val target = PlaybackSkip.target(adapter.currentPosition, deltaMs, maxSeekablePositionMs())
+            ?: return
+        Log.d(TAG, "skipBy: $deltaMs ms -> $target ms")
+        seekToPosition(target)
+        val seconds = (abs(deltaMs) / 1000).toInt()
+        showQuickToast(
+            getString(if (deltaMs < 0) R.string.skip_backward else R.string.skip_forward, seconds)
+        )
+    }
+
+    /** シークで行ける上限。シークバーで選べる範囲の右端と同じ。分からなければ負の値。 */
+    private fun maxSeekablePositionMs(): Long =
+        if (tsSeekAdapter != null) {
+            tsSeekDataProvider?.maxSeekableMs ?: -1L
+        } else {
+            playerAdapter?.duration ?: -1L
+        }
+
+    /**
      * シリーズの別の回へ切り替える。再生位置の記録・プレーヤーの解放・新しい再生の開始は
      * すべて [PlaybackActivity.switchProgram] がフラグメントを作り直すことで行われる
      * (このフラグメントは破棄され、onPause で今の再生位置が記録される)。
@@ -1219,18 +1309,44 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * シークバー確定(DPAD_CENTER/ENTER)時にTsSeekPlayerAdapterから呼ばれるエントリポイント。
      *
      * PlaybackSeekDataProvider(TsSeekDataProvider)を設定している間、LeanbackはD-pad操作の
-     * 途中経過ではPlayerAdapter.seekTo()を呼ばず、確定時に1回だけ呼ぶ。ここでは概算バイト位置
-     * (線形補間)を求めた上で、その近傍を1回だけ軽量プローブして実際の位置に補正する。
+     * 途中経過ではPlayerAdapter.seekTo()を呼ばず、確定時に1回だけ呼ぶ。レジューム再生の復帰・
+     * 頭出し・リモコンの早戻し/早送りもここを通る。
      *
-     * 確定直後(mIsSeekがfalseに変わり通常ポーリングが再開する瞬間)から補正プローブ完了までの
+     * 狙った時刻に着地するバイト位置は [TsSeekRefiner] が探す。先頭と末尾を結ぶ直線で見積もった
+     * 位置へそのまま着地していた頃は、ビットレートが一定でない録画で着地が数十秒ずれていた
+     * (22分の録画で最大38秒)。シークバーなら気づきにくいが、「10秒戻る」が1秒しか戻らない・
+     * 40秒戻る、という形で早戻し/早送りでは使いものにならなくなる。
+     *
+     * 確定直後(mIsSeekがfalseに変わり通常ポーリングが再開する瞬間)からプローブ完了までの
      * 短い空白期間、シークバーが一瞬古い位置に戻ってから正しい位置へ進むという不自然な動きに
-     * なるのを防ぐため、notifySeekPending()で概算位置を即座に(ネットワークI/O前に)反映する。
+     * なるのを防ぐため、notifySeekPending()で狙った位置を即座に(ネットワークI/O前に)反映する。
+     *
+     * 後から来たシークが常に勝つ([seekToByteOffsetGuess] と同じ通し番号を使う)。
      */
     private fun performTsSeek(targetPositionMs: Long) {
         val provider = tsSeekDataProvider ?: return
-        val clampedTarget = targetPositionMs.coerceIn(0, provider.durationMs)
-        val guessByteOffset = provider.estimateByteOffset(clampedTarget)
-        seekToByteOffsetGuess(guessByteOffset, clampedTarget)
+        val url = tsSeekUrl ?: return
+        val client = tsSeekHttpClient ?: return
+        val clampedTarget = targetPositionMs.coerceIn(0, provider.maxSeekableMs)
+        val generation = ++tsSeekGeneration
+        tsSeekAdapter?.notifySeekPending(clampedTarget)
+        tsProbeExecutor.execute {
+            val landing = tsSeekRefiner.refine(
+                provider.toAbsoluteMs(clampedTarget),
+                provider.headPoint,
+                provider.tailPoint,
+                isCancelled = { generation != tsSeekGeneration },
+            ) { byteOffset ->
+                TsProbe.refineSeekPoint(url, client, provider.fileSize, provider.pcrPid, byteOffset)
+            } ?: return@execute
+            val landedMs = provider.toRelativeMs(landing.timeMs)
+            Log.d(TAG, "performTsSeek: target=$clampedTarget ms landed=$landedMs ms probes=${tsSeekRefiner.lastProbeCount}")
+            mainHandler.post {
+                if (!isAdded) return@post
+                if (generation != tsSeekGeneration) return@post
+                restartTsPlaybackAt(landing.byteOffset, landedMs)
+            }
+        }
     }
 
     /**
@@ -1248,18 +1364,27 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * 概算バイト位置を1回だけ軽量プローブして実際の位置に補正し、MediaSourceを開き直す。
-     * [performTsSeek]（通常のシーク確定）・[performTsCatchUpSeek]（追いかけ再生の再オープン）の
-     * 共通の後段処理。
+     * [performTsCatchUpSeek]（追いかけ再生の再オープン）用。狙いが末尾のすぐ手前なので、
+     * 末尾からの見積もりがそのまま当たり、[performTsSeek] のような合わせ込みは要らない。
+     *
+     * **後から来たシークが常に勝つ。** リモコンの早戻し/早送りは続けて押されるので、1つ目の
+     * プローブが戻る前に2つ目が来る。古い結果まで順に適用すると、押した回数だけ MediaSource を
+     * 開き直すうえ、その都度 [TsSeekPlayerAdapter.notifySeekApplied] が「着地予定の位置」を
+     * 消してしまい、次の押下が途中の着地点を起点に計算される(3回押したのに2回分しか進まない)。
      */
     private fun seekToByteOffsetGuess(guessByteOffset: Long, targetPositionMs: Long) {
         val provider = tsSeekDataProvider ?: return
         val url = tsSeekUrl ?: return
         val client = tsSeekHttpClient ?: return
+        val generation = ++tsSeekGeneration
         tsSeekAdapter?.notifySeekPending(targetPositionMs)
         tsProbeExecutor.execute {
+            // 順番を待っている間に追い越されていたら、プローブ(ネットワークI/O)ごと省く。
+            if (generation != tsSeekGeneration) return@execute
             val refined = TsProbe.refineSeekPoint(url, client, provider.fileSize, provider.pcrPid, guessByteOffset)
             mainHandler.post {
                 if (!isAdded) return@post
+                if (generation != tsSeekGeneration) return@post
                 if (refined != null) {
                     restartTsPlaybackAt(refined.byteOffset, provider.toRelativeMs(refined.timeMs))
                 } else {
@@ -1821,9 +1946,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         showMessageToast(getString(R.string.speed_not_supported))
     }
 
-    /** アイコンで状態が分かるトグルボタン向けに、通常のToastより短く表示して消す */
+    /**
+     * アイコンで状態が分かるトグルボタン向けに、通常のToastより短く表示して消す。
+     *
+     * 前のものが残っていれば消してから出す。リモコンのキー(字幕・早送りなど)は続けて
+     * 押されるので、溜めると押し終わった後も順番に出続けてしまう。
+     */
     fun showQuickToast(message: String) {
+        quickToast?.cancel()
         val toast = Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT)
+        quickToast = toast
         toast.show()
         Handler(Looper.getMainLooper()).postDelayed({ toast.cancel() }, QUICK_TOAST_DURATION_MS)
     }
@@ -1970,6 +2102,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         episodeGridView = null
         speedPickerView = null
         speedPickerOpen = false
+        quickToast = null
         super.onDestroyView()
         keepAliveHandler.removeCallbacks(keepAliveRunnable)
         hlsStreamId?.let { id ->
@@ -2032,6 +2165,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         private const val PREF_CAPTION_ENABLED = "pref_caption_enabled"
         private const val PREF_SUB_AUDIO = "pref_sub_audio"
         private const val QUICK_TOAST_DURATION_MS = 1000L
+        // リモコンの専用キーのうち、この画面が受けるもの([onRemoteKey])。
+        private val REMOTE_KEY_CODES = setOf(
+            KeyEvent.KEYCODE_CAPTIONS,
+            KeyEvent.KEYCODE_MEDIA_AUDIO_TRACK,
+            KeyEvent.KEYCODE_MEDIA_REWIND,
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD,
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS,
+            KeyEvent.KEYCODE_MEDIA_NEXT,
+            KeyEvent.KEYCODE_MEDIA_STOP,
+        )
         // 要求した再生速度と実効値が一致しているとみなす差。ExoPlayerは要求値をそのまま
         // 返してくるので厳密比較でも足りるが、浮動小数の比較なので念のため幅を持たせる。
         private const val SPEED_MATCH_TOLERANCE = 0.01f
@@ -2324,6 +2467,22 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             this.hasSubAudio = hasSubAudio
             refreshTrackActions()
         }
+
+        /**
+         * リモコンの字幕キー。画面のボタンを押したのと同じ経路を通して、ボタンの表示
+         * (アイコンとラベル)も一緒に切り替える。
+         */
+        fun toggleCaptionByKey() {
+            if (!hasSubtitle) {
+                // ボタンが出ていない(字幕を扱えない)再生。キーが効いていないように見えるので知らせる。
+                playbackFragment()?.showQuickToast(label(R.string.no_subtitle))
+                return
+            }
+            onActionClicked(ccAction)
+        }
+
+        /** リモコンの音声切換キー。副音声が無いときの知らせは切り替えの側が出す。 */
+        fun toggleAudioByKey() = onActionClicked(audioAction)
 
         private fun refreshTrackActions() {
             val adapter = primaryActions ?: return

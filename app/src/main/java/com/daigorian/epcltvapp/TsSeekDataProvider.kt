@@ -8,16 +8,15 @@ private const val TS_PACKET_SIZE = 188
  * 先頭・末尾プロービング(head/tailの2点)だけを元にLeanbackのシークUIへシーク位置を提供する。
  *
  * 全区間を事前プローブしたテーブルは持たない——duration表示同様、head/tailの2点さえ
- * 分かればシークをすぐ有効化できるため。各シーク位置に対応する正確なバイト位置は、
- * head/tailの線形補間による概算([estimateByteOffset])のみで、実際の値は
- * シーク確定時に [TsProbe.refineSeekPoint] で1回だけ軽量プローブして補正する
+ * 分かればシークをすぐ有効化できるため。各シーク位置に対応するバイト位置はここでは持たず、
+ * シーク確定時に [TsSeekRefiner] が実際の時刻を読みながら探す
  * (PlaybackVideoFragment.performTsSeek参照)。
  */
 internal class TsSeekDataProvider(
     val fileSize: Long,
     val pcrPid: Int,
-    private val headPoint: TsProbe.TimePoint,
-    private val tailPoint: TsProbe.TimePoint,
+    val headPoint: TsProbe.TimePoint,
+    val tailPoint: TsProbe.TimePoint,
     pointIntervalMs: Long,
     maxPointCount: Int,
     private val onSeekGestureStarted: () -> Unit,
@@ -33,7 +32,7 @@ internal class TsSeekDataProvider(
      * あったため、末尾からpointIntervalMs分の余裕を残す。真の終端までは通常再生で
      * 到達させる想定(そちらはTsSeekPlayerAdapter.play()のSTATE_ENDED処理で対応)。
      */
-    private val maxSeekableMs: Long = (durationMs - pointIntervalMs).coerceAtLeast(0)
+    val maxSeekableMs: Long = (durationMs - pointIntervalMs).coerceAtLeast(0)
 
     private val positions: LongArray = run {
         val pointCount = ((maxSeekableMs / pointIntervalMs) + 1).toInt().coerceIn(2, maxPointCount)
@@ -63,14 +62,8 @@ internal class TsSeekDataProvider(
         return raw - (raw % TS_PACKET_SIZE)
     }
 
-    /** head/tailのバイト位置からの線形補間による概算バイト位置(188アライン済み)。maxSeekableMsを超えないようクランプする。 */
-    fun estimateByteOffset(relativeTimeMs: Long): Long {
-        if (durationMs <= 0) return headPoint.byteOffset
-        return byteOffsetForRelativeMs(relativeTimeMs.coerceIn(0, maxSeekableMs))
-    }
-
     /**
-     * 収録中TS追いかけ再生（Issue #42）用: [estimateByteOffset]と異なり、シークバー用の
+     * 収録中TS追いかけ再生（Issue #42）用: 通常のシークと異なり、シークバー用の
      * 安全マージンである[maxSeekableMs](15秒)にはクランプしない。STATE_ENDED直後の再オープンは
      * シークバーの目盛り幅とは無関係に「今の終端の手前marginMs」へ近づくことが目的のため、
      * 0からdurationMsの全域を使ってhead/tailの平均ビットレートで見積もる。
@@ -82,4 +75,7 @@ internal class TsSeekDataProvider(
 
     /** TsProbeが返す絶対PCR時刻(ms)を、duration/position系と同じ基準(head起点の相対時刻)に変換する。 */
     fun toRelativeMs(absolutePcrMs: Long): Long = absolutePcrMs - headPoint.timeMs
+
+    /** [toRelativeMs] の逆。head起点の相対時刻(ms)を、TsProbeと同じ絶対PCR時刻に変換する。 */
+    fun toAbsoluteMs(relativeMs: Long): Long = relativeMs + headPoint.timeMs
 }
