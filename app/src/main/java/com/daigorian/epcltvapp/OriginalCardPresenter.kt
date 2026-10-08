@@ -267,31 +267,41 @@ class OriginalCardPresenter() : Presenter() {
             }
         }
 
-        updateNowPlayingOverlay(cardView, item)
+        updateThumbnailOverlays(cardView, item)
     }
 
     /**
-     * 「再生中」の目印を出し入れする。カードは使い回されるので、毎回どちらかを必ず行う。
+     * サムネイルに重ねる目印(「再生中」とプロテクト済みの南京錠)を出し入れする。
+     * カードは使い回されるので、毎回いったん全て外してから要るものだけを載せる。
      *
      * [ImageCardView] は子ビューを縦に積む [androidx.leanback.widget.BaseCardView] 派生で、
      * 重ねるビューを足せない。サムネイルの ViewOverlay に載せることで、レイアウトへ手を
      * 入れずに画像の上へ描く。
      */
-    private fun updateNowPlayingOverlay(cardView: ImageCardView, item: Any) {
-        val itemId = when (item) {
-            is RecordedProgram -> item.id
-            is RecordedItem -> item.id
-            else -> null
-        }
+    private fun updateThumbnailOverlays(cardView: ImageCardView, item: Any) {
         val overlay = cardView.mainImageView?.overlay ?: return
         overlay.clear()
-        if (itemId == null || itemId != nowPlayingId) return
-        overlay.add(
-            NowPlayingOverlayDrawable(cardView.context.getString(R.string.now_playing)).apply {
-                // setMainImageDimensions() でこのサイズに固定してあるので、実測を待たずに置ける。
-                setBounds(0, 0, CARD_WIDTH, CARD_HEIGHT)
-            }
-        )
+        val (itemId, isProtected) = when (item) {
+            is RecordedProgram -> item.id to item.protection
+            is RecordedItem -> item.id to item.isProtected
+            else -> return
+        }
+        // 「再生中」はサムネイル全体を暗くするので先に載せ、南京錠がその下に沈まないようにする。
+        if (itemId == nowPlayingId) {
+            overlay.add(
+                NowPlayingOverlayDrawable(cardView.context.getString(R.string.now_playing)).apply {
+                    // setMainImageDimensions() でこのサイズに固定してあるので、実測を待たずに置ける。
+                    setBounds(0, 0, CARD_WIDTH, CARD_HEIGHT)
+                }
+            )
+        }
+        if (isProtected) {
+            overlay.add(
+                ProtectedBadgeDrawable(cardView.context, PROTECTED_BADGE_SIZE_RATIO).apply {
+                    setBounds(0, 0, CARD_WIDTH, CARD_HEIGHT)
+                }
+            )
+        }
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
@@ -334,6 +344,9 @@ class OriginalCardPresenter() : Presenter() {
 
         private const val CARD_WIDTH = 313
         private const val CARD_HEIGHT = 176
+
+        /** 南京錠(下敷きの円)の直径。サムネイルの高さに対する比。 */
+        private const val PROTECTED_BADGE_SIZE_RATIO = 0.24f
     }
 }
 

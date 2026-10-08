@@ -95,6 +95,21 @@
     <string name="program_info">番組情報</string>
     <string name="close">閉じる</string>
 
+    <!-- 録画のプロテクト（EPGStation の自動削除の対象から外す）。詳細画面 -->
+    <string name="protect">プロテクト</string>
+    <string name="protect_this">この番組をプロテクト</string>
+    <string name="unprotect_this">この番組のプロテクトを解除</string>
+    <string name="protect_series">シリーズをプロテクト</string>
+    <string name="unprotect_series">シリーズのプロテクトを解除</string>
+    <string name="protect_target_single">「%1$s」</string>
+    <string name="protect_target_series">「%1$s」 %2$d番組</string>
+    <string name="protect_done">プロテクトしました</string>
+    <string name="unprotect_done">プロテクトを解除しました</string>
+    <string name="protect_series_done">%1$d番組をプロテクトしました</string>
+    <string name="unprotect_series_done">%1$d番組のプロテクトを解除しました</string>
+    <string name="protect_failed">プロテクトの変更に失敗しました</string>
+    <string name="protect_partially_failed">%1$d番組中%2$d番組で失敗しました</string>
+
     <!-- Stream profile settings (Issue #34) -->
     <string name="pref_category_stream_profile">ストリーム画質</string>
     <string name="pref_category_ts_processing">TS処理</string>
