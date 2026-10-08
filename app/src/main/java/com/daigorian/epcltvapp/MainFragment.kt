@@ -251,12 +251,20 @@ class MainFragment : BrowseSupportFragment() {
                 mNeedsReloadHistoryOnResume = false
                 mForceNextVisibleSweep = true
                 view?.post {
-                    // 検索から戻ったときは履歴の行だけを作り直す。以前は updateRows() を呼んでいたため、
-                    // ここでも録画ルール全件の getRecorded() が走っていた。
-                    Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
-                    val selectedRowId = selectedRowHeaderId()
-                    refreshSearchHistoryRows()
-                    restoreSelection(selectedRowId)
+                    if (mHasLoadedOnce) {
+                        // 検索から戻ったときも、ほかの画面から戻ったときと同じ軽い更新をする
+                        // （検索履歴の行もこの中で取り直され、選んでいた行も保たれる）。
+                        // 以前は履歴の行だけに絞っていた。当時の updateRows() は録画ルール全件を
+                        // 取り直すしかなかったためで、ルール行を除けるようになった今は絞る理由がない。
+                        Log.i(TAG, "onResume: reloadHistory deferred → 軽い更新（ルール行は見えている分だけ）")
+                        updateRows(includeRules = false)
+                    } else {
+                        // 起動直後。このあと loadRows が全部読むので、履歴の行だけにとどめる。
+                        Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
+                        val selectedRowId = selectedRowHeaderId()
+                        refreshSearchHistoryRows()
+                        restoreSelection(selectedRowId)
+                    }
                 }
             }
             else -> {
