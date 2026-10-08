@@ -18,10 +18,10 @@ private const val PAT_PID = 0x0000
  * PCR PIDを特定してPCRの時刻を追跡する（VLCのmodules/demux/mpeg/ts.cのProbeStart/
  * ProbeEndに倣う）。全体を読むことはせず、ファイルの一部だけを読んで完結させる。
  *
- * シーク自体は都度の二分探索ではなく、head/tailの2点だけからLeanbackのシークUI
- * (PlaybackSeekDataProvider経由)をすぐ有効化し、シーク確定時に [refineSeekPoint] で
- * 1回だけ軽量プローブして補正する方式を使う。詳細はTsSeekDataProvider/
- * PlaybackVideoFragmentを参照。
+ * シーク位置の表を事前に作ることはせず、head/tailの2点だけからLeanbackのシークUI
+ * (PlaybackSeekDataProvider経由)をすぐ有効化する。狙った時刻に対応するバイト位置は、
+ * シーク確定時に [refineSeekPoint] で実際の時刻を読みながら探す。詳細はTsSeekRefiner/
+ * TsSeekDataProvider/PlaybackVideoFragmentを参照。
  */
 object TsProbe {
 
@@ -100,9 +100,8 @@ object TsProbe {
     }
 
     /**
-     * 概算バイト位置(TsSeekDataProvider.estimateByteOffset等で求めた線形補間値)の近傍を
-     * 単発プローブし、実際のPCR時刻とバイト位置を返す。シーク確定時に1回だけ呼ばれる想定
-     * (二分探索のような繰り返しは行わない)。
+     * 見積もったバイト位置の近傍を単発プローブし、そこ以降で最初に見つかるPCRの時刻と
+     * バイト位置を返す。通常のシークでは [TsSeekRefiner] が狙いの近くに来るまで数回呼ぶ。
      */
     fun refineSeekPoint(url: String, client: OkHttpClient, fileSize: Long, pcrPid: Int, guessByteOffset: Long): TimePoint? {
         val aligned = guessByteOffset.coerceIn(0, (fileSize - TS_PACKET_SIZE).coerceAtLeast(0))

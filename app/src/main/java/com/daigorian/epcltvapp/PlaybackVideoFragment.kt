@@ -157,6 +157,9 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // 使う([seekToByteOffsetGuess])。プローブ用のスレッドからも読むので @Volatile。
     @Volatile
     private var tsSeekGeneration = 0
+    // 狙った時刻に着地するバイト位置を探す。読めた点を覚えて次のシークに使うので、再生の間
+    // 持ち続ける。プローブ用のスレッド(tsProbeExecutor)からだけ触ること。
+    private val tsSeekRefiner = TsSeekRefiner()
 
     // コマ送り(一時停止中の早戻し/早送り)。エンコード済み動画とHLSだけが対象([stepFrame])。
     // 最後に画面へ出したコマの時刻(us)。再生スレッドから書かれるので @Volatile。
@@ -1394,18 +1397,44 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * シークバー確定(DPAD_CENTER/ENTER)時にTsSeekPlayerAdapterから呼ばれるエントリポイント。
      *
      * PlaybackSeekDataProvider(TsSeekDataProvider)を設定している間、LeanbackはD-pad操作の
-     * 途中経過ではPlayerAdapter.seekTo()を呼ばず、確定時に1回だけ呼ぶ。ここでは概算バイト位置
-     * (線形補間)を求めた上で、その近傍を1回だけ軽量プローブして実際の位置に補正する。
+     * 途中経過ではPlayerAdapter.seekTo()を呼ばず、確定時に1回だけ呼ぶ。レジューム再生の復帰・
+     * 頭出し・リモコンの早戻し/早送りもここを通る。
      *
-     * 確定直後(mIsSeekがfalseに変わり通常ポーリングが再開する瞬間)から補正プローブ完了までの
+     * 狙った時刻に着地するバイト位置は [TsSeekRefiner] が探す。先頭と末尾を結ぶ直線で見積もった
+     * 位置へそのまま着地していた頃は、ビットレートが一定でない録画で着地が数十秒ずれていた
+     * (22分の録画で最大38秒)。シークバーなら気づきにくいが、「10秒戻る」が1秒しか戻らない・
+     * 40秒戻る、という形で早戻し/早送りでは使いものにならなくなる。
+     *
+     * 確定直後(mIsSeekがfalseに変わり通常ポーリングが再開する瞬間)からプローブ完了までの
      * 短い空白期間、シークバーが一瞬古い位置に戻ってから正しい位置へ進むという不自然な動きに
-     * なるのを防ぐため、notifySeekPending()で概算位置を即座に(ネットワークI/O前に)反映する。
+     * なるのを防ぐため、notifySeekPending()で狙った位置を即座に(ネットワークI/O前に)反映する。
+     *
+     * 後から来たシークが常に勝つ([seekToByteOffsetGuess] と同じ通し番号を使う)。
      */
     private fun performTsSeek(targetPositionMs: Long) {
         val provider = tsSeekDataProvider ?: return
-        val clampedTarget = targetPositionMs.coerceIn(0, provider.durationMs)
-        val guessByteOffset = provider.estimateByteOffset(clampedTarget)
-        seekToByteOffsetGuess(guessByteOffset, clampedTarget)
+        val url = tsSeekUrl ?: return
+        val client = tsSeekHttpClient ?: return
+        val clampedTarget = targetPositionMs.coerceIn(0, provider.maxSeekableMs)
+        val generation = ++tsSeekGeneration
+        tsSeekAdapter?.notifySeekPending(clampedTarget)
+        tsProbeExecutor.execute {
+            val landing = tsSeekRefiner.refine(
+                provider.toAbsoluteMs(clampedTarget),
+                provider.headPoint,
+                provider.tailPoint,
+                isCancelled = { generation != tsSeekGeneration },
+            ) { byteOffset ->
+                TsProbe.refineSeekPoint(url, client, provider.fileSize, provider.pcrPid, byteOffset)
+            } ?: return@execute
+            val landedMs = provider.toRelativeMs(landing.timeMs)
+            Log.d(TAG, "performTsSeek: target=$clampedTarget ms landed=$landedMs ms probes=${tsSeekRefiner.lastProbeCount}")
+            mainHandler.post {
+                if (!isAdded) return@post
+                if (generation != tsSeekGeneration) return@post
+                restartTsPlaybackAt(landing.byteOffset, landedMs)
+            }
+        }
     }
 
     /**
@@ -1423,8 +1452,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * 概算バイト位置を1回だけ軽量プローブして実際の位置に補正し、MediaSourceを開き直す。
-     * [performTsSeek]（通常のシーク確定）・[performTsCatchUpSeek]（追いかけ再生の再オープン）の
-     * 共通の後段処理。
+     * [performTsCatchUpSeek]（追いかけ再生の再オープン）用。狙いが末尾のすぐ手前なので、
+     * 末尾からの見積もりがそのまま当たり、[performTsSeek] のような合わせ込みは要らない。
      *
      * **後から来たシークが常に勝つ。** リモコンの早戻し/早送りは続けて押されるので、1つ目の
      * プローブが戻る前に2つ目が来る。古い結果まで順に適用すると、押した回数だけ MediaSource を
