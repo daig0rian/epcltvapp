@@ -21,4 +21,16 @@
     <dimen name="settings_header_icon_size">28dp</dimen>
     <dimen name="settings_header_icon_padding">16dp</dimen>
 
+    <!-- ホームのタイトル文字の下に出す、ディスク使用量の棒（DiskUsageBarView）。
+
+         文字を棒の中に収めるので、文字の大きさも棒の高さと同じ dp で持つ
+         （sp にすると、端末の文字サイズ設定で文字だけが大きくなって棒からはみ出す）。 -->
+    <dimen name="disk_usage_bar_height">16dp</dimen>
+    <dimen name="disk_usage_bar_text_size">11dp</dimen>
+    <dimen name="disk_usage_bar_text_padding">6dp</dimen>
+    <!-- 保存先が複数あるときの、棒と棒の間。 -->
+    <dimen name="disk_usage_bar_spacing">3dp</dimen>
+    <!-- タイトル文字のベースラインから、1本目の棒の上端まで。 -->
+    <dimen name="disk_usage_bar_margin_top">5dp</dimen>
+
 </resources>

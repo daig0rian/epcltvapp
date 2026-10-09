@@ -46,6 +46,9 @@ object EpgStation {
 
         @GET("channels")
         fun getChannels(): Call<List<ChannelItemV1>>
+
+        @GET("storage")
+        fun getStorage(): Call<StorageInfoV1>
     }
 
     private var baseUrl:String = "http://192.168.0.0:8888/api/"

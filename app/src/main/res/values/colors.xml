@@ -7,4 +7,12 @@
     <color name="default_background">#1E1E1E</color>
     <color name="background_epgstation">#363636</color>
     <color name="card_background">#1E1E1E</color>
+
+    <!-- ホームのタイトル文字の下に出す、ディスク使用量の棒（DiskUsageBarView）。
+         使用済みはタイトル文字（lb_browse_title_color）と同じ色にして、下線に見えるようにする。
+         空きは、背景にサムネイルが出ていても上の文字が読めるよう、ほぼ不透明の灰色にしている。 -->
+    <color name="disk_usage_bar_used">#EEEEEE</color>
+    <color name="disk_usage_bar_free">#CC4A4A4A</color>
+    <color name="disk_usage_bar_text_on_used">#1E1E1E</color>
+    <color name="disk_usage_bar_text_on_free">#EEEEEE</color>
 </resources>
