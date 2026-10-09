@@ -923,6 +923,60 @@ class MainFragment : BrowseSupportFragment() {
             Log.i(TAG, "可視行の取り直し: ${refreshedRuleIds.size}行 ルール=$refreshedRuleIds 復帰直後=$ignoreCooldown")
         }
         Log.d(TAG, "可視行の掃き出し: 可視ルール行=$visibleRuleRows 取り直し=${refreshedRuleIds.size} 据え置き=$keptByCooldown")
+
+        // 戻ってきた直後は、「番組表からの録画」の行に出ているカードも取り直す。
+        if (ignoreCooldown) refreshVisibleManualRecordedCards()
+    }
+
+    /**
+     * 「番組表からの録画」の行のうち、いま画面に出ているカードを1枚ずつ取り直す。
+     *
+     * この行に**何が入るか**を決め直すには全録画を読む必要があり（[fetchLatestRecordedSeed]）、
+     * 戻ってくるたびにはできない。**入っているカードの中身**なら1枚1リクエストで取れるので、
+     * 離れていた間の変化（詳細画面で変えたプロテクトなど）はこちらで反映する。
+     *
+     * 行の枚数には上限が無い（ルールを使わず番組表から録る環境では数千枚になりうる）ため、
+     * 対象は画面に出ているカードに限る。1回で飛ぶリクエストは横に並ぶ枚数まで。
+     * 横へ送って初めて出てくるカードは、次に戻ってきたときか全体の読み込みまで古いまま残る。
+     * 消えた録画のカードもここでは外さない（行の顔ぶれを決めるのは全体の読み込みの役目）。
+     *
+     * 録画を1本だけ取る口をこのアプリが持っているのは EPGStation v2 だけなので、v1 では何もしない。
+     */
+    private fun refreshVisibleManualRecordedCards() {
+        val api = EpgStationV2.api ?: return
+        val headerId = Category.MANUAL_RECORDED.ordinal.toLong() * 10000
+        val rowPosition = (0 until mMainMenuAdapter.size())
+            .firstOrNull { (mMainMenuAdapter.get(it) as? ListRow)?.headerItem?.id == headerId }
+            ?: return
+        val cards = (mMainMenuAdapter.get(rowPosition) as ListRow).adapter as? ArrayObjectAdapter ?: return
+        // 行そのものが画面に出ていなければ ViewHolder が無いので、ここで帰る。
+        val cardGrid = (rowsSupportFragment?.getRowViewHolder(rowPosition) as? ListRowPresenter.ViewHolder)
+            ?.gridView ?: return
+
+        var requested = 0
+        for (i in 0 until cardGrid.childCount) {
+            val position = cardGrid.getChildAdapterPosition(cardGrid.getChildAt(i))
+            if (position < 0 || position >= cards.size()) continue
+            val shown = cards.get(position) as? RecordedItem ?: continue
+            requested++
+            api.getRecordedItem(shown.id).enqueue(object : Callback<RecordedItem> {
+                override fun onResponse(call: Call<RecordedItem>, response: Response<RecordedItem>) {
+                    if (!isUiAlive) return
+                    // 録画を1本だけ取る API はタグを返すが、一覧の API は返さない（実サーバーで確認）。
+                    // カードはどれも一覧から来ているので、タグを落として一覧と同じ形に揃える。
+                    // 揃えないと、中身が同じでも別の録画データと判定されてしまう。
+                    val fresh = response.body()?.copy(tags = null) ?: return
+                    // 応答を待つ間に行の中身が入れ替わっていることがあるので、位置は引き直す。
+                    val index = cards.indexOf(shown)
+                    if (index >= 0 && fresh != shown) cards.replace(index, fresh)
+                }
+
+                override fun onFailure(call: Call<RecordedItem>, t: Throwable) {
+                    Log.d(TAG, "番組表からの録画: カードの取り直しに失敗 id=${shown.id}")
+                }
+            })
+        }
+        if (requested > 0) Log.i(TAG, "番組表からの録画: 見えているカードを取り直す ${requested}枚")
     }
 
     /**
