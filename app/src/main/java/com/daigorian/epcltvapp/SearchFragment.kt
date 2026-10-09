@@ -29,6 +29,13 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
     private val mRowsAdapter = CustomArrayObjectAdapter(mListRowPresenter)
     private val mCardPresenter = OriginalCardPresenter()
 
+    // 結果行に振る通し番号。画面へ戻ってきて行を取り直すときに、どの行かを見分けるのに使う
+    // (同じ検索語の行が2つ並ぶことがあるので、検索語では見分けられない)。
+    private var mNextResultRowId = 0L
+
+    // まだ一度も onResume していないか。そのときの行は onCreate で取りに行ったばかりなので取り直さない。
+    private var mIsFirstResume = true
+
     override fun getResultsAdapter(): ObjectAdapter {
         return mRowsAdapter
     }
@@ -78,6 +85,39 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         }
 
         Log.i(TAG, "onResume rowsAdapterSize=${mRowsAdapter.size()}")
+
+        if (mIsFirstResume) {
+            mIsFirstResume = false
+        } else {
+            refreshResultRows()
+        }
+    }
+
+    /**
+     * 出ている結果行を取り直す。
+     *
+     * 詳細画面や再生画面から戻ってきたときに、離れていた間の変化(プロテクト・削除・録画の完了など)を
+     * カードへ反映する。行は作り直さず、中身の差分だけを入れ替える。
+     */
+    private fun refreshResultRows() {
+        var refreshed = 0
+        for (i in 0 until mRowsAdapter.size()) {
+            val row = mRowsAdapter.get(i) as? ListRow ?: continue
+            // 空の行は最初の検索結果を待っている最中。そこへ取り直しの結果も足すと二重に並ぶので、
+            // 最初の応答に任せる(0件ならその応答が行ごと消す)。
+            if (row.adapter.size() == 0) continue
+            val query = row.headerItem.name
+            mRowsAdapter.updateContentsListRow(
+                GetRecordedParam(keyword = query, reverse = true),
+                GetRecordedParamV2(keyword = query, isReverse = true),
+                query,
+                row.headerItem.id,
+                mCardPresenter,
+                requireContext()
+            )
+            refreshed++
+        }
+        Log.i(TAG, "結果行の取り直し: ${refreshed}行")
     }
 
     override fun onPause() {
@@ -172,7 +212,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         if(query.isEmpty()) return
 
         //まずは結果行を加える。（API呼出し後の処理の中の非同期処理で加えると連続処理したときに場所が不確定になってしまうため）
-        val newResultRowHeader = HeaderItem(query)
+        val newResultRowHeader = HeaderItem(mNextResultRowId++, query)
         val newResultRowContents = ArrayObjectAdapter(mCardPresenter)
         val newResultRow = ListRow(newResultRowHeader, newResultRowContents)
         mRowsAdapter.addToTop(newResultRow)

@@ -21,6 +21,7 @@ class SeriesPlaylistTest {
         name: String,
         original: Boolean = true,
         encoded: List<EncodedProgram>? = null,
+        protection: Boolean = false,
     ) = RecordedProgram(
         id = id,
         startAt = startAt,
@@ -28,6 +29,7 @@ class SeriesPlaylistTest {
         hasThumbnail = false,
         original = original,
         encoded = encoded,
+        protection = protection,
     )
 
     private fun playlistOf(vararg programs: RecordedProgram) =
@@ -97,6 +99,47 @@ class SeriesPlaylistTest {
         // サーバー側は半角に寄せてから突き合わせるので、こちらだけ厳密だと食い違う。
         assertTrue(SeriesPlaylist.matchesSeries("ＴＥＳＴ冒険譚 #2", "TEST冒険譚"))
         assertTrue(SeriesPlaylist.matchesSeries("TEST冒険譚 #3", "ＴＥＳＴ冒険譚"))
+    }
+
+    @Test
+    fun `連続再生用の取得は前後の回が分かった時点で打ち切る`() {
+        // 検索結果は新しい順に返る。今見ている回(2)と、それより古い回(1)が揃っている。
+        val collected = listOf(
+            SeriesEntry.of(program(2, 2_000, "ためしの冒険 #2")),
+            SeriesEntry.of(program(1, 1_000, "ためしの冒険 #1")),
+        )
+
+        assertFalse(
+            SeriesPlaylist.shouldFetchMore(
+                collected, currentId = 2, fetchedCount = 100, total = 300, page = 0, fetchAll = false
+            )
+        )
+    }
+
+    @Test
+    fun `全件の取得は検索結果が尽きるまで続ける`() {
+        val collected = listOf(
+            SeriesEntry.of(program(2, 2_000, "ためしの冒険 #2")),
+            SeriesEntry.of(program(1, 1_000, "ためしの冒険 #1")),
+        )
+
+        assertTrue(
+            "前後の回が揃っていても、残りがあるうちは取りに行く",
+            SeriesPlaylist.shouldFetchMore(
+                collected, currentId = 2, fetchedCount = 100, total = 300, page = 0, fetchAll = true
+            )
+        )
+        assertFalse(
+            SeriesPlaylist.shouldFetchMore(
+                collected, currentId = 2, fetchedCount = 300, total = 300, page = 2, fetchAll = true
+            )
+        )
+    }
+
+    @Test
+    fun `プロテクトの状態を読める`() {
+        assertTrue(SeriesEntry.of(program(1, 1_000, "ためしの冒険 #1", protection = true)).isProtected)
+        assertFalse(SeriesEntry.of(program(2, 2_000, "ためしの冒険 #2")).isProtected)
     }
 
     @Test

@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.LayerDrawable
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -24,6 +25,7 @@ import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
 import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
 import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
@@ -49,6 +51,14 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     private lateinit var mPresenterSelector: ClassPresenterSelector
     private lateinit var mAdapter: DeleteEnabledArrayObjectAdapter
     private val mCardPresenter = OriginalCardPresenter()
+
+    // 詳細行と、そこへ出しているサムネイルの元画像(南京錠を重ねる前のもの)。プロテクトの状態が
+    // 変わったときに、画像を読み込み直さずに南京錠だけを出し入れするために控えておく。
+    private var mOverviewRow: DetailsOverviewRow? = null
+    private var mOverviewBaseImage: Drawable? = null
+
+    // プロテクトの対象を取得している最中か。待っている間の連打でダイアログを二重に開かないために見る。
+    private var mLoadingProtectTargets = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         Log.d(TAG, "onCreate DetailsFragment")
@@ -117,6 +127,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     override fun onResume() {
         super.onResume()
         updateRelatedMovieListRow()
+        refreshProtectedState()
     }
 
     private fun initializeBackground(imageURL: String) {
@@ -173,7 +184,8 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 })
         }
 
-        row.imageDrawable = ContextCompat.getDrawable(requireContext(), R.drawable.default_background)
+        mOverviewRow = row
+        setOverviewImage(ContextCompat.getDrawable(requireContext(), R.drawable.default_background))
         val width = convertDpToPixel(requireContext(), DETAIL_THUMB_WIDTH)
         val height = convertDpToPixel(requireContext(), DETAIL_THUMB_HEIGHT)
 
@@ -196,7 +208,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     transition: Transition<in Drawable>?
                 ) {
                     Log.d(TAG, "details overview card image url ready: $drawable")
-                    row.imageDrawable = drawable
+                    setOverviewImage(drawable)
                     mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size())
                 }
 
@@ -207,21 +219,21 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     mSelectedRecordedProgram?.let {
                         // EPGStation Version 1.x.x
                         if (it.recording) {
-                            row.imageDrawable =
-                                ContextCompat.getDrawable(context!!, R.drawable.on_rec)
+                            setOverviewImage(
+                                ContextCompat.getDrawable(context!!, R.drawable.on_rec))
                         } else{
-                            row.imageDrawable=
-                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge)
+                            setOverviewImage(
+                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge))
                         }
                     }
                     mSelectedRecordedItem?.let{
                         // EPGStation Version 2.x.x
                         if (it.isRecording){
-                            row.imageDrawable =
-                                ContextCompat.getDrawable(context!!, R.drawable.on_rec)
+                            setOverviewImage(
+                                ContextCompat.getDrawable(context!!, R.drawable.on_rec))
                         } else{
-                            row.imageDrawable=
-                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge)
+                            setOverviewImage(
+                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge))
                         }
                     }
                     mAdapter.notifyArrayItemRangeChanged(0, mAdapter.size())
@@ -285,6 +297,11 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
 
         actionAdapter.add(Action(ACTION_SHOW_DESCRIPTION, getString(R.string.program_info)))
+
+        // プロテクトを切り替える API は EPGStation v2 にしか無い。v1 は状態を読めるだけなので出さない。
+        if (mSelectedRecordedItem != null) {
+            actionAdapter.add(Action(ACTION_PROTECT, getString(R.string.protect)))
+        }
 
         row.actionsAdapter = actionAdapter
 
@@ -351,6 +368,11 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 }
                 ProgramInfoDialogFragment.newInstance(programName, bodyText)
                     .show(childFragmentManager, ProgramInfoDialogFragment.TAG)
+                return@OnActionClickedListener
+            }
+
+            if (action.id == ACTION_PROTECT) {
+                showProtectDialog()
                 return@OnActionClickedListener
             }
 
@@ -428,6 +450,155 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         }
         mPresenterSelector.addClassPresenter(DetailsOverviewRow::class.java, detailsPresenter)
+    }
+
+    /** 今開いている録画がプロテクト済みか。 */
+    private fun isSelectedProtected(): Boolean =
+        mSelectedRecordedProgram?.protection ?: mSelectedRecordedItem?.isProtected ?: false
+
+    /**
+     * 詳細行のサムネイルを差し替える。プロテクト済みなら南京錠を重ねる。
+     *
+     * 大きさを持たない画像(読み込みを待つ間の仮の背景)には重ねない。南京錠は画像の大きさに
+     * 合わせて描くので、読み込み後とは違う位置・大きさで一瞬出てしまう。
+     */
+    private fun setOverviewImage(image: Drawable?) {
+        mOverviewBaseImage = image
+        val context = context
+        mOverviewRow?.imageDrawable = if (
+            image != null && context != null && isSelectedProtected() &&
+            image.intrinsicWidth > 0 && image.intrinsicHeight > 0
+        ) {
+            LayerDrawable(arrayOf(image, ProtectedBadgeDrawable(context, PROTECTED_BADGE_SIZE_RATIO)))
+        } else {
+            image
+        }
+    }
+
+    /**
+     * 今開いている録画のプロテクト状態を [isProtected] に合わせ、画面の表示へ反映する。
+     * v2 専用(v1 にはこのアプリから状態を変える手段が無い)。
+     */
+    private fun applyProtectedState(isProtected: Boolean) {
+        val item = mSelectedRecordedItem ?: return
+        if (item.isProtected == isProtected) return
+        val updated = item.copy(isProtected = isProtected)
+        mSelectedRecordedItem = updated
+        // 画面が作り直されたときに古い状態へ戻らないよう、起動時に受け取った引数も差し替える。
+        activity?.intent?.putExtra(DetailsActivity.RECORDEDITEM, updated)
+        mOverviewRow?.item = updated
+        setOverviewImage(mOverviewBaseImage)
+    }
+
+    /**
+     * 今開いている録画のプロテクト状態を取り直す。
+     *
+     * 一覧から受け取った状態は古いことがあり、この画面を開いている間にも変わりうる——
+     * 関連動画から開いた別の回でシリーズごとプロテクトして戻ってきた場合など。関連動画の
+     * カードは取り直しで更新されるので、こちらだけ古いままだと同じ録画なのに南京錠の有無が
+     * 食い違う。
+     */
+    private fun refreshProtectedState() {
+        val item = mSelectedRecordedItem ?: return
+        EpgStationV2.api?.getRecordedItem(item.id)?.enqueue(object : Callback<RecordedItem> {
+            override fun onResponse(call: Call<RecordedItem>, response: Response<RecordedItem>) {
+                if (!isAdded) return
+                response.body()?.let { applyProtectedState(it.isProtected) }
+            }
+
+            override fun onFailure(call: Call<RecordedItem>, t: Throwable) {
+                // 取り直せなくても、受け取った時点の状態でこの画面は使える。
+                // 接続に失敗したことは、同時に走る関連動画の取得のほうが知らせる。
+                Log.d(TAG, "refreshProtectedState() getRecordedItem API Failure")
+            }
+        })
+    }
+
+    /**
+     * プロテクトの対象を選ぶダイアログを開く。
+     *
+     * 開く前にシリーズの全件を取りに行く。シリーズの本数を選択肢に書いて見せるためと、
+     * 選ばれたときに要求を送る先をこの時点で確定させるため。
+     */
+    private fun showProtectDialog() {
+        val item = mSelectedRecordedItem ?: return
+        if (mLoadingProtectTargets) return
+        mLoadingProtectTargets = true
+        SeriesPlaylist.load(null, item, fetchAll = true) { series ->
+            mLoadingProtectTargets = false
+            if (!isAdded || isStateSaved) return@load
+            // 選択肢はシリーズの一覧から組むので、単体の側もそれと同じ時点の状態に揃える。
+            series?.entries?.firstOrNull { it.id == item.id }
+                ?.let { applyProtectedState(it.isProtected) }
+            val current = mSelectedRecordedItem ?: return@load
+            val choices = ProtectOperation.choicesFor(
+                current.id, current.name, current.isProtected, series
+            )
+            ProtectDialogFragment.newInstance(choices)
+                .show(childFragmentManager, ProtectDialogFragment.TAG)
+        }
+    }
+
+    /**
+     * [ProtectDialogFragment] で選ばれた操作を実行する。
+     *
+     * EPGStation にまとめて変える API は無いので、対象の本数だけ要求を送り、全部の結果が
+     * 揃ってから1回だけ結果を知らせる。
+     */
+    fun onProtectOperationChosen(operation: ProtectOperation) {
+        val api = EpgStationV2.api ?: return
+        val succeededIds = mutableListOf<Long>()
+        var pending = operation.idsToChange.size
+        // 結果はすべてメインスレッドへ返るので、数える側に排他は要らない。
+        fun onOneFinished() {
+            pending -= 1
+            if (pending == 0) onProtectOperationFinished(operation, succeededIds)
+        }
+        operation.idsToChange.forEach { id ->
+            val request = if (operation.protect) api.protectRecorded(id) else api.unprotectRecorded(id)
+            request.enqueue(object : Callback<ApiErrorV2> {
+                override fun onResponse(call: Call<ApiErrorV2>, response: Response<ApiErrorV2>) {
+                    if (response.isSuccessful) {
+                        succeededIds.add(id)
+                    } else {
+                        Log.w(TAG, "protect=${operation.protect} failed: id=$id HTTP${response.code()}")
+                    }
+                    onOneFinished()
+                }
+
+                override fun onFailure(call: Call<ApiErrorV2>, t: Throwable) {
+                    Log.w(TAG, "protect=${operation.protect} failed: id=$id ${t.message}")
+                    onOneFinished()
+                }
+            })
+        }
+    }
+
+    private fun onProtectOperationFinished(operation: ProtectOperation, succeededIds: List<Long>) {
+        if (!isAdded) return
+        val failedCount = operation.idsToChange.size - succeededIds.size
+        val message = when {
+            failedCount == 0 && operation.isSeries -> getString(
+                if (operation.protect) R.string.protect_series_done else R.string.unprotect_series_done,
+                operation.totalCount
+            )
+            failedCount == 0 -> getString(
+                if (operation.protect) R.string.protect_done else R.string.unprotect_done
+            )
+            operation.isSeries -> getString(
+                R.string.protect_partially_failed, operation.totalCount, failedCount
+            )
+            else -> getString(R.string.protect_failed)
+        }
+        Toast.makeText(
+            requireContext(), message,
+            if (failedCount == 0) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+        ).show()
+
+        val currentId = mSelectedRecordedItem?.id
+        if (currentId != null && currentId in succeededIds) applyProtectedState(operation.protect)
+        // 関連動画のカードに出ている南京錠も合わせる。
+        updateRelatedMovieListRow()
     }
 
 
@@ -636,8 +807,12 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         internal const val ACTION_WATCH_ORIGINAL_TS = 0L
         internal const val ACTION_SHOW_DESCRIPTION = -1L
         internal const val ACTION_WATCH_RECORDING_HLS = -2L
+        internal const val ACTION_PROTECT = -3L
 
         private const val DETAIL_THUMB_WIDTH = 274
         private const val DETAIL_THUMB_HEIGHT = 274
+
+        /** サムネイルに重ねる南京錠(下敷きの円)の直径。サムネイルの高さに対する比。 */
+        private const val PROTECTED_BADGE_SIZE_RATIO = 0.16f
     }
 }

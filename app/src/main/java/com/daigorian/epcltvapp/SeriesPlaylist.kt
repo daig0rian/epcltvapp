@@ -73,14 +73,25 @@ class SeriesPlaylist private constructor(
         private const val MAX_PAGES = 5
 
         /**
+         * シリーズを全件集めるとき([load] の fetchAll)の、続きを取りに行く回数の上限。
+         * ここに達したら集めきれなかったものとして扱い、欠けた一覧は返さない。
+         */
+        private const val MAX_PAGES_ALL = 30
+
+        /**
          * 今見ている番組と同じシリーズの録画を集める。
          *
          * 結果はメインスレッドで [onLoaded] に返る(Retrofit の enqueue と同じ)。
          * シリーズ名が取り出せない・APIが未初期化・通信に失敗した場合は null を返す。
+         *
+         * @param fetchAll false なら前後の回が分かった時点で打ち切る(連続再生用)。
+         *                 true ならシリーズの全件を集める。集めきれなかった場合は null を返す——
+         *                 一部だけの一覧を「シリーズ全体」として扱わせないため。
          */
         fun load(
             program: RecordedProgram?,
             item: RecordedItem?,
+            fetchAll: Boolean = false,
             onLoaded: (SeriesPlaylist?) -> Unit,
         ) {
             val programName = program?.name ?: item?.name
@@ -96,9 +107,9 @@ class SeriesPlaylist private constructor(
             }
             val currentId = program?.id ?: item!!.id
             if (program != null) {
-                loadV1(seriesTitle, currentId, mutableListOf(), 0, 0, onLoaded)
+                loadV1(seriesTitle, currentId, mutableListOf(), 0, 0, fetchAll, onLoaded)
             } else {
-                loadV2(seriesTitle, currentId, mutableListOf(), 0, 0, onLoaded)
+                loadV2(seriesTitle, currentId, mutableListOf(), 0, 0, fetchAll, onLoaded)
             }
         }
 
@@ -109,6 +120,7 @@ class SeriesPlaylist private constructor(
             collected: MutableList<SeriesEntry>,
             fetchedCount: Long,
             page: Int,
+            fetchAll: Boolean,
             onLoaded: (SeriesPlaylist?) -> Unit,
         ) {
             val api = EpgStation.api
@@ -132,8 +144,11 @@ class SeriesPlaylist private constructor(
                             .filter { matchesSeries(it.name, seriesTitle) }
                             .mapTo(collected) { SeriesEntry.of(it) }
                         val fetched = fetchedCount + body.recorded.size
-                        if (shouldFetchMore(collected, currentId, fetched, body.total, page)) {
-                            loadV1(seriesTitle, currentId, collected, fetched, page + 1, onLoaded)
+                        if (shouldFetchMore(collected, currentId, fetched, body.total, page, fetchAll)) {
+                            loadV1(seriesTitle, currentId, collected, fetched, page + 1, fetchAll, onLoaded)
+                        } else if (fetchAll && fetched < body.total) {
+                            Log.w(TAG, "loadV1: series too large to fetch all ($fetched/${body.total})")
+                            onLoaded(null)
                         } else {
                             onLoaded(build(collected, seriesTitle))
                         }
@@ -153,6 +168,7 @@ class SeriesPlaylist private constructor(
             collected: MutableList<SeriesEntry>,
             fetchedCount: Long,
             page: Int,
+            fetchAll: Boolean,
             onLoaded: (SeriesPlaylist?) -> Unit,
         ) {
             val api = EpgStationV2.api
@@ -173,8 +189,12 @@ class SeriesPlaylist private constructor(
                             .filter { matchesSeries(it.name, seriesTitle) }
                             .mapTo(collected) { SeriesEntry.of(it) }
                         val fetched = fetchedCount + body.records.size
-                        if (shouldFetchMore(collected, currentId, fetched, body.total.toLong(), page)) {
-                            loadV2(seriesTitle, currentId, collected, fetched, page + 1, onLoaded)
+                        val total = body.total.toLong()
+                        if (shouldFetchMore(collected, currentId, fetched, total, page, fetchAll)) {
+                            loadV2(seriesTitle, currentId, collected, fetched, page + 1, fetchAll, onLoaded)
+                        } else if (fetchAll && fetched < total) {
+                            Log.w(TAG, "loadV2: series too large to fetch all ($fetched/$total)")
+                            onLoaded(null)
                         } else {
                             onLoaded(build(collected, seriesTitle))
                         }
@@ -195,16 +215,20 @@ class SeriesPlaylist private constructor(
          *  - それより古い回が1つは見つかっていること(前の回が次のページに居ることがある)
          * の2つ。新しい側の隣は、今見ている回が見つかった時点で同じページか前のページに
          * 揃っているので確認しなくてよい。
+         *
+         * [fetchAll] のときは上の2つを見ず、検索結果が尽きるまで取りに行く。
          */
-        private fun shouldFetchMore(
+        fun shouldFetchMore(
             collected: List<SeriesEntry>,
             currentId: Long,
             fetchedCount: Long,
             total: Long,
             page: Int,
+            fetchAll: Boolean,
         ): Boolean {
             if (fetchedCount >= total) return false
-            if (page + 1 >= MAX_PAGES) return false
+            if (page + 1 >= (if (fetchAll) MAX_PAGES_ALL else MAX_PAGES)) return false
+            if (fetchAll) return true
             val current = collected.firstOrNull { it.id == currentId } ?: return true
             return collected.none { it.startAt < current.startAt }
         }
@@ -239,6 +263,9 @@ class SeriesEntry private constructor(
     val id: Long = recordedProgram?.id ?: recordedItem!!.id
     val startAt: Long = recordedProgram?.startAt ?: recordedItem!!.startAt
     val name: String = recordedProgram?.name ?: recordedItem!!.name
+
+    /** 自動削除の対象から外してあるか(プロテクト済みか)。 */
+    val isProtected: Boolean = recordedProgram?.protection ?: recordedItem!!.isProtected
 
     /**
      * この回を再生するときの再生対象を決める。今見ているのと同じものを選ぶ——[preferTs] で

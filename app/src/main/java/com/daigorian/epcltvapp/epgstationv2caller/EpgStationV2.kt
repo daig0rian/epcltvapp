@@ -32,8 +32,26 @@ object EpgStationV2 {
             @Query("hasOriginalFile") hasOriginalFile: Boolean? = null,
         ): Call<Records>
 
+        @GET("recorded/{recordedId}")
+        fun getRecordedItem(
+            @Path("recordedId") recordedId : Long,
+            @Query("isHalfWidth") isHalfWidth: Boolean = true,
+        ): Call<RecordedItem>
+
         @DELETE("recorded/{recordedId}")
         fun deleteRecorded(
+            @Path("recordedId") recordedId : Long
+        ): Call<ApiErrorV2>
+
+        // 録画を自動削除の対象から外す。すでに外れていても成功を返す。
+        @PUT("recorded/{recordedId}/protect")
+        fun protectRecorded(
+            @Path("recordedId") recordedId : Long
+        ): Call<ApiErrorV2>
+
+        // 録画を自動削除の対象へ戻す。すでに戻っていても成功を返す。
+        @PUT("recorded/{recordedId}/unprotect")
+        fun unprotectRecorded(
             @Path("recordedId") recordedId : Long
         ): Call<ApiErrorV2>
 

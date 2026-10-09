@@ -104,6 +104,15 @@ class MainFragment : BrowseSupportFragment() {
     /** 可視行の掃き出しを仕掛ける購読を、もう張ったか。 */
     private var mVisibleSweepInstalled = false
 
+    /**
+     * 次の可視行の掃き出しで、取り直しの最短間隔（[RULE_ROW_REFRESH_COOLDOWN_MS]）を見ないか。
+     *
+     * 別の画面から戻ってきたときに立てる。最短間隔は行を上下に跨ぐたびの取り直しを抑えるための
+     * もので、画面を離れていた間の変化（詳細画面で変えたプロテクトなど）を見送る理由にはならない。
+     * これが無いと、戻るのが早いときだけ古い内容が残り、いつ更新されるのかが利用者から読めない。
+     */
+    private var mForceNextVisibleSweep = false
+
     /** タイトル行の検索ボタン。サイドバーの一番上の行から↑で戻るための参照。 */
     private var mSearchOrb: View? = null
 
@@ -240,13 +249,22 @@ class MainFragment : BrowseSupportFragment() {
             mNeedsReloadHistoryOnResume -> {
                 Log.d(TAG, "onResume: branch=reloadHistory → deferring to view.post")
                 mNeedsReloadHistoryOnResume = false
+                mForceNextVisibleSweep = true
                 view?.post {
-                    // 検索から戻ったときは履歴の行だけを作り直す。以前は updateRows() を呼んでいたため、
-                    // ここでも録画ルール全件の getRecorded() が走っていた。
-                    Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
-                    val selectedRowId = selectedRowHeaderId()
-                    refreshSearchHistoryRows()
-                    restoreSelection(selectedRowId)
+                    if (mHasLoadedOnce) {
+                        // 検索から戻ったときも、ほかの画面から戻ったときと同じ軽い更新をする
+                        // （検索履歴の行もこの中で取り直され、選んでいた行も保たれる）。
+                        // 以前は履歴の行だけに絞っていた。当時の updateRows() は録画ルール全件を
+                        // 取り直すしかなかったためで、ルール行を除けるようになった今は絞る理由がない。
+                        Log.i(TAG, "onResume: reloadHistory deferred → 軽い更新（ルール行は見えている分だけ）")
+                        updateRows(includeRules = false)
+                    } else {
+                        // 起動直後。このあと loadRows が全部読むので、履歴の行だけにとどめる。
+                        Log.d(TAG, "onResume: reloadHistory deferred → refreshSearchHistoryRows adapterSize=${mMainMenuAdapter.size()}")
+                        val selectedRowId = selectedRowHeaderId()
+                        refreshSearchHistoryRows()
+                        restoreSelection(selectedRowId)
+                    }
                 }
             }
             else -> {
@@ -255,8 +273,9 @@ class MainFragment : BrowseSupportFragment() {
                     // 起動直後。このあと loadRows が全部読むので、ここで取ると同じものを二度取ることになる。
                     Log.i(TAG, "onResume: 初回は loadRows に任せる（軽い更新はしない）")
                 } else {
-                    Log.i(TAG, "onResume: branch=else → 軽い更新（ルール行は触らない）")
+                    Log.i(TAG, "onResume: branch=else → 軽い更新（ルール行は見えている分だけ）")
                     updateRows(includeRules = false)
+                    mForceNextVisibleSweep = true
                 }
             }
         }
@@ -266,7 +285,8 @@ class MainFragment : BrowseSupportFragment() {
         // Leanback の復元は onResume より後（レイアウト時）なので、少し待ってから選択行を見る。
         scheduleSelectionRestore()
         // 復帰したときは行が既に attach 済みで attach イベントが来ないので、ここで1回掃く。
-        // 判定は sweep 側に集約してあるため、復帰専用の分岐は要らない。
+        // 戻ってきただけのときは [mForceNextVisibleSweep] が立っていて、見えているルール行を
+        // 最短間隔に関わらず取り直す。どの行を取るかの判定は sweep 側に集約したまま。
         installVisibleRowSweep()
         scheduleVisibleSweep()
     }
@@ -855,6 +875,7 @@ class MainFragment : BrowseSupportFragment() {
 
     /**
      * いま見えているルール行のうち、しばらく取っていないものを取り直す。
+     * 別の画面から戻ってきた直後の1回だけは、取ったばかりの行も含めて見えている分を全部取り直す。
      *
      * 1回で飛ぶリクエストは可視行数（TV では3〜5行）が上限。ルール一覧（getRules）は取り直さない
      * ——ruleId は headerId から戻せるし、タイトルは行が持っているため。
@@ -867,6 +888,9 @@ class MainFragment : BrowseSupportFragment() {
         val grid = rowsSupportFragment?.verticalGridView ?: return
         // ここまで来たならグリッドはある。まだ仕掛けていなければこの機会に仕掛ける。
         installVisibleRowSweep()
+        // グリッドが現れる前に呼ばれると上で帰るので、実際に掃くところまで来てから下ろす。
+        val ignoreCooldown = mForceNextVisibleSweep
+        mForceNextVisibleSweep = false
         val now = SystemClock.elapsedRealtime()
         val refreshedRuleIds = ArrayList<Long>()
         var visibleRuleRows = 0
@@ -879,7 +903,7 @@ class MainFragment : BrowseSupportFragment() {
             val ruleId = ruleIdFromHeaderId(headerId) ?: continue
             visibleRuleRows++
             val last = mRuleRowRefreshedAt[headerId]
-            if (last != null && now - last < RULE_ROW_REFRESH_COOLDOWN_MS) {
+            if (!ignoreCooldown && last != null && now - last < RULE_ROW_REFRESH_COOLDOWN_MS) {
                 keptByCooldown++
                 continue
             }
@@ -896,9 +920,63 @@ class MainFragment : BrowseSupportFragment() {
         // 掃くたびに出すと流している間ずっと出るので、実際に取りに行ったときだけ Log.i に残す。
         // 毎回の内訳は Log.d 側（据え置きが効いているかを追えるようにするため）。
         if (refreshedRuleIds.isNotEmpty()) {
-            Log.i(TAG, "可視行の取り直し: ${refreshedRuleIds.size}行 ルール=$refreshedRuleIds")
+            Log.i(TAG, "可視行の取り直し: ${refreshedRuleIds.size}行 ルール=$refreshedRuleIds 復帰直後=$ignoreCooldown")
         }
         Log.d(TAG, "可視行の掃き出し: 可視ルール行=$visibleRuleRows 取り直し=${refreshedRuleIds.size} 据え置き=$keptByCooldown")
+
+        // 戻ってきた直後は、「番組表からの録画」の行に出ているカードも取り直す。
+        if (ignoreCooldown) refreshVisibleManualRecordedCards()
+    }
+
+    /**
+     * 「番組表からの録画」の行のうち、いま画面に出ているカードを1枚ずつ取り直す。
+     *
+     * この行に**何が入るか**を決め直すには全録画を読む必要があり（[fetchLatestRecordedSeed]）、
+     * 戻ってくるたびにはできない。**入っているカードの中身**なら1枚1リクエストで取れるので、
+     * 離れていた間の変化（詳細画面で変えたプロテクトなど）はこちらで反映する。
+     *
+     * 行の枚数には上限が無い（ルールを使わず番組表から録る環境では数千枚になりうる）ため、
+     * 対象は画面に出ているカードに限る。1回で飛ぶリクエストは横に並ぶ枚数まで。
+     * 横へ送って初めて出てくるカードは、次に戻ってきたときか全体の読み込みまで古いまま残る。
+     * 消えた録画のカードもここでは外さない（行の顔ぶれを決めるのは全体の読み込みの役目）。
+     *
+     * 録画を1本だけ取る口をこのアプリが持っているのは EPGStation v2 だけなので、v1 では何もしない。
+     */
+    private fun refreshVisibleManualRecordedCards() {
+        val api = EpgStationV2.api ?: return
+        val headerId = Category.MANUAL_RECORDED.ordinal.toLong() * 10000
+        val rowPosition = (0 until mMainMenuAdapter.size())
+            .firstOrNull { (mMainMenuAdapter.get(it) as? ListRow)?.headerItem?.id == headerId }
+            ?: return
+        val cards = (mMainMenuAdapter.get(rowPosition) as ListRow).adapter as? ArrayObjectAdapter ?: return
+        // 行そのものが画面に出ていなければ ViewHolder が無いので、ここで帰る。
+        val cardGrid = (rowsSupportFragment?.getRowViewHolder(rowPosition) as? ListRowPresenter.ViewHolder)
+            ?.gridView ?: return
+
+        var requested = 0
+        for (i in 0 until cardGrid.childCount) {
+            val position = cardGrid.getChildAdapterPosition(cardGrid.getChildAt(i))
+            if (position < 0 || position >= cards.size()) continue
+            val shown = cards.get(position) as? RecordedItem ?: continue
+            requested++
+            api.getRecordedItem(shown.id).enqueue(object : Callback<RecordedItem> {
+                override fun onResponse(call: Call<RecordedItem>, response: Response<RecordedItem>) {
+                    if (!isUiAlive) return
+                    // 録画を1本だけ取る API はタグを返すが、一覧の API は返さない（実サーバーで確認）。
+                    // カードはどれも一覧から来ているので、タグを落として一覧と同じ形に揃える。
+                    // 揃えないと、中身が同じでも別の録画データと判定されてしまう。
+                    val fresh = response.body()?.copy(tags = null) ?: return
+                    // 応答を待つ間に行の中身が入れ替わっていることがあるので、位置は引き直す。
+                    val index = cards.indexOf(shown)
+                    if (index >= 0 && fresh != shown) cards.replace(index, fresh)
+                }
+
+                override fun onFailure(call: Call<RecordedItem>, t: Throwable) {
+                    Log.d(TAG, "番組表からの録画: カードの取り直しに失敗 id=${shown.id}")
+                }
+            })
+        }
+        if (requested > 0) Log.i(TAG, "番組表からの録画: 見えているカードを取り直す ${requested}枚")
     }
 
     /**
@@ -2434,6 +2512,7 @@ class MainFragment : BrowseSupportFragment() {
          * 同じルール行を取り直すまでの最短間隔（ms）。
          *
          * これがないと、行を上下に跨ぐたびに同じ行を取りに行くことになる。
+         * 別の画面から戻ってきた直後の掃き出しだけは、この間隔を見ない（[mForceNextVisibleSweep]）。
          */
         private const val RULE_ROW_REFRESH_COOLDOWN_MS = 60_000L
 

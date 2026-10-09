@@ -204,6 +204,24 @@
     <string name="program_info">Program Info</string>
     <string name="close">Close</string>
 
+    <!-- Protecting recordings from EPGStation's auto deletion (details screen) -->
+    <string name="protect">Protect</string>
+    <string name="protect_this">Protect this program</string>
+    <string name="unprotect_this">Unprotect this program</string>
+    <string name="protect_series">Protect the series</string>
+    <string name="unprotect_series">Unprotect the series</string>
+    <!-- %1$s is the program name -->
+    <string name="protect_target_single">\"%1$s\"</string>
+    <!-- %1$s is the series name, %2$d is the number of programs in the series (2 or more) -->
+    <string name="protect_target_series">\"%1$s\" - %2$d programs</string>
+    <string name="protect_done">Protected</string>
+    <string name="unprotect_done">Unprotected</string>
+    <string name="protect_series_done">Protected %1$d programs</string>
+    <string name="unprotect_series_done">Unprotected %1$d programs</string>
+    <string name="protect_failed">Failed to change protection</string>
+    <!-- %1$d is the number of programs in the series, %2$d is how many of them failed -->
+    <string name="protect_partially_failed">Failed for %2$d of %1$d programs</string>
+
     <!-- Stream profile settings (Issue #34) -->
     <string name="pref_category_stream_profile">Stream Quality</string>
     <string name="pref_category_ts_processing">TS Processing</string>

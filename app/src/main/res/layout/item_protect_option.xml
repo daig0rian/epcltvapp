@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- プロテクトダイアログの選択肢1行。上段に何をするか、下段に何が対象になるかを書く。
+     行全体が1つのボタンとして働くので、文字色は親のフォーカス状態に合わせて反転させる
+     (duplicateParentState)。 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginBottom="8dp"
+    android:orientation="vertical"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:background="@drawable/bg_dialog_button"
+    android:clickable="true"
+    android:focusable="true">
+
+    <TextView
+        android:id="@+id/protect_option_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="@color/dialog_button_text"
+        android:textSize="16sp"
+        android:duplicateParentState="true" />
+
+    <TextView
+        android:id="@+id/protect_option_target"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:maxLines="2"
+        android:ellipsize="end"
+        android:textColor="@color/dialog_button_text"
+        android:textSize="14sp"
+        android:duplicateParentState="true" />
+
+</LinearLayout>
