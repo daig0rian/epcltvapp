@@ -18,18 +18,21 @@ data class DiskUsage(
     val availableBytes: Long,
 ) {
     /**
-     * 使用率（0.0〜1.0）。分母は「使用済み + 空き」。
+     * 録画に使える容量。「使用済み + 空き」。
      *
-     * サーバーは全体の容量も返すが、そちらを分母にはしない。全体にはファイルシステムが
+     * サーバーは全体の容量も返すが、そちらは使わない。全体にはファイルシステムが
      * 管理者用に取り置く領域が含まれ、それは使用済みにも空きにも入らない（検証に使ったサーバーでは
      * 全体の約4%）。全体を分母にすると、空きが 0 になっても 100% に届かない。
      * df の Use% と同じ数え方にしている。
      */
+    val capacityBytes: Long get() = usedBytes + availableBytes
+
+    /** 使用率（0.0〜1.0）。分母は [capacityBytes]。 */
     val usedRatio: Float
         get() {
-            val usable = usedBytes + availableBytes
-            if (usable <= 0L) return 0f
-            return (usedBytes.toDouble() / usable).toFloat().coerceIn(0f, 1f)
+            val capacity = capacityBytes
+            if (capacity <= 0L) return 0f
+            return (usedBytes.toDouble() / capacity).toFloat().coerceIn(0f, 1f)
         }
 
     /** 使用率を四捨五入した整数（0〜100）。 */
@@ -50,12 +53,17 @@ data class DiskUsage(
         if (entryCount > 1 && !name.isNullOrBlank()) name else DEFAULT_NAME
 
     /**
-     * ラベルのうち名前より後ろの部分。`Used 282 GB · 64%`、満杯なら `Full`。
+     * ラベルのうち名前より後ろの部分。`Used 282GB/435GB · 65%`、満杯なら `Full 435GB/435GB`。
+     *
+     * 使用量は容量との分数で書く。使用量だけだと、ほとんど使っていない保存先の大きさが読み取れない。
      *
      * 名前は幅に収まらなければ切り詰めるが、こちらは切らない。そのため分けて返す。
      */
     val labelBody: String
-        get() = if (isFull) "Full" else "Used ${formatSize(usedBytes)} · $usedPercent%"
+        get() {
+            val amount = formatAmount(usedBytes, capacityBytes)
+            return if (isFull) "Full $amount" else "Used $amount · $usedPercent%"
+        }
 
     companion object {
         /** 保存先名を出さないときに、名前の位置へ出す語。 */
@@ -83,29 +91,35 @@ data class DiskUsage(
                 .filter { it.isValid }
 
         /**
-         * バイト数を有効数字3桁ほどの短い表記にする（`282 GB`、`45.3 GB`、`1.82 TB`）。
+         * 使用量と容量を `282GB/435GB` の形で書く。
+         *
+         * 単位と小数の桁は容量に合わせて、使用量も同じにする。別々に選ぶと `3KB/500GB` のように
+         * 食い違い、比べにくい。容量は有効数字3桁ほどになるようにする（`435GB`、`45.3GB`、`1.73TB`）。
          *
          * 1024 で割って GB / TB と書く。EPGStation の Web UI と同じ数え方なので、数字が揃う。
          */
-        fun formatSize(bytes: Long): String {
-            var value = bytes.coerceAtLeast(0L).toDouble()
+        fun formatAmount(usedBytes: Long, capacityBytes: Long): String {
+            var capacity = capacityBytes.coerceAtLeast(0L).toDouble()
+            var used = usedBytes.coerceAtLeast(0L).toDouble()
             var unit = 0
             // 999.5 以上は丸めると4桁になるので、次の単位へ上げる
-            while (value >= 999.5 && unit < UNITS.lastIndex) {
-                value /= 1024
+            while (capacity >= 999.5 && unit < UNITS.lastIndex) {
+                capacity /= 1024
+                used /= 1024
                 unit++
             }
             val decimals = when {
                 unit == 0 -> 0
-                value < 9.995 -> 2
-                value < 99.95 -> 1
+                capacity < 9.995 -> 2
+                capacity < 99.95 -> 1
                 else -> 0
             }
-            return String.format(Locale.US, "%.${decimals}f %s", value, UNITS[unit])
+            val number = "%.${decimals}f"
+            return String.format(Locale.US, "$number%s/$number%s", used, UNITS[unit], capacity, UNITS[unit])
         }
     }
 
     /** 棒にできる値か。応答に値が欠けていると 0 や負になる。 */
     private val isValid: Boolean
-        get() = usedBytes >= 0L && availableBytes >= 0L && usedBytes + availableBytes > 0L
+        get() = usedBytes >= 0L && availableBytes >= 0L && capacityBytes > 0L
 }

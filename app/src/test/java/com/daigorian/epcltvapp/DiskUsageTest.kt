@@ -35,7 +35,7 @@ class DiskUsageTest {
 
         assertEquals(1f, usage.usedRatio, 0f)
         assertTrue(usage.isFull)
-        assertEquals("Full", usage.labelBody)
+        assertEquals("Full 95.0GB/95.0GB", usage.labelBody)
     }
 
     @Test
@@ -46,10 +46,27 @@ class DiskUsageTest {
     }
 
     @Test
-    fun `ラベルは使用量と使用率を並べる`() {
+    fun `ラベルは使用量を容量との分数で書き、使用率を添える`() {
         val usage = DiskUsage("recorded", usedBytes = 282 * gb, availableBytes = 153 * gb)
 
-        assertEquals("Used 282 GB · 65%", usage.labelBody)
+        assertEquals("Used 282GB/435GB · 65%", usage.labelBody)
+    }
+
+    @Test
+    fun `ほとんど使っていない保存先でも容量が読める`() {
+        val usage = DiskUsage("archive", usedBytes = 28 * 1024, availableBytes = 1771 * gb)
+
+        assertEquals("Used 0.00TB/1.73TB · 0%", usage.labelBody)
+    }
+
+    @Test
+    fun `容量は使用済みと空きの合計で、予約領域を含まない`() {
+        val usage = DiskUsage.fromV2(
+            StorageInfo(listOf(StorageItem("recorded", available = 19 * gb, used = 76 * gb, total = 100 * gb)))
+        ).single()
+
+        assertEquals(95 * gb, usage.capacityBytes)
+        assertEquals("Used 76.0GB/95.0GB · 80%", usage.labelBody)
     }
 
     @Test
@@ -126,35 +143,44 @@ class DiskUsageTest {
 
         assertEquals(null, usage.name)
         assertEquals(75, usage.usedPercent)
-        assertEquals("Used 90.0 GB · 75%", usage.labelBody)
+        assertEquals("Used 90GB/120GB · 75%", usage.labelBody)
     }
 
     @Test
-    fun `サイズは有効数字3桁ほどで書く`() {
-        assertEquals("0 B", DiskUsage.formatSize(0))
-        assertEquals("512 B", DiskUsage.formatSize(512))
-        assertEquals("1.00 KB", DiskUsage.formatSize(1024))
-        assertEquals("1.82 TB", DiskUsage.formatSize((1.82 * 1024 * gb).toLong()))
-        assertEquals("45.3 GB", DiskUsage.formatSize((45.3 * gb).toLong()))
-        assertEquals("282 GB", DiskUsage.formatSize(282 * gb))
+    fun `容量は有効数字3桁ほどで書く`() {
+        assertEquals("100B/512B", DiskUsage.formatAmount(100, 512))
+        assertEquals("0.50KB/1.00KB", DiskUsage.formatAmount(512, 1024))
+        assertEquals("12.3GB/45.3GB", DiskUsage.formatAmount((12.34 * gb).toLong(), (45.3 * gb).toLong()))
+        assertEquals("282GB/435GB", DiskUsage.formatAmount(282 * gb, 435 * gb))
+        assertEquals("0.31TB/1.82TB", DiskUsage.formatAmount((0.31 * 1024 * gb).toLong(), (1.82 * 1024 * gb).toLong()))
+    }
+
+    @Test
+    fun `使用量の単位と桁は容量に合わせる`() {
+        // 使用量だけで選ぶと 3.00KB や 1.50GB になり、容量と食い違う
+        assertEquals("0GB/500GB", DiskUsage.formatAmount(3 * 1024, 500 * gb))
+        assertEquals("2GB/500GB", DiskUsage.formatAmount((1.5 * gb).toLong(), 500 * gb))
+        assertEquals("0.00TB/1.82TB", DiskUsage.formatAmount(3 * gb, (1.82 * 1024 * gb).toLong()))
+        assertEquals("0.25TB/1.82TB", DiskUsage.formatAmount(256 * gb, (1.82 * 1024 * gb).toLong()))
     }
 
     @Test
     fun `4桁になる手前で次の単位へ上げる`() {
-        assertEquals("999 GB", DiskUsage.formatSize(999 * gb))
-        assertEquals("0.98 TB", DiskUsage.formatSize(1000 * gb))
-        assertEquals("1.00 TB", DiskUsage.formatSize(1024 * gb))
+        assertEquals("500GB/999GB", DiskUsage.formatAmount(500 * gb, 999 * gb))
+        assertEquals("0.49TB/0.98TB", DiskUsage.formatAmount(500 * gb, 1000 * gb))
+        assertEquals("0.50TB/1.00TB", DiskUsage.formatAmount(512 * gb, 1024 * gb))
     }
 
     @Test
     fun `桁の境目で桁数が増えない`() {
         // 9.996 を小数2桁で書くと 10.00、99.96 を小数1桁で書くと 100.0 になってしまう
-        assertEquals("10.0 GB", DiskUsage.formatSize((9.996 * gb).toLong()))
-        assertEquals("100 GB", DiskUsage.formatSize((99.96 * gb).toLong()))
+        assertEquals("5.0GB/10.0GB", DiskUsage.formatAmount(5 * gb, (9.996 * gb).toLong()))
+        assertEquals("50GB/100GB", DiskUsage.formatAmount(50 * gb, (99.96 * gb).toLong()))
     }
 
     @Test
-    fun `負のサイズは 0 として書く`() {
-        assertEquals("0 B", DiskUsage.formatSize(-1))
+    fun `負の値は 0 として書く`() {
+        assertEquals("0GB/100GB", DiskUsage.formatAmount(-1, 100 * gb))
+        assertEquals("0B/0B", DiskUsage.formatAmount(-1, -1))
     }
 }
