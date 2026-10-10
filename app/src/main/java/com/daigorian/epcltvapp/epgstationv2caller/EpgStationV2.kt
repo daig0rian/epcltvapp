@@ -80,6 +80,9 @@ object EpgStationV2 {
         @GET("config")
         fun getConfig(): Call<ConfigResponse>
 
+        @GET("storages")
+        fun getStorages(): Call<StorageInfo>
+
         @GET("schedules/broadcasting")
         fun getScheduleOnAir(
             @Query("isHalfWidth") isHalfWidth: Boolean = true

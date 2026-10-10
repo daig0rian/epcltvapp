@@ -131,6 +131,23 @@ class MainFragment : BrowseSupportFragment() {
     /** ライブ視聴の番組情報を自動更新するRunnable。固定間隔ではなく、次に終了する番組の終了時刻に合わせて都度スケジュールし直す */
     private val mProgramRefreshRunnable = Runnable { refreshLiveProgramNames() }
 
+    /** タイトル文字の下に出しているディスク使用量。画面が作り直されても出し直せるように持っておく。 */
+    private var mDiskUsages: List<DiskUsage> = emptyList()
+
+    /** タイトル文字の下の棒。タイトル行が出来上がってから足すので、それまでは null。 */
+    private var mDiskUsageBar: DiskUsageBarView? = null
+
+    /** [refreshDiskUsage] の通し番号。後から出した要求の結果だけを使うためのもの。 */
+    private var mDiskUsageRequestSeq = 0
+
+    /** ホームを出している間、ディスク使用量を一定間隔で取り直す。録画中は使用量が増え続けるため。 */
+    private val mDiskUsageRefreshRunnable = object : Runnable {
+        override fun run() {
+            refreshDiskUsage()
+            mHandler.postDelayed(this, DISK_USAGE_REFRESH_INTERVAL_MS)
+        }
+    }
+
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
@@ -192,6 +209,8 @@ class MainFragment : BrowseSupportFragment() {
 
         adapter = mMainMenuAdapter
         mCardPresenter.objAdapter = mMainMenuAdapter
+        // ホームでカードを長押しして消したときは画面を離れないので、ここで空きの変化を拾う
+        mCardPresenter.onRecordedDeleted = { refreshDiskUsage() }
 
         // プレイヤー設定などデフォルト値をSharedPreferencesに書き込む（初回のみ）
         androidx.preference.PreferenceManager.setDefaultValues(requireContext(), R.xml.preferences, false)
@@ -224,6 +243,7 @@ class MainFragment : BrowseSupportFragment() {
         super.onViewCreated(view, savedInstanceState)
         // タイトル行（検索ボタンがある行）は Leanback が組み立てるので、出来上がってから足す
         view.post { addSettingsButton() }
+        view.post { addDiskUsageBar() }
         // 行のグリッドも Leanback が組み立てるので同様。ここで張れなくても onResume が取りに来る。
         view.post { installVisibleRowSweep() }
     }
@@ -289,11 +309,17 @@ class MainFragment : BrowseSupportFragment() {
         // 最短間隔に関わらず取り直す。どの行を取るかの判定は sweep 側に集約したまま。
         installVisibleRowSweep()
         scheduleVisibleSweep()
+        // ディスク使用量も取り直し、表示中は一定間隔で追う。
+        // 起動直後は initEPGStationApi が終わったところで取るので、ここでは取らない。
+        mHandler.removeCallbacks(mDiskUsageRefreshRunnable)
+        if (mHasLoadedOnce) refreshDiskUsage()
+        mHandler.postDelayed(mDiskUsageRefreshRunnable, DISK_USAGE_REFRESH_INTERVAL_MS)
     }
 
     override fun onPause() {
         super.onPause()
         mHandler.removeCallbacks(mProgramRefreshRunnable)
+        mHandler.removeCallbacks(mDiskUsageRefreshRunnable)
         mRowIdBeforePause = selectedRowHeaderId()
         Log.i(TAG, "onPause: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition 選択行=$mRowIdBeforePause")
     }
@@ -352,6 +378,7 @@ class MainFragment : BrowseSupportFragment() {
                 }
             }
             loadRows()
+            refreshDiskUsage()
         }
     }
 
@@ -753,6 +780,7 @@ class MainFragment : BrowseSupportFragment() {
         // 行を作り直すので、取り直した時刻の控えも捨てる（消えたルールの分を残さない）
         mRuleRowRefreshedAt.clear()
         updateRows()
+        refreshDiskUsage()
     }
 
     /**
@@ -1597,6 +1625,121 @@ class MainFragment : BrowseSupportFragment() {
             (group.getChildAt(i) as? ImageView)?.let { return it }
         }
         return null
+    }
+
+    /**
+     * タイトル文字「EPGStation」の下へ、ディスク使用量の棒（[DiskUsageBarView]）を足す。
+     *
+     * タイトル行の子として足すので、行を下へ送るとタイトルと一緒に隠れる。
+     * 幅と位置はタイトル文字の実測値に合わせる（文字の大きさはテーマと端末の設定で変わるため）。
+     */
+    private fun addDiskUsageBar() {
+        if (!isAdded) return
+        // タイトル行はテーマで差し替えられることがあるので、期待した型でなければ何もしない
+        val titleBar = getTitleView() as? TitleView ?: return
+        // 画面を作り直したときに二重に足さない
+        if (titleBar.findViewWithTag<View>(DISK_USAGE_BAR_TAG) != null) return
+        val titleText = titleBar.findViewById<TextView>(androidx.leanback.R.id.title_text) ?: return
+
+        val bar = DiskUsageBarView(requireContext()).apply {
+            tag = DISK_USAGE_BAR_TAG
+            setEntries(mDiskUsages)
+        }
+        titleBar.addView(
+            bar,
+            FrameLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START)
+        )
+        mDiskUsageBar = bar
+
+        val gap = resources.getDimensionPixelSize(R.dimen.disk_usage_bar_margin_top)
+        // 棒が増えたときに広げる前の、タイトル行のもとの下余白
+        val basePaddingBottom = titleBar.paddingBottom
+        val alignUnderTitleText = Runnable {
+            // Leanback はタイトル行を残したままタイトル文字だけを GONE にすることがある
+            // （updateComponentsVisibility）。棒だけ残ると不自然なので合わせる。
+            val visibility = if (bar.isEmpty) View.GONE else titleText.visibility
+            if (bar.visibility != visibility) bar.visibility = visibility
+            val params = bar.layoutParams as? FrameLayout.LayoutParams ?: return@Runnable
+            if (titleText.width == 0) return@Runnable
+
+            // gravity=top|start の子の位置は「親の padding + 自分の margin」なので、親の padding ぶんを
+            // 引いてから margin に入れる。「EPGStation」にはベースラインより下へ出る字が無いので、
+            // 枠の下端ではなくベースラインのすぐ下に置く。
+            val left = titleText.left - titleBar.paddingLeft
+            val top = titleText.top + titleText.baseline + gap - titleBar.paddingTop
+            val height = bar.contentHeight
+            // 棒はタイトル文字の枠より下へはみ出す。FrameLayout は子の「高さ + 上下の margin」から
+            // 自分の高さを決めるので、そのままだとタイトル行の中身が伸び、その上下中央に置かれている
+            // 検索ボタンとタイトル文字が下へずれる。下の margin を負にして、高さの計算から棒を外す。
+            val bottom = -(top + height)
+            if (params.width != titleText.width || params.leftMargin != left ||
+                params.topMargin != top || params.bottomMargin != bottom
+            ) {
+                params.width = titleText.width
+                params.leftMargin = left
+                params.topMargin = top
+                params.bottomMargin = bottom
+                bar.layoutParams = params
+            }
+
+            // 代わりに下余白を広げて、棒をタイトル行の枠の中に収める（枠の外は親に切られて描かれない）。
+            // 1〜2本ならもとの余白に収まる。余白を変えても中身の高さは変わらないので、ほかの子は動かない。
+            val contentBottom = titleBar.height - titleBar.paddingBottom
+            val overflow = titleBar.paddingTop + top + height - contentBottom
+            val paddingBottom = maxOf(basePaddingBottom, overflow)
+            if (titleBar.paddingBottom != paddingBottom) {
+                titleBar.setPadding(
+                    titleBar.paddingLeft, titleBar.paddingTop, titleBar.paddingRight, paddingBottom
+                )
+            }
+        }
+        // タイトル文字の出し入れ・棒の本数の変化・画面の作り直しは、どれもタイトル行のレイアウトを
+        // やり直させる。高さと余白が食い違わないよう、位置合わせはレイアウトが済んだところでだけ行う。
+        titleBar.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> alignUnderTitleText.run() }
+        alignUnderTitleText.run()
+    }
+
+    /**
+     * 保存先のディスク使用量を取り直して、タイトル文字の下の棒へ反映する。
+     *
+     * 取れなかったときは棒を消す。古い数字を出したままにはしない。
+     */
+    private fun refreshDiskUsage() {
+        // 後から出した要求の結果だけを使う。接続先を変えた直後は、前の接続先への要求が
+        // まだ返ってきていないことがある。
+        val seq = ++mDiskUsageRequestSeq
+        fun show(usages: List<DiskUsage>) {
+            if (!isUiAlive || seq != mDiskUsageRequestSeq) return
+            Log.i(TAG, "ディスク使用量: ${usages.size}本 使用率=${usages.map { it.usedPercent }}")
+            mDiskUsages = usages
+            mDiskUsageBar?.setEntries(usages)
+        }
+
+        // 起動直後はルール一覧の取得で待ち行列が埋まるので、先に通るほうのクライアントで頼む
+        val v2 = EpgStationV2.priorityApi
+        val v1 = EpgStation.api
+        when {
+            v2 != null -> v2.getStorages().enqueue(object : Callback<StorageInfo> {
+                override fun onResponse(call: Call<StorageInfo>, response: Response<StorageInfo>) {
+                    show(DiskUsage.fromV2(response.body()))
+                }
+                override fun onFailure(call: Call<StorageInfo>, t: Throwable) {
+                    Log.i(TAG, "ディスク使用量: 取得に失敗 $t")
+                    show(emptyList())
+                }
+            })
+            v1 != null -> v1.getStorage().enqueue(object : Callback<StorageInfoV1> {
+                override fun onResponse(call: Call<StorageInfoV1>, response: Response<StorageInfoV1>) {
+                    show(DiskUsage.fromV1(response.body()))
+                }
+                override fun onFailure(call: Call<StorageInfoV1>, t: Throwable) {
+                    Log.i(TAG, "ディスク使用量: 取得に失敗 $t")
+                    show(emptyList())
+                }
+            })
+            // 接続先がまだ決まっていない・接続できなかった
+            else -> show(emptyList())
+        }
     }
 
     /**
@@ -2536,6 +2679,12 @@ class MainFragment : BrowseSupportFragment() {
          * そのまま追うと「隠れる → うっすら出る → また隠れる」に見えてしまう。隠す方は即おこなう。
          */
         private const val SETTINGS_BUTTON_SHOW_DELAY_MS = 250L
+
+        /** タイトル行に足したディスク使用量の棒の目印。画面を作り直したときに二重に足さないために使う。 */
+        private const val DISK_USAGE_BAR_TAG = "disk_usage_bar"
+
+        /** ホームを出している間、ディスク使用量を取り直す間隔（ms）。 */
+        private const val DISK_USAGE_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 

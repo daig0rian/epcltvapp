@@ -44,6 +44,9 @@ class OriginalCardPresenter() : Presenter() {
 
     var objAdapter :DeleteEnabledArrayObjectAdapter? =null
 
+    /** カードの長押しから録画を削除できたときに呼ばれる。 */
+    var onRecordedDeleted: (() -> Unit)? = null
+
     /**
      * 今再生中の録画のID。セットすると、そのカードのサムネイルに「再生中」の目印を重ねる。
      * 再生画面のエピソード一覧だけで使い、他の一覧(ホーム・検索・詳細)では null のまま。
@@ -112,6 +115,7 @@ class OriginalCardPresenter() : Presenter() {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
+                                        onRecordedDeleted?.invoke()
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
@@ -143,6 +147,7 @@ class OriginalCardPresenter() : Presenter() {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
+                                        onRecordedDeleted?.invoke()
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
