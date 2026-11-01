@@ -43,9 +43,8 @@ class OriginalCardPresenter() : Presenter() {
     private var sDefaultBackgroundColor: Int by Delegates.notNull()
 
     var objAdapter :DeleteEnabledArrayObjectAdapter? =null
-
     /** カードの長押しから録画を削除できたときに呼ばれる。 */
-    var onRecordedDeleted: (() -> Unit)? = null
+    var onRecordedDeleted: ((Long) -> Unit)? = null
 
     /**
      * 今再生中の録画のID。セットすると、そのカードのサムネイルに「再生中」の目印を重ねる。
@@ -54,8 +53,6 @@ class OriginalCardPresenter() : Presenter() {
     var nowPlayingId: Long? = null
 
     override fun onCreateViewHolder(parent: ViewGroup): ViewHolder {
-        Log.d(TAG, "onCreateViewHolder")
-
         sDefaultBackgroundColor = ContextCompat.getColor(parent.context, R.color.default_background)
         sSelectedBackgroundColor =
             ContextCompat.getColor(parent.context, R.color.selected_background)
@@ -73,13 +70,47 @@ class OriginalCardPresenter() : Presenter() {
         cardView.isFocusableInTouchMode = true
         updateCardBackgroundColor(cardView, false)
         cardView.findViewById<TextView>(LeanbackR.id.title_text).maxLines = 3
-        cardView.findViewById<TextView>(LeanbackR.id.content_text).maxLines = 4
+        // 説明欄の行数は「カード内容の短縮」に合わせて onBind 側で調整する。
+        cardView.findViewById<TextView>(LeanbackR.id.content_text).maxLines = 1
         return ViewHolder(cardView)
     }
 
     override fun onBindViewHolder(viewHolder: ViewHolder, item: Any) {
         val cardView = viewHolder.view as ImageCardView
         cardView.setMainImageDimensions(CARD_WIDTH, CARD_HEIGHT)
+
+        if (item is RuleRowContinuation || (item is ManualRecordingContinuation && !item.failed)) {
+            Glide.with(cardView.context).clear(cardView.mainImageView)
+            cardView.mainImage = null
+            cardView.titleText = ""
+            cardView.contentText = ""
+            cardView.setOnLongClickListener(null)
+            updateThumbnailOverlays(cardView, item)
+            return
+        }
+
+        if (item is ManualRecordingContinuation) {
+            Glide.with(cardView.context).clear(cardView.mainImageView)
+            cardView.mainImage = mDefaultCardImage
+            cardView.titleText = cardView.context.getString(R.string.rule_row_error)
+            cardView.contentText = ""
+            cardView.setOnLongClickListener(null)
+            updateThumbnailOverlays(cardView, item)
+            return
+        }
+
+        if (item is RuleRowPlaceholder) {
+            Glide.with(cardView.context).clear(cardView.mainImageView)
+            cardView.mainImage = mDefaultCardImage
+            cardView.titleText = cardView.context.getString(when (item.status) {
+                RuleRowPlaceholder.Status.LOADING -> R.string.rule_row_loading
+                RuleRowPlaceholder.Status.ERROR -> R.string.rule_row_error
+            })
+            cardView.contentText = ""
+            cardView.setOnLongClickListener(null)
+            updateThumbnailOverlays(cardView, item)
+            return
+        }
 
         viewHolder.view.setOnLongClickListener{
             if (item is ChannelItem) {
@@ -115,7 +146,7 @@ class OriginalCardPresenter() : Presenter() {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
-                                        onRecordedDeleted?.invoke()
+                                        onRecordedDeleted?.invoke(item.id)
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
@@ -147,7 +178,7 @@ class OriginalCardPresenter() : Presenter() {
                                         Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
                                             .show()
                                         objAdapter?.removeItemFromAllListRows(item)
-                                        onRecordedDeleted?.invoke()
+                                        onRecordedDeleted?.invoke(item.id)
                                     } else {
                                         Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
                                             .show()
@@ -173,17 +204,21 @@ class OriginalCardPresenter() : Presenter() {
             true
         }
 
-        Log.d(TAG, "onBindViewHolder")
+        val shortened = ShortenCardContentPreferences.shortenCards(cardView.context)
+        // 設定を変えた直後だけ反映する（毎回 setMaxLines すると requestLayout が積もる）
+        val wantContentLines = if (shortened && (item is RecordedProgram || item is RecordedItem)) 1 else 4
+        cardView.findViewById<TextView>(LeanbackR.id.content_text).let { tv ->
+            if (tv.maxLines != wantContentLines) tv.maxLines = wantContentLines
+        }
+
         when (item) {
             is RecordedProgram -> {
                 // EPGStation Version 1.x.x
                 cardView.titleText = item.name
                 val channelNameV1 = EpgStation.channelMap[item.channelId] ?: ""
-                cardView.contentText = buildString {
-                    if (channelNameV1.isNotEmpty()) { append(channelNameV1); append("\n") }
-                    append("${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})")
-                    if (!item.description.isNullOrEmpty()) { append("\n"); append(item.description) }
-                }
+                cardView.contentText = RecordingCardContent.text(channelNameV1,
+                    "${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})",
+                    item.description, shortened)
                 val thumbnailURL = EpgStation.getThumbnailURL(item.id.toString())
 
                 //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
@@ -204,11 +239,9 @@ class OriginalCardPresenter() : Presenter() {
                 // EPGStation Version 2.x.x
                 cardView.titleText = item.name
                 val channelNameV2 = item.channelId?.let { EpgStationV2.channelMap[it] } ?: ""
-                cardView.contentText = buildString {
-                    if (channelNameV2.isNotEmpty()) { append(channelNameV2); append("\n") }
-                    append("${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})")
-                    if (!item.description.isNullOrEmpty()) { append("\n"); append(item.description) }
-                }
+                cardView.contentText = RecordingCardContent.text(channelNameV2,
+                    "${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})",
+                    item.description, shortened)
                 //サムネのURLから画像をロードする。失敗した場合、録画中なら録画中アイコンを出す。そうでなければNO IMAGEアイコン。
 
                 val thumbnailURL = if(!item.thumbnails.isNullOrEmpty()){
@@ -310,7 +343,6 @@ class OriginalCardPresenter() : Presenter() {
     }
 
     override fun onUnbindViewHolder(viewHolder: ViewHolder) {
-        Log.d(TAG, "onUnbindViewHolder")
         val cardView = viewHolder.view as ImageCardView
         // Remove references to images so that the garbage collector can free up memory
         cardView.badgeImage = null
@@ -326,11 +358,14 @@ class OriginalCardPresenter() : Presenter() {
         view.setInfoAreaBackgroundColor(color)
     }
 
-    private fun formatAsJapaneseDateTime(unixTimeMs: Long): String {
-        val formatter = SimpleDateFormat("MM/dd(EEE) HH:mm", Locale.JAPANESE)
-        formatter.timeZone = TimeZone.getTimeZone("Asia/Tokyo")
-        return formatter.format(Date(unixTimeMs))
+    // bind ごとに SimpleDateFormat を作るとロケールデータの解決が毎回走るので使い回す。
+    // Presenter の bind は main スレッドのみなので、スレッド安全でない SimpleDateFormat でも問題ない。
+    private val dateTimeFormatter = SimpleDateFormat("MM/dd(EEE) HH:mm", Locale.JAPANESE).apply {
+        timeZone = TimeZone.getTimeZone("Asia/Tokyo")
     }
+
+    private fun formatAsJapaneseDateTime(unixTimeMs: Long): String =
+        dateTimeFormatter.format(Date(unixTimeMs))
 
     private fun formatDurationMinutes(startUnixTimeMs: Long, endUnixTimeMs: Long): String {
         val minutes = (endUnixTimeMs - startUnixTimeMs) / 60000

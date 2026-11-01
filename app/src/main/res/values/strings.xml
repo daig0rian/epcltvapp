@@ -157,6 +157,29 @@
 
     <string name="pref_key_show_thumbnail_background" translatable="false">KEY_SHOW_THUMBNAIL_BACKGROUND</string>
     <string name="show_thumbnail_background">Thumbnail background</string>
+    <string name="pref_key_lazy_load" translatable="false">KEY_LAZY_LOAD</string>
+    <string name="pref_category_performance">Performance</string>
+    <string name="lazy_load">Load recordings later</string>
+    <string name="lazy_load_summary">Loads less at startup so you can start browsing right away.</string>
+    <string name="pref_key_request_concurrency" translatable="false">KEY_REQUEST_CONCURRENCY</string>
+    <string name="request_concurrency">Concurrent connections</string>
+    <string-array name="pref_options_request_concurrency_label">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>5 (Default)</item>
+        <item>8</item>
+        <item>13</item>
+    </string-array>
+    <string-array name="pref_options_request_concurrency_val" translatable="false">
+        <item>1</item><item>2</item><item>3</item><item>5</item><item>8</item><item>13</item>
+    </string-array>
+    <string name="pref_val_request_concurrency_default" translatable="false">5</string>
+    <string name="pref_key_shorten_card_content" translatable="false">KEY_SHORTEN_CARD_CONTENT</string>
+    <string name="shorten_card_content">Shorten card content</string>
+    <string name="shorten_card_content_summary">Reduce the text on cards to make drawing lighter.</string>
+    <string name="rule_row_loading">Loading recordings</string>
+    <string name="rule_row_error">Could not load. Select to retry.</string>
 
     <!-- Actions on the settings root screen -->
     <string name="pref_key_reload_action" translatable="false">pref_key_reload_action</string>

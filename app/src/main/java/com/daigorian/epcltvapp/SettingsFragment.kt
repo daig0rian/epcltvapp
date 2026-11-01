@@ -124,6 +124,7 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
         }
 
         override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+            ShortenCardContentPreferences.migrate(activity!!)
             val root = arguments.getString(PREFERENCE_ROOT, null)
             val prefResId = arguments.getInt(PREFERENCE_RESOURCE_ID)
             Log.i(TAG, "PrefFragment.onCreatePreferences root=$root")

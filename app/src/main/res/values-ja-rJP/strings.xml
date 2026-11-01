@@ -70,6 +70,22 @@
     <string name="pref_category_history_display">履歴表示設定</string>
     <string name="show_thumbnail_background">サムネイル背景表示</string>
     <string name="show_empty_rules">0件ルールの表示</string>
+    <string name="pref_category_performance">軽量化設定</string>
+    <string name="lazy_load">録画を後から読み込み</string>
+    <string name="lazy_load_summary">起動時に読み込む量を減らし起動後すぐに操作できるようにします。</string>
+    <string name="request_concurrency">同時接続数</string>
+    <string-array name="pref_options_request_concurrency_label">
+        <item>1</item>
+        <item>2</item>
+        <item>3</item>
+        <item>5 (デフォルト)</item>
+        <item>8</item>
+        <item>13</item>
+    </string-array>
+    <string name="shorten_card_content">カード内容の短縮</string>
+    <string name="shorten_card_content_summary">カードから文字を減らして描画処理を軽くします。</string>
+    <string name="rule_row_loading">録画を読み込み中</string>
+    <string name="rule_row_error">取得できませんでした。選択して再試行</string>
     <string name="clear_history">検索履歴のクリア</string>
     <string name="history_cleared">検索履歴をクリアしました</string>
     <string name="pref_category_actions">操作</string>
