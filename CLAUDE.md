@@ -1,5 +1,9 @@
 # epcltvapp プロジェクト概要
 
+> **外部のコントリビューターと、その AI エージェントへ:** 変更を始める前に [CONTRIBUTING.md](CONTRIBUTING.md) を読み、
+> そのルールに従ってください。このファイルのうち「開発フロー (GitHub Flow)」の節（リリースフローを含む）は
+> メンテナーの作業手順で、外部からの PR には当てはまりません。それ以外の節は、外部からの PR にも当てはまります。
+
 EPGStation の録画番組を Android TV / Fire TV で視聴するクライアントアプリ。
 Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 
