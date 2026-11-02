@@ -595,7 +595,11 @@ class MainFragment : BrowseSupportFragment() {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
                     if (!isUiAlive) return
                     response.body()?.let { rawChannels ->
-                        mLiveChannels = rawChannels
+                        // 番組名は equals に含まれない副次的な状態で、行に出ているオブジェクトにしか入っていない。
+                        // setItems は行の中身を渡したオブジェクトに入れ替えるので、前と同じ局は前のオブジェクトを
+                        // 使い回す（取り直すたびに全カードが番組名なしで描き直されないように）。
+                        val previous = mLiveChannels.orEmpty().associateBy { it.id }
+                        mLiveChannels = rawChannels.map { fresh -> previous[fresh.id]?.takeIf { it == fresh } ?: fresh }
                         renderLiveChannels()
                         // チャンネル一覧の取得だけでは番組名(currentProgramName)は入らないため、直後に取得する
                         refreshLiveProgramNames()
