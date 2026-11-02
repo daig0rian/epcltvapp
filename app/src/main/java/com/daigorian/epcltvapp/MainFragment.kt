@@ -575,16 +575,11 @@ class MainFragment : BrowseSupportFragment() {
                 selectedChannelId,
                 previousCardIndex
             )
-            setSelectedPosition(liveRowPosition, false, object : Presenter.ViewHolderTask() {
-                override fun run(viewHolder: Presenter.ViewHolder?) {
-                    if (!isUiAlive) return
-                    val rowViewHolder = viewHolder as? ListRowPresenter.ViewHolder
-                    val targetChannel = channels.getOrNull(targetCardIndex)
-                    if (rowViewHolder != null && targetChannel != null) {
-                        rowViewHolder.gridView.selectedPosition = targetCardIndex
-                    }
-                }
-            })
+            // 行の一覧側だけで選び直す。BrowseSupportFragment.setSelectedPosition に task を渡すと
+            // startHeadersTransition(false) が走り、開いている左メニューが閉じる。設定画面の裏で走ると
+            // 状態保存後のフラグメント操作になり、Android 5.1 の Fire TV では落ちる。
+            val task = ListRowPresenter.SelectItemViewHolderTask(targetCardIndex).apply { setSmoothScroll(false) }
+            rowsSupportFragment?.setSelectedPosition(liveRowPosition, false, task)
         } else {
             restoreSelection(previousSelectedRowId)
         }
