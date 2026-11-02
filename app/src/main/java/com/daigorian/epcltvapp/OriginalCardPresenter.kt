@@ -114,15 +114,39 @@ class OriginalCardPresenter() : Presenter() {
 
         viewHolder.view.setOnLongClickListener{
             if (item is ChannelItem) {
-                // 長押しでHLS再生（通常タップはmpegts直送）。サーバー側で変換済みの映像を
-                // 受け取るため、mpegts直送が不安定な場合や回線・端末性能が足りない場合の
-                // フォールバック用途。なおARIB字幕・文字スーパー・デュアルモノ副音声は
-                // TSを直接扱う直送側(isTsContent=true)でのみ扱えるため、HLSでは表示できない。
-                val intent = Intent(it.context, PlaybackActivity::class.java)
-                intent.putExtra(DetailsActivity.IS_LIVE, true)
-                intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
-                intent.putExtra(DetailsActivity.CHANNEL_NAME, item.halfWidthName.ifEmpty { item.name })
-                it.context.startActivity(intent)
+                val context = it.context
+                val name = item.halfWidthName.ifEmpty { item.name }
+                AlertDialog.Builder(context, AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth)
+                    .setTitle(name)
+                    .setItems(
+                        arrayOf(
+                            context.getString(R.string.play_live_hls),
+                            context.getString(R.string.hide_live_channel)
+                        )
+                    ) { _, action ->
+                        if (action == 0) {
+                            // サーバー側で変換済みの映像を受け取るHLS再生。
+                            val intent = Intent(context, PlaybackActivity::class.java)
+                            intent.putExtra(DetailsActivity.IS_LIVE, true)
+                            intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
+                            intent.putExtra(DetailsActivity.CHANNEL_NAME, name)
+                            context.startActivity(intent)
+                        } else {
+                            AlertDialog.Builder(
+                                context,
+                                AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth
+                            )
+                                .setMessage(
+                                    context.getString(R.string.hide_live_channel_confirm, name)
+                                )
+                                .setNegativeButton(android.R.string.cancel, null)
+                                .setPositiveButton(android.R.string.ok) { _, _ ->
+                                    HiddenLiveChannels.hide(context, item)
+                                }
+                                .show()
+                        }
+                    }
+                    .show()
                 return@setOnLongClickListener true
             }
 

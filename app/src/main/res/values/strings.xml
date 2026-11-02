@@ -181,6 +181,15 @@
     <string name="rule_row_loading">Loading recordings</string>
     <string name="rule_row_error">Could not load. Select to retry.</string>
 
+    <string name="pref_key_hidden_live_channels" translatable="false">KEY_HIDDEN_LIVE_CHANNELS</string>
+    <string name="hidden_live_channels">Hidden live channels</string>
+    <string name="hidden_live_channels_count">%1$d hidden channels</string>
+    <string name="hidden_live_channels_empty">No hidden channels</string>
+    <string name="play_live_hls">Play via HLS</string>
+    <string name="hide_live_channel">Hide this channel</string>
+    <string name="hide_live_channel_confirm">Hide %1$s? You can show it again in Display settings.</string>
+    <string name="live_channel_fallback_name">Channel %1$s</string>
+
     <!-- Actions on the settings root screen -->
     <string name="pref_key_reload_action" translatable="false">pref_key_reload_action</string>
     <string name="pref_key_check_update_action" translatable="false">pref_key_check_update_action</string>

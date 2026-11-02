@@ -6,6 +6,8 @@ import android.util.Log
 import android.view.View
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.R as AppCompatR
+import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.FragmentActivity
 import androidx.leanback.preference.LeanbackPreferenceFragment
 import androidx.leanback.preference.LeanbackSettingsFragment
@@ -132,6 +134,44 @@ class SettingsFragment : LeanbackSettingsFragment(), TargetFragment {
                 addPreferencesFromResource(prefResId)
             } else {
                 setPreferencesFromResource(prefResId, root)
+            }
+
+            preferenceScreen.findPreference<Preference>(getText(R.string.pref_key_hidden_live_channels))?.let { pref ->
+                fun updateSummary() {
+                    val count = HiddenLiveChannels.ids(activity!!).size
+                    pref.summary = if (count == 0) getString(R.string.hidden_live_channels_empty)
+                    else getString(R.string.hidden_live_channels_count, count)
+                }
+                updateSummary()
+                pref.setOnPreferenceClickListener {
+                    val context = activity!!
+                    val ids = HiddenLiveChannels.ids(context).sorted()
+                    if (ids.isNotEmpty()) {
+                        val checked = BooleanArray(ids.size) { true }
+                        val names = ids.map { HiddenLiveChannels.name(context, it) }.toTypedArray()
+                        AlertDialog.Builder(context, AppCompatR.style.Theme_AppCompat_Light_Dialog_MinWidth)
+                            .setTitle(R.string.hidden_live_channels)
+                            .setMultiChoiceItems(names, checked) { _, index, selected ->
+                                checked[index] = selected
+                            }
+                            .setNegativeButton(android.R.string.cancel, null)
+                            .setPositiveButton(android.R.string.ok) { _, _ ->
+                                HiddenLiveChannels.update(
+                                    context,
+                                    ids.filterIndexed { index, _ -> checked[index] }.toSet()
+                                )
+                                updateSummary()
+                            }
+                            .show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            R.string.hidden_live_channels_empty,
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                    true
+                }
             }
 
             val ipAddressPref = preferenceScreen.findPreference(getText(R.string.pref_key_ip_addr)) as EditTextPreference?

@@ -141,6 +141,7 @@ class MainFragment : BrowseSupportFragment() {
             .getBoolean(getString(R.string.pref_key_lazy_load), false)
 
     private val mCardPresenter = OriginalCardPresenter()
+    private var mLiveChannels: List<ChannelItem>? = null
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
@@ -167,6 +168,9 @@ class MainFragment : BrowseSupportFragment() {
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
+            HiddenLiveChannels.KEY -> view?.post {
+                if (isUiAlive) renderLiveChannels()
+            }
             getString(R.string.pref_key_rules_order_mode) -> {
                 // ルールの並び順。並びは取得済みのデータだけで決まるので、行は取り直さずに並べ替える。
                 Log.d(TAG, "prefChanged: rules_order_mode → applyRuleOrder (行の再取得なし)")
@@ -516,59 +520,89 @@ class MainFragment : BrowseSupportFragment() {
         })
     }
 
+    /** 取得済みチャンネルだけを絞り直し、ライブ行の選択位置も同じ操作内で戻す。 */
+    private fun renderLiveChannels() {
+        val loaded = mLiveChannels ?: return
+        val channels = HiddenLiveChannels.visible(
+            loaded,
+            HiddenLiveChannels.ids(requireContext())
+        )
+        val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong() * 10000
+        val previousRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
+        val previousSelectedRowId = selectedRowHeaderId()
+        val liveWasSelected = previousRowPosition >= 0 && previousRowPosition == selectedPosition
+        // ライブ行で最後に選ばれていたカードは、onItemSelected が mRowCardSelections に控えている
+        val tracked = if (liveWasSelected) mRowCardSelections[liveHeaderId] else null
+        val previousCardIndex = tracked?.second ?: -1
+        val selectedChannelId = (tracked?.first as? ChannelItem)?.id
+        val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
+
+        if (channels.isEmpty()) {
+            if (currentListRow != null) {
+                mMainMenuAdapter.deleteCategory(Category.LIVE_CHANNELS)
+            }
+            if (liveWasSelected) {
+                val fallbackPosition = (0 until mMainMenuAdapter.size())
+                    .filter { mMainMenuAdapter.get(it) is ListRow }
+                    .minByOrNull { kotlin.math.abs(it - previousRowPosition) }
+                if (fallbackPosition != null) setSelectedPosition(fallbackPosition, false)
+            } else {
+                restoreSelection(previousSelectedRowId)
+            }
+            return
+        }
+
+        val adapter = currentListRow?.adapter as? ArrayObjectAdapter ?: run {
+            val created = ArrayObjectAdapter(mCardPresenter)
+            mMainMenuAdapter.addToCategory(
+                Category.LIVE_CHANNELS,
+                ListRow(HeaderItem(liveHeaderId, getString(R.string.live_channels)), created)
+            )
+            created
+        }
+        adapter.setItems(channels, object : DiffCallback<ChannelItem>() {
+            override fun areItemsTheSame(oldItem: ChannelItem, newItem: ChannelItem) =
+                oldItem.id == newItem.id
+
+            override fun areContentsTheSame(oldItem: ChannelItem, newItem: ChannelItem) =
+                oldItem === newItem
+        })
+
+        val liveRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
+        if (liveWasSelected && liveRowPosition >= 0) {
+            val targetCardIndex = HiddenLiveChannels.restoredSelectionIndex(
+                channels,
+                selectedChannelId,
+                previousCardIndex
+            )
+            // 行の一覧側だけで選び直す。BrowseSupportFragment.setSelectedPosition に task を渡すと
+            // startHeadersTransition(false) が走り、開いている左メニューが閉じる。設定画面の裏で走ると
+            // 状態保存後のフラグメント操作になり、Android 5.1 の Fire TV では落ちる。
+            val task = ListRowPresenter.SelectItemViewHolderTask(targetCardIndex).apply { setSmoothScroll(false) }
+            rowsSupportFragment?.setSelectedPosition(liveRowPosition, false, task)
+        } else {
+            restoreSelection(previousSelectedRowId)
+        }
+    }
+
     /** Reload rule rows only when explicitly requested, not when returning from playback. */
     private fun updateRows(includeRules: Boolean = true) {
 
         EpgStationV2.api?.let { api ->
             // EPGStation V2.x.x　の場合だけ「ライブ視聴」列を作る
 
-            val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong()*10000
-
             api.getChannels().enqueue(object : Callback<List<ChannelItem>> {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
                     if (!isUiAlive) return
                     response.body()?.let { rawChannels ->
-                        // データ放送専用サービス等（映像・音声を伴わないチャンネル）を除外する
-                        val channels = rawChannels.filter { ChannelItem.isAudioVideoService(it.type) }
-                        if (channels.isEmpty()) {
-                            if (mMainMenuAdapter.getListRowByHeaderId(liveHeaderId) != null) {
-                                mMainMenuAdapter.deleteCategory(Category.LIVE_CHANNELS)
-                            }
-                        } else {
-                            val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
-                            val listRowAdapter = if (currentListRow == null) {
-                                ArrayObjectAdapter(mCardPresenter).also { adapter ->
-                                    val header = HeaderItem(liveHeaderId, getString(R.string.live_channels))
-                                    mMainMenuAdapter.addToCategory(Category.LIVE_CHANNELS, ListRow(header, adapter))
-                                }
-                            } else {
-                                currentListRow.adapter as ArrayObjectAdapter
-                            }
-
-                            //既存のリストにあって、レスポンスにないアイテムの削除
-                            var horizontalIndex = 0
-                            while (horizontalIndex < listRowAdapter.size()) {
-                                var found = false
-                                channels.forEach {
-                                    if (listRowAdapter.get(horizontalIndex).equals(it)) found = true
-                                }
-                                if (!found) {
-                                    listRowAdapter.removeItems(horizontalIndex, 1)
-                                } else {
-                                    horizontalIndex += 1
-                                }
-                            }
-
-                            //レスポンスにあって、既存のリストにないアイテムの追加
-                            channels.forEachIndexed { index, it ->
-                                if (listRowAdapter.indexOf(it) == -1) {
-                                    listRowAdapter.add(index, it)
-                                }
-                            }
-
-                            // チャンネル一覧の取得だけでは番組名(currentProgramName)は入らないため、直後に取得する
-                            refreshLiveProgramNames()
-                        }
+                        // 番組名は equals に含まれない副次的な状態で、行に出ているオブジェクトにしか入っていない。
+                        // setItems は行の中身を渡したオブジェクトに入れ替えるので、前と同じ局は前のオブジェクトを
+                        // 使い回す（取り直すたびに全カードが番組名なしで描き直されないように）。
+                        val previous = mLiveChannels.orEmpty().associateBy { it.id }
+                        mLiveChannels = rawChannels.map { fresh -> previous[fresh.id]?.takeIf { it == fresh } ?: fresh }
+                        renderLiveChannels()
+                        // チャンネル一覧の取得だけでは番組名(currentProgramName)は入らないため、直後に取得する
+                        refreshLiveProgramNames()
                     }
                 }
                 override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {

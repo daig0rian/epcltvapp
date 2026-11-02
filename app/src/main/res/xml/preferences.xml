@@ -131,6 +131,10 @@
                 app:defaultValue="false"
                 app:title=       "@string/show_thumbnail_background" />
 
+            <Preference
+                app:key=         "@string/pref_key_hidden_live_channels"
+                app:title=       "@string/hidden_live_channels" />
+
         </PreferenceCategory>
 
         <PreferenceCategory
