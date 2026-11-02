@@ -142,8 +142,6 @@ class MainFragment : BrowseSupportFragment() {
 
     private val mCardPresenter = OriginalCardPresenter()
     private var mLiveChannels: List<ChannelItem>? = null
-    private var mSelectedLiveChannelId: Long? = null
-    private var mSelectedLiveChannelIndex = -1
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
@@ -533,16 +531,16 @@ class MainFragment : BrowseSupportFragment() {
         val previousRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
         val previousSelectedRowId = selectedRowHeaderId()
         val liveWasSelected = previousRowPosition >= 0 && previousRowPosition == selectedPosition
-        val previousCardIndex = if (liveWasSelected) mSelectedLiveChannelIndex else -1
-        val selectedChannelId = if (liveWasSelected) mSelectedLiveChannelId else null
+        // ライブ行で最後に選ばれていたカードは、onItemSelected が mRowCardSelections に控えている
+        val tracked = if (liveWasSelected) mRowCardSelections[liveHeaderId] else null
+        val previousCardIndex = tracked?.second ?: -1
+        val selectedChannelId = (tracked?.first as? ChannelItem)?.id
         val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
 
         if (channels.isEmpty()) {
             if (currentListRow != null) {
                 mMainMenuAdapter.deleteCategory(Category.LIVE_CHANNELS)
             }
-            mSelectedLiveChannelId = null
-            mSelectedLiveChannelIndex = -1
             if (liveWasSelected) {
                 val fallbackPosition = (0 until mMainMenuAdapter.size())
                     .filter { mMainMenuAdapter.get(it) is ListRow }
@@ -584,8 +582,6 @@ class MainFragment : BrowseSupportFragment() {
                     val targetChannel = channels.getOrNull(targetCardIndex)
                     if (rowViewHolder != null && targetChannel != null) {
                         rowViewHolder.gridView.selectedPosition = targetCardIndex
-                        mSelectedLiveChannelId = targetChannel.id
-                        mSelectedLiveChannelIndex = targetCardIndex
                     }
                 }
             })
@@ -2119,14 +2115,6 @@ class MainFragment : BrowseSupportFragment() {
             mManualRecordingPager?.onSelected(item)
             ruleIdFromHeaderId(row.headerItem?.id ?: -1)?.let { id ->
                 mLazyRuleLoader?.onCardSelected(id, item)
-            }
-            if (item is ChannelItem &&
-                row.headerItem?.id == Category.LIVE_CHANNELS.ordinal.toLong() * 10000
-            ) {
-                if (cardPosition != null && cardPosition >= 0) {
-                    mSelectedLiveChannelId = item.id
-                    mSelectedLiveChannelIndex = cardPosition
-                }
             }
             when (item) {
                 is RecordedProgram -> {
