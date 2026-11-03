@@ -1,6 +1,7 @@
 package com.daigorian.epcltvapp
 
 import android.graphics.Paint
+import android.view.ViewGroup
 import androidx.core.view.updatePadding
 import androidx.leanback.R as LeanbackR
 import androidx.leanback.media.PlaybackBaseControlGlue
@@ -31,6 +32,7 @@ import androidx.leanback.widget.AbstractDetailsDescriptionPresenter
  * ## 直し方
  *
  * はみ出す分だけ説明欄の上にパディングを入れ、TextView 全体を説明欄の内側に収める。
+ * パディングの上でもタイトルを描けるよう、説明欄の clipToPadding は切る。
  * TextView の中で字がどこに描かれるかは変えないので、代替フォントの寸法や Android の
  * バージョンによらず効く。説明欄が上へ広がるだけで、その分は何も描かれない。
  *
@@ -44,6 +46,9 @@ class PlaybackDescriptionPresenter : AbstractDetailsDescriptionPresenter() {
         vh.title.text = glue.title
         vh.subtitle.text = glue.subtitle
         vh.view.updatePadding(top = titleOverflow(vh))
+        // ViewGroup はパディングが1つでも0でないと、子をパディングの内側で切り抜く。
+        // これを切らないと、余白を足しても切り口は元と同じ位置に残る。
+        (vh.view as ViewGroup).clipToPadding = false
     }
 
     /**
