@@ -22,10 +22,10 @@
 ## 完了
 
 - [x] ブランチ作成
+- [x] 実装（`PlaybackDescriptionPresenter` を追加し、glue の `onCreateRowPresenter()` で差し替え）
 
 ## 残タスク
 
-- [ ] 実装
 - [ ] 3機種（BRAVIA・AFTT・Streamer）で動作確認（ユーザー）
 - [ ] PR
 
