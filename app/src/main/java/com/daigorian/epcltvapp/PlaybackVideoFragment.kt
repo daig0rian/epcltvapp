@@ -36,8 +36,10 @@ import androidx.leanback.widget.ObjectAdapter
 import androidx.leanback.widget.OnItemViewClickedListener
 import androidx.leanback.widget.OnItemViewSelectedListener
 import androidx.leanback.widget.PlaybackControlsRow
+import androidx.leanback.widget.PlaybackRowPresenter
 import androidx.leanback.widget.PlaybackSeekDataProvider
 import androidx.leanback.widget.PlaybackSeekUi
+import androidx.leanback.widget.PlaybackTransportRowPresenter
 import androidx.leanback.widget.RowPresenter
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -2421,6 +2423,18 @@ class PlaybackVideoFragment : VideoSupportFragment() {
          * HLSライブには従来どおり置く。こちらはシークバーも残していて、止めて追いつく
          * (=バッファに溜まった分を後から見る)操作に意味があるため。
          */
+        /**
+         * タイトル・サブタイトルの表示だけを [PlaybackDescriptionPresenter] に差し替える。
+         * 既定のままだと、漢字・かなのタイトルの上端が機種によって切れる(理由はそちら)。
+         *
+         * 行のプレゼンター自体は super が作ったものをそのまま使う。キー入力を [onKey] へ
+         * つなぐ処理がそちらに入っているため。
+         */
+        override fun onCreateRowPresenter(): PlaybackRowPresenter =
+            (super.onCreateRowPresenter() as PlaybackTransportRowPresenter).apply {
+                setDescriptionPresenter(PlaybackDescriptionPresenter())
+            }
+
         override fun onCreatePrimaryActions(primaryActionsAdapter: ArrayObjectAdapter) {
             if (!isLiveMpegTs) {
                 super.onCreatePrimaryActions(primaryActionsAdapter)
