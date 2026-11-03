@@ -125,7 +125,10 @@ class OriginalCardPresenter() : Presenter() {
                         )
                     ) { _, action ->
                         if (action == 0) {
-                            // サーバー側で変換済みの映像を受け取るHLS再生。
+                            // HLS再生（通常タップはmpegts直送）。サーバー側で変換済みの映像を
+                            // 受け取るため、mpegts直送が不安定な場合や回線・端末性能が足りない場合の
+                            // フォールバック用途。なおARIB字幕・文字スーパー・デュアルモノ副音声は
+                            // TSを直接扱う直送側(isTsContent=true)でのみ扱えるため、HLSでは表示できない。
                             val intent = Intent(context, PlaybackActivity::class.java)
                             intent.putExtra(DetailsActivity.IS_LIVE, true)
                             intent.putExtra(DetailsActivity.CHANNEL_ID, item.id)
