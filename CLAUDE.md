@@ -55,13 +55,13 @@ Kotlin 製 Android TV アプリ (Leanback UI フレームワーク使用)。
 | compileSdk | 30 | **34** | Compose for TV 移行準備（当時の判断。移行自体は未実施） |
 | targetSdk | 30 | **34** | compileSdk に合わせて更新 |
 | minSdk | 22 | **22 (変更なし)** | Fire TV 全世代サポート維持 |
-| leanback | 1.0.0 | **1.0.0 (変更なし)** | stable 1.1.0 が存在しないため |
+| leanback | 1.0.0 | **1.0.0 (変更なし)** | 安定版 1.2.0 (2025-04) はあるが、上げると全画面の回帰テストが要る割に利用者の得るものが小さいため見送り中 (Issue #124)。1.3.0 以降は minSdk 23 のため入れられない |
 
 ## 既知の技術的負債
 
 | 項目 | 状況 | 理由 |
 |------|------|------|
-| `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` stable 1.1.0 が存在せず、Leanback 側での解消手段がない。抜本的な解消には UI フレームワークの移行が必要だが、その方針は未定 |
+| `SettingsFragment.kt` の `PreferenceFragment` | 警告あり・保留中 | `leanback-preference` 1.2.0 の Compat 版 (`LeanbackSettingsFragmentCompat` 等) へ移せば解消できるが、Leanback 1.2.0 への更新ごと見送り中 (Issue #124) |
 
 ## 検討して撤回した機能
 

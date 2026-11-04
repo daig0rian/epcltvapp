@@ -134,7 +134,7 @@ targetSdkVersion 34
 
 | 項目 | 内容 | 対応方針 |
 |------|------|---------|
-| `SettingsFragment.kt` の `PreferenceFragment` | deprecated 警告が残存 | `leanback-preference` stable 1.1.0 が存在しないため保留。Compose for TV 移行時に解消 |
+| `SettingsFragment.kt` の `PreferenceFragment` | deprecated 警告が残存 | `leanback-preference` 1.2.0 の Compat 版へ移せば解消できる。Leanback 1.2.0 への更新とあわせて見送り中 (Issue #124) |
 
 ---
 
