@@ -89,6 +89,20 @@ object EpgStationV2 {
             @Query("isHalfWidth") isHalfWidth: Boolean = true
         ): Call<List<Schedule>>
 
+        // 期間内に1本でも番組がある局だけが返る。GR/BS/CS/SKY は省略できない。
+        // BS4K は v3 で足された任意の指定で、付けないと BS4K の局が外れる（v2 は無視する）。
+        @GET("schedules")
+        fun getSchedules(
+            @Query("startAt") startAt: Long,
+            @Query("endAt") endAt: Long,
+            @Query("isHalfWidth") isHalfWidth: Boolean = true,
+            @Query("GR") gr: Boolean = true,
+            @Query("BS") bs: Boolean = true,
+            @Query("CS") cs: Boolean = true,
+            @Query("SKY") sky: Boolean = true,
+            @Query("BS4K") bs4k: Boolean = true,
+        ): Call<List<Schedule>>
+
         @POST("reserves")
         fun addReserve(
             @Body option: ManualReserveOption

@@ -5,7 +5,11 @@ data class ChannelItem(
     val name: String = "",
     val halfWidthName: String = "",
     val type: Int? = null,
-    val hasLogoData: Boolean = false
+    val hasLogoData: Boolean = false,
+    val serviceId: Long = 0,
+    val networkId: Long = 0,
+    val channelType: String? = null,   // GR / BS / CS / SKY
+    val channel: String? = null        // 物理チャンネル（BS は TS 単位、例: BS01_0）
 ) {
     // 「番組情報更新」で取得した現在放送中の番組情報。equals/hashCode/copy には含めない副次的な状態。
     @Transient

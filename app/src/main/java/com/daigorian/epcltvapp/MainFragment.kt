@@ -142,11 +142,21 @@ class MainFragment : BrowseSupportFragment() {
 
     private val mCardPresenter = OriginalCardPresenter()
     private var mLiveChannels: List<ChannelItem>? = null
+
+    /** 最後に取った番組表（いまから [LIVE_SCHEDULE_WINDOW_MS] 先まで）。番組名と、サブチャンネルを並べるかどうかに使う。 */
+    private var mLiveSchedules: List<Schedule> = emptyList()
+
+    /** [mLiveSchedules] が当てになる時刻の上限。これを過ぎたら、取り直すまで番組の情報を書き換えない。 */
+    private var mLiveSchedulesUntil = Long.MIN_VALUE
+
+    /** [refreshLiveSchedule] の通し番号。後から出した要求の結果だけを使うためのもの。 */
+    private var mLiveScheduleRequestSeq = 0
+
     private val mMainMenuListRowPresenter = ListRowPresenter()
     private val mMainMenuAdapter = MainMenuAdapter(mMainMenuListRowPresenter)
 
-    /** ライブ視聴の番組情報を自動更新するRunnable。固定間隔ではなく、次に終了する番組の終了時刻に合わせて都度スケジュールし直す */
-    private val mProgramRefreshRunnable = Runnable { refreshLiveProgramNames() }
+    /** ライブ視聴の番組情報を自動更新するRunnable。固定間隔ではなく、どれかの局で番組が切り替わる時刻に合わせて都度スケジュールし直す */
+    private val mProgramRefreshRunnable = Runnable { refreshLiveSchedule() }
 
     /** タイトル文字の下に出しているディスク使用量。画面が作り直されても出し直せるように持っておく。 */
     private var mDiskUsages: List<DiskUsage> = emptyList()
@@ -349,7 +359,7 @@ class MainFragment : BrowseSupportFragment() {
         }
         // 表示中のみ動かすため画面を離れたら止める。ポーズ中に終了時刻を迎えた番組があるかもしれないので、
         // 再開時は都度スケジュールし直すのではなく、最新情報を取り直してから次のタイマーを仕掛け直す。
-        refreshLiveProgramNames()
+        refreshLiveSchedule()
         // Leanback の復元は onResume より後（レイアウト時）なので、少し待ってから選択行を見る。
         scheduleSelectionRestore()
         // 復帰したときは行が既に attach 済みで attach イベントが来ないので、ここで1回掃く。
@@ -520,14 +530,31 @@ class MainFragment : BrowseSupportFragment() {
         })
     }
 
-    /** 取得済みチャンネルだけを絞り直し、ライブ行の選択位置も同じ操作内で戻す。 */
+    /**
+     * 取得済みの局と番組表から並べる局を決め直し、ライブ行の選択位置も同じ操作内で戻す。
+     * 並ぶ局が前と同じなら行には触らず、番組が変わったカードだけを描き直す。
+     */
     private fun renderLiveChannels() {
         val loaded = mLiveChannels ?: return
-        val channels = HiddenLiveChannels.visible(
+        val programChangedIds = applyCurrentPrograms(loaded)
+        val onAirIds = loaded.filter { it.currentProgramStartAt != null }.map { it.id }.toSet()
+        val channels = LiveLineup.visible(
             loaded,
-            HiddenLiveChannels.ids(requireContext())
+            HiddenLiveChannels.ids(requireContext()),
+            onAirIds
         )
         val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong() * 10000
+        val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
+        val currentCards = currentListRow?.adapter as? ArrayObjectAdapter
+        val currentSize = currentCards?.size() ?: 0
+        // id ではなくオブジェクトで比べる。局の情報が変わって作り直されたオブジェクトは、行の中身も入れ替える必要がある
+        if (currentSize == channels.size && channels.indices.all { currentCards?.get(it) === channels[it] }) {
+            // 選択位置を戻す処理も走らせない。いま行の中を移動している最中かもしれないため。
+            notifyProgramChanged(currentCards, programChangedIds)
+            return
+        }
+        Log.i(TAG, "renderLiveChannels: 並ぶ局 $currentSize → ${channels.size}（番組があるサブ ${(LiveLineup.subChannelIds(loaded) intersect onAirIds).size}）")
+
         val previousRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
         val previousSelectedRowId = selectedRowHeaderId()
         val liveWasSelected = previousRowPosition >= 0 && previousRowPosition == selectedPosition
@@ -535,7 +562,6 @@ class MainFragment : BrowseSupportFragment() {
         val tracked = if (liveWasSelected) mRowCardSelections[liveHeaderId] else null
         val previousCardIndex = tracked?.second ?: -1
         val selectedChannelId = (tracked?.first as? ChannelItem)?.id
-        val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
 
         if (channels.isEmpty()) {
             if (currentListRow != null) {
@@ -567,6 +593,8 @@ class MainFragment : BrowseSupportFragment() {
             override fun areContentsTheSame(oldItem: ChannelItem, newItem: ChannelItem) =
                 oldItem === newItem
         })
+        // 使い回したオブジェクトは「中身が同じ」とみなされて描き直されないので、番組が変わったものは自分で知らせる
+        notifyProgramChanged(adapter, programChangedIds)
 
         val liveRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
         if (liveWasSelected && liveRowPosition >= 0) {
@@ -585,6 +613,39 @@ class MainFragment : BrowseSupportFragment() {
         }
     }
 
+    /**
+     * [mLiveSchedules] から、いま放送中の番組を各局に書き込む。行に出ていない局にも書く（隠していた局を戻したとき、
+     * 番組が無いサブチャンネルに番組が始まったときに、すぐ番組名が出るように）。番組表が古くなっていたら何もしない。
+     * @return 番組が変わった局の id
+     */
+    private fun applyCurrentPrograms(channels: List<ChannelItem>): Set<Long> {
+        val now = System.currentTimeMillis()
+        if (now > mLiveSchedulesUntil) return emptySet()
+        val programs = LiveLineup.currentPrograms(mLiveSchedules, now)
+        val changed = HashSet<Long>()
+        for (channel in channels) {
+            val program = programs[channel.id]
+            if (channel.currentProgramStartAt != program?.startAt ||
+                channel.currentProgramEndAt != program?.endAt ||
+                channel.currentProgramName != program?.name) {
+                channel.currentProgramName = program?.name
+                channel.currentProgramStartAt = program?.startAt
+                channel.currentProgramEndAt = program?.endAt
+                changed.add(channel.id)
+            }
+        }
+        return changed
+    }
+
+    /** 番組が変わったカードだけを再描画する（他のカードはチラつかせない）。 */
+    private fun notifyProgramChanged(cards: ArrayObjectAdapter?, changedIds: Set<Long>) {
+        if (cards == null || changedIds.isEmpty()) return
+        for (i in 0 until cards.size()) {
+            val channel = cards.get(i) as? ChannelItem ?: continue
+            if (channel.id in changedIds) cards.notifyArrayItemRangeChanged(i, 1)
+        }
+    }
+
     /** Reload rule rows only when explicitly requested, not when returning from playback. */
     private fun updateRows(includeRules: Boolean = true) {
 
@@ -595,14 +656,14 @@ class MainFragment : BrowseSupportFragment() {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
                     if (!isUiAlive) return
                     response.body()?.let { rawChannels ->
-                        // 番組名は equals に含まれない副次的な状態で、行に出ているオブジェクトにしか入っていない。
+                        // 番組名は equals に含まれない副次的な状態で、前のオブジェクトにしか入っていない。
                         // setItems は行の中身を渡したオブジェクトに入れ替えるので、前と同じ局は前のオブジェクトを
-                        // 使い回す（取り直すたびに全カードが番組名なしで描き直されないように）。
+                        // 使い回す（取り直すたびに全カードが描き直されないように）。
                         val previous = mLiveChannels.orEmpty().associateBy { it.id }
                         mLiveChannels = rawChannels.map { fresh -> previous[fresh.id]?.takeIf { it == fresh } ?: fresh }
                         renderLiveChannels()
                         // チャンネル一覧の取得だけでは番組名(currentProgramName)は入らないため、直後に取得する
-                        refreshLiveProgramNames()
+                        refreshLiveSchedule()
                     }
                 }
                 override fun onFailure(call: Call<List<ChannelItem>>, t: Throwable) {
@@ -1537,59 +1598,57 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
-     * 現在放送中の番組情報をまとめて取り直し、実際に番組が切り替わったカードだけを再描画する。
-     * 次回の実行は、表示中チャンネルの中で最も早く終了する番組の終了時刻に合わせてスケジュールする
-     * （固定間隔で全カードを再描画するとチラつくため、カード単位の終了時刻ベースの更新に変更）。
+     * いまから [LIVE_SCHEDULE_WINDOW_MS] 先までの番組表を取り直し、ライブ行の番組名と並ぶ局に反映する。
+     * 次回の実行は、並びうる局のどれかで放送中の番組が変わる時刻に合わせてスケジュールする。番組の終わりだけでなく
+     * 始まりも見るので、放送休止が明けたメインチャンネルの番組名も、サブチャンネルの出入りも、その時刻に反映される
+     * （固定間隔で全カードを再描画するとチラつくため、切り替わりの時刻ベースで更新している）。
      */
-    private fun refreshLiveProgramNames() {
-        val headerId = Category.LIVE_CHANNELS.ordinal.toLong()*10000
-        if (mMainMenuAdapter.getListRowByHeaderId(headerId) == null) return
+    private fun refreshLiveSchedule() {
+        val channels = mLiveChannels ?: return
+        // 利用者が隠した局は待たない。いま番組が無くて行に出ていないサブチャンネルは待つ（始まったら並べるため）
+        val candidateIds = HiddenLiveChannels.visible(channels, HiddenLiveChannels.ids(requireContext()))
+            .map { it.id }.toSet()
+        if (candidateIds.isEmpty()) return
+        val api = EpgStationV2.api ?: return
+        val now = System.currentTimeMillis()
+        val until = now + LIVE_SCHEDULE_WINDOW_MS
+        val seq = ++mLiveScheduleRequestSeq
 
-        EpgStationV2.api?.getScheduleOnAir()?.enqueue(object : Callback<List<Schedule>> {
+        api.getSchedules(startAt = now, endAt = until).enqueue(object : Callback<List<Schedule>> {
             override fun onResponse(call: Call<List<Schedule>>, response: Response<List<Schedule>>) {
-                if (!isUiAlive) return
-                val programByChannelId = response.body()
-                    ?.associate { it.channel.id to it.programs.firstOrNull() }
-                    ?: return
-                // レスポンス到達までの間に行のアダプタが再生成されている可能性があるため、反映直前に取り直す
-                val adapter = (mMainMenuAdapter.getListRowByHeaderId(headerId)?.adapter as? ArrayObjectAdapter) ?: return
-
-                val changedIndices = mutableListOf<Int>()
-                var nextProgramEndAt = Long.MAX_VALUE
-                for (i in 0 until adapter.size()) {
-                    val channelItem = adapter.get(i) as? ChannelItem ?: continue
-                    val program = programByChannelId[channelItem.id]
-                    if (channelItem.currentProgramStartAt != program?.startAt) {
-                        channelItem.currentProgramName = program?.name
-                        channelItem.currentProgramStartAt = program?.startAt
-                        channelItem.currentProgramEndAt = program?.endAt
-                        changedIndices.add(i)
-                    }
-                    program?.endAt?.let { endAt -> if (endAt < nextProgramEndAt) nextProgramEndAt = endAt }
+                if (!isUiAlive || seq != mLiveScheduleRequestSeq) return
+                val schedules = response.body()
+                if (schedules == null) {
+                    Log.d(TAG, "refreshLiveSchedule() getSchedules API Error code=${response.code()}")
+                    scheduleNextProgramRefresh(null)
+                    return
                 }
-
-                activity?.runOnUiThread {
-                    // 番組が切り替わったカードだけを再描画する（他のカードはチラつかせない）
-                    changedIndices.forEach { adapter.notifyArrayItemRangeChanged(it, 1) }
-                }
-
-                scheduleNextProgramRefresh(nextProgramEndAt)
+                mLiveSchedules = schedules
+                mLiveSchedulesUntil = until
+                renderLiveChannels()
+                // 範囲の中に変化が無ければ範囲の終わりに取り直す。取り直しは必ずこの範囲の中で起きるので、
+                // 範囲より先に始まる番組も、どこかの回で範囲に入ってきたときに拾える。
+                val nextChangeAt = LiveLineup.nextChangeAt(schedules, candidateIds, now) ?: until
+                Log.i(TAG, "refreshLiveSchedule: 番組表の局 ${schedules.size}、次の切り替わりまで ${(nextChangeAt - now) / 1000}秒")
+                scheduleNextProgramRefresh(nextChangeAt)
             }
             override fun onFailure(call: Call<List<Schedule>>, t: Throwable) {
-                if (!isUiAlive) return
-                Log.d(TAG,"refreshLiveProgramNames() getScheduleOnAir API Failure")
+                if (!isUiAlive || seq != mLiveScheduleRequestSeq) return
+                Log.d(TAG,"refreshLiveSchedule() getSchedules API Failure")
                 // 失敗時もフォールバック間隔でリトライする
-                scheduleNextProgramRefresh(Long.MAX_VALUE)
+                scheduleNextProgramRefresh(null)
             }
         })
     }
 
-    /** 次に番組が終了する時刻（不明な場合は Long.MAX_VALUE）に合わせて自動更新タイマーを仕掛け直す */
-    private fun scheduleNextProgramRefresh(nextProgramEndAt: Long) {
-        val delay = if (nextProgramEndAt == Long.MAX_VALUE) {
+    /** [at]（ms）の少し後に自動更新タイマーを仕掛け直す。null なら（取得に失敗したときなど）一定間隔で再試行する */
+    private fun scheduleNextProgramRefresh(at: Long?) {
+        // 画面を離れた後に応答が届いた場合は仕掛けない。戻ったときに onResume が取り直す
+        if (!isResumed) return
+        val delay = if (at == null) {
             PROGRAM_REFRESH_FALLBACK_INTERVAL_MS
         } else {
-            (nextProgramEndAt - System.currentTimeMillis() + PROGRAM_END_REFRESH_BUFFER_MS)
+            (at - System.currentTimeMillis() + PROGRAM_END_REFRESH_BUFFER_MS)
                 .coerceAtLeast(MIN_PROGRAM_REFRESH_DELAY_MS)
         }
         mHandler.removeCallbacks(mProgramRefreshRunnable)
@@ -2930,10 +2989,13 @@ class MainFragment : BrowseSupportFragment() {
 
         private const val BACKGROUND_UPDATE_DELAY = 300
 
-        /** 番組終了時刻が取得できない場合（放送休止中など）のフォールバック更新間隔 */
+        /** 番組表を取得できなかったときの再試行の間隔 */
         private const val PROGRAM_REFRESH_FALLBACK_INTERVAL_MS = 60 * 1000L
 
-        /** 番組終了時刻ちょうどだとEPGStation側の番組切り替えに間に合わないことがあるための余裕時間 */
+        /** ライブ行のために取る番組表の範囲（いまからこの時間先まで）。番組の始まりを知るには、いまより先が要る */
+        private const val LIVE_SCHEDULE_WINDOW_MS = 60 * 60 * 1000L
+
+        /** 番組の切り替わり時刻ちょうどだとEPGStation側の番組情報の更新に間に合わないことがあるための余裕時間 */
         private const val PROGRAM_END_REFRESH_BUFFER_MS = 5 * 1000L
 
         /** 自動更新タイマーの最小間隔（連続発火を防ぐ下限） */
