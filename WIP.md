@@ -27,12 +27,14 @@
 
 ## 完了
 
-（なし）
+- ChannelItem に serviceId / networkId / channelType / channel を足した
+- `LiveLineup`（サブ判定・いまの番組・次に変わる時刻）を純粋関数で書き、`LiveLineupTest` 18件を
+  手元の kotlinc で通した
+- MainFragment: 取得先を `/schedules` に切り替え、番組情報の反映を `renderLiveChannels` に一本化。
+  並ぶ局が同じなら行に触らない（選択位置も戻さない）。画面を離れた後に届いた応答ではタイマーを仕掛けない
+- 手元のモックに `MOCK_SUB_CHANNELS=1`（局が出入りするモード）と `/schedules` を足した（リポジトリ外）
 
 ## 残タスク
 
-- [ ] ChannelItem に serviceId / networkId / channelType / channel を足す
-- [ ] サブ判定と番組表の計算を純粋関数にし、単体テストを書く
-- [ ] MainFragment: 取得先の切り替え、描画の一本化、次の取り直し時刻
-- [ ] 手元のモックにサブチャンネルと `/schedules` を足して検証
-- [ ] 実機確認（フォーカス中のサブが消える／手前にサブが入る／左メニューを開いている／設定画面の裏、AFTT を含む）
+- [ ] ユーザーのビルド・実機確認（実サーバー／モックの出入り／フォーカス中のサブが消える／手前にサブが入る／
+      左メニューを開いている／設定画面で非表示の局を戻す、AFTT を含む）
