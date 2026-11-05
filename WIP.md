@@ -19,8 +19,9 @@ v1.42 のリリース前に、#117 で入った「録画を後から読み込み
 ## 完了
 
 - [x] Issue #120 に AFTT での比較結果をコメント
-- [ ] 既定値を ON にする（リソース・preferences.xml・MainFragment）
-- [ ] MANUAL.md 1.2節（番組表からの録画）と 5.3節（録画を後から読み込み）を直す
+- [x] 既定値を ON にする（リソース・preferences.xml・MainFragment）
+- [x] MANUAL.md 1.2節（番組表からの録画）と 5.3節（録画を後から読み込み）を直す
+  （スクリーンショット settings-display-performance.png はもともと ON の状態なので撮り直し不要）
 
 ## 残り
 
