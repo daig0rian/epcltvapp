@@ -92,6 +92,57 @@ class LiveLineupTest {
         assertEquals(emptyList<ChannelItem>(), LiveLineup.visible(listOf(main, idleSub), setOf(main.id.toString()), emptySet()))
     }
 
+    // --- 左右キーで移る先 ---
+
+    @Test fun rightAndLeftMoveToAdjacentChannels() {
+        val channels = listOf(gr(1024), gr(1032, networkId = 32737), gr(1040, networkId = 32738))
+        assertSame(channels[2], LiveLineup.neighbor(channels, emptySet(), emptySet(), channels[1].id, forward = true))
+        assertSame(channels[0], LiveLineup.neighbor(channels, emptySet(), emptySet(), channels[1].id, forward = false))
+    }
+
+    @Test fun endsWrapAround() {
+        val channels = listOf(gr(1024), gr(1032, networkId = 32737), gr(1040, networkId = 32738))
+        assertSame(channels[0], LiveLineup.neighbor(channels, emptySet(), emptySet(), channels[2].id, forward = true))
+        assertSame(channels[2], LiveLineup.neighbor(channels, emptySet(), emptySet(), channels[0].id, forward = false))
+    }
+
+    @Test fun skipsHiddenChannelAndIdleSubChannel() {
+        val main = gr(1024)
+        val idleSub = gr(1025)
+        val hidden = gr(1032, networkId = 32737)
+        val next = gr(1040, networkId = 32738)
+        val channels = listOf(main, idleSub, hidden, next)
+        assertSame(next, LiveLineup.neighbor(channels, setOf(hidden.id.toString()), emptySet(), main.id, forward = true))
+        assertSame(main, LiveLineup.neighbor(channels, setOf(hidden.id.toString()), emptySet(), next.id, forward = false))
+    }
+
+    @Test fun subChannelWithProgramIsNotSkipped() {
+        val main = gr(1024)
+        val sub = gr(1025)
+        val next = gr(1032, networkId = 32737)
+        assertSame(sub, LiveLineup.neighbor(listOf(main, sub, next), emptySet(), setOf(sub.id), main.id, forward = true))
+    }
+
+    @Test fun channelNotInLineupMovesByPositionAmongAllChannels() {
+        val first = gr(1024)
+        val hidden = gr(1032, networkId = 32737)
+        val last = gr(1040, networkId = 32738)
+        val channels = listOf(first, hidden, last)
+        val hiddenIds = setOf(hidden.id.toString())
+        assertSame(last, LiveLineup.neighbor(channels, hiddenIds, emptySet(), hidden.id, forward = true))
+        assertSame(first, LiveLineup.neighbor(channels, hiddenIds, emptySet(), hidden.id, forward = false))
+    }
+
+    @Test fun noOtherChannelIsNull() {
+        val only = gr(1024)
+        val idleSub = gr(1025)
+        assertNull(LiveLineup.neighbor(listOf(only, idleSub), emptySet(), emptySet(), only.id, forward = true))
+    }
+
+    @Test fun unknownCurrentChannelIsNull() {
+        assertNull(LiveLineup.neighbor(listOf(gr(1024)), emptySet(), emptySet(), 1L, forward = true))
+    }
+
     // --- いまの番組 ---
 
     @Test fun currentProgramContainsNow() {
