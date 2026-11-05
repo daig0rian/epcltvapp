@@ -161,7 +161,7 @@
 
             <SwitchPreference
                 app:key=         "@string/pref_key_lazy_load"
-                app:defaultValue="false"
+                app:defaultValue="@bool/pref_val_lazy_load_default"
                 app:title=       "@string/lazy_load"
                 app:summary=     "@string/lazy_load_summary" />
 

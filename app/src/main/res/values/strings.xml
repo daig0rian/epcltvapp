@@ -158,6 +158,7 @@
     <string name="pref_key_show_thumbnail_background" translatable="false">KEY_SHOW_THUMBNAIL_BACKGROUND</string>
     <string name="show_thumbnail_background">Thumbnail background</string>
     <string name="pref_key_lazy_load" translatable="false">KEY_LAZY_LOAD</string>
+    <bool name="pref_val_lazy_load_default">true</bool>
     <string name="pref_category_performance">Performance</string>
     <string name="lazy_load">Load recordings later</string>
     <string name="lazy_load_summary">Loads less at startup so you can start browsing right away.</string>
