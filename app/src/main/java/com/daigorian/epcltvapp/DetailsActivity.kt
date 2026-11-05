@@ -29,5 +29,7 @@ class DetailsActivity : FragmentActivity() {
         const val IS_LIVE_MPEGTS = "IsLiveMpegTs"
         const val CHANNEL_ID = "ChannelId"
         const val CHANNEL_NAME = "ChannelName"
+        // ライブ視聴中に左右キーで局を変えてきた再生か。コントロールを閉じたまま始める。
+        const val IS_CHANNEL_SWITCH = "IsChannelSwitch"
     }
 }

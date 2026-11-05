@@ -143,7 +143,7 @@ class MainFragment : BrowseSupportFragment() {
     private val mCardPresenter = OriginalCardPresenter()
     private var mLiveChannels: List<ChannelItem>? = null
 
-    /** 最後に取った番組表（いまから [LIVE_SCHEDULE_WINDOW_MS] 先まで）。番組名と、サブチャンネルを並べるかどうかに使う。 */
+    /** 最後に取った番組表（いまから [LiveLineup.SCHEDULE_WINDOW_MS] 先まで）。番組名と、サブチャンネルを並べるかどうかに使う。 */
     private var mLiveSchedules: List<Schedule> = emptyList()
 
     /** [mLiveSchedules] が当てになる時刻の上限。これを過ぎたら、取り直すまで番組の情報を書き換えない。 */
@@ -310,6 +310,8 @@ class MainFragment : BrowseSupportFragment() {
         Log.i(TAG, "onResume adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition 選択行=${selectedRowHeaderId()} 復元待ち=$mPendingRestoreRowId 直前=$mRowIdBeforePause flags[reloadAll=$mNeedsReloadAllOnResume conn=$mNeedsCheckConnectionOnResume hist=$mNeedsReloadHistoryOnResume]")
         super.onResume()
         Log.d(TAG, "onResume after super: adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
+        // ライブ視聴中に左右キーで局を変えてきたなら、ライブの行のカーソルを最後に見ていた局へ合わせる
+        PlaybackActivity.takeLastSwitchedLiveChannelId()?.let { selectLiveCard(it) }
         when {
             mNeedsReloadAllOnResume && SettingsFragment.isPreferenceAllExists(requireContext()) -> {
                 Log.d(TAG, "onResume: branch=reloadAll")
@@ -611,6 +613,29 @@ class MainFragment : BrowseSupportFragment() {
         } else {
             restoreSelection(previousSelectedRowId)
         }
+    }
+
+    /**
+     * ライブ視聴の行のカーソルを [channelId] の局へ合わせる。ライブの行を選んだまま画面を離れていたとき
+     * (ライブの行から再生を始めたとき)だけ。
+     *
+     * その局がいま行に無くても控えには書いておく。見ている間に番組が始まったサブチャンネルは、
+     * 番組表を取り直して行を作り直したところで並ぶので、そのとき [renderLiveChannels] がこの控えを見て選び直す。
+     * 隠した局など、作り直しても並ばない局なら何も起きない。
+     */
+    private fun selectLiveCard(channelId: Long) {
+        val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong() * 10000
+        if (mRowIdBeforePause != liveHeaderId) return
+        val channel = mLiveChannels?.firstOrNull { it.id == channelId } ?: return
+        val cards = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)?.adapter as? ArrayObjectAdapter ?: return
+        val index = (0 until cards.size()).firstOrNull { (cards.get(it) as? ChannelItem)?.id == channelId }
+        mRowCardSelections[liveHeaderId] = channel to (index ?: mRowCardSelections[liveHeaderId]?.second ?: 0)
+        if (index == null) return
+        val rowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
+        // 行の一覧側だけで選び直す(理由は renderLiveChannels と同じ)
+        val task = ListRowPresenter.SelectItemViewHolderTask(index).apply { setSmoothScroll(false) }
+        rowsSupportFragment?.setSelectedPosition(rowPosition, false, task)
+        Log.i(TAG, "selectLiveCard: 最後に見ていた局へカーソルを合わせる 局=$channelId 位置=$index")
     }
 
     /**
@@ -1603,7 +1628,7 @@ class MainFragment : BrowseSupportFragment() {
     }
 
     /**
-     * いまから [LIVE_SCHEDULE_WINDOW_MS] 先までの番組表を取り直し、ライブ行の番組名と並ぶ局に反映する。
+     * いまから [LiveLineup.SCHEDULE_WINDOW_MS] 先までの番組表を取り直し、ライブ行の番組名と並ぶ局に反映する。
      * 次回の実行は、並びうる局のどれかで放送中の番組が変わる時刻に合わせてスケジュールする。番組の終わりだけでなく
      * 始まりも見るので、放送休止が明けたメインチャンネルの番組名も、サブチャンネルの出入りも、その時刻に反映される
      * （固定間隔で全カードを再描画するとチラつくため、切り替わりの時刻ベースで更新している）。
@@ -1616,7 +1641,7 @@ class MainFragment : BrowseSupportFragment() {
         if (candidateIds.isEmpty()) return
         val api = EpgStationV2.api ?: return
         val now = System.currentTimeMillis()
-        val until = now + LIVE_SCHEDULE_WINDOW_MS
+        val until = now + LiveLineup.SCHEDULE_WINDOW_MS
         val seq = ++mLiveScheduleRequestSeq
 
         api.getSchedules(startAt = now, endAt = until).enqueue(object : Callback<List<Schedule>> {
@@ -2996,9 +3021,6 @@ class MainFragment : BrowseSupportFragment() {
 
         /** 番組表を取得できなかったときの再試行の間隔 */
         private const val PROGRAM_REFRESH_FALLBACK_INTERVAL_MS = 60 * 1000L
-
-        /** ライブ行のために取る番組表の範囲（いまからこの時間先まで）。番組の始まりを知るには、いまより先が要る */
-        private const val LIVE_SCHEDULE_WINDOW_MS = 60 * 60 * 1000L
 
         /** 番組の切り替わり時刻ちょうどだとEPGStation側の番組情報の更新に間に合わないことがあるための余裕時間 */
         private const val PROGRAM_END_REFRESH_BUFFER_MS = 5 * 1000L

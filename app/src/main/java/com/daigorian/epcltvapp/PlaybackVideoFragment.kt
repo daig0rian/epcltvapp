@@ -217,6 +217,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     private var inSeekMode = false
     // コントロール行より下の行(エピソード一覧)を見ている最中。
     private var browsingOtherRows = false
+    // 左右キーで局を変えてきた直後で、コントロールを閉じたままにしているか。Leanback は再生が始まると
+    // コントロールを開く(setControlsOverlayAutoHideEnabled の値が変わると showControlsOverlay を呼ぶ)。
+    // 開いている間の左右キーはボタンの移動になるので、そのままだと続けて局を変えられない。
+    // 利用者が左右と音量以外のキーを押したら解く([onChannelKey])。
+    private var holdControlsHidden = false
 
     // Live viewing state
     private var liveChannelId: Long = -1L
@@ -270,6 +275,16 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         val isAnyLive = isLive || isLiveMpegTs
         liveChannelId = activity?.intent?.getLongExtra(DetailsActivity.CHANNEL_ID, -1L) ?: -1L
         val liveChannelName = activity?.intent?.getStringExtra(DetailsActivity.CHANNEL_NAME)
+        if (isAnyLive) {
+            // 最初に左右キーを押したときに待たせないよう、局の並びを先に取っておく
+            (activity as? PlaybackActivity)?.liveChannelLineup?.prefetch()
+            // 左右キーで局を変えてきたなら、コントロールを閉じたまま始める。画面を作る前に閉じておくのは
+            // Leanback が用意している経路(PlaybackSupportFragment の mControlVisibleBeforeOnCreateView)。
+            if (activity?.intent?.getBooleanExtra(DetailsActivity.IS_CHANNEL_SWITCH, false) == true) {
+                hideControlsOverlay(false)
+                holdControlsHidden = true
+            }
+        }
 
         // Restore persisted states
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -755,6 +770,78 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     }
 
     /**
+     * ライブ視聴中の左右キーで、ホームのライブ視聴の行で隣にある局へ移る(右なら右のカードの局)。
+     * 端からは反対の端へ回る。HLS で見ていれば HLS のまま、直送なら直送のまま移る。
+     *
+     * 受けるのはコントロールが閉じているときだけ。開いている間の左右キーはボタンの移動のまま。
+     * Leanback の既定では、閉じているときの左右キーはコントロールを開くだけで、ライブはシークできないので
+     * ほかに役目が無い。コントロールは上下キーと決定キーで開ける。
+     *
+     * [PlaybackActivity.dispatchKeyEvent] から、ビュー階層へ配る前に呼ばれる([onRemoteKey] の後)。
+     *
+     * @return ここで受けたか。true ならキーはこれ以上どこにも流れない。
+     */
+    fun onChannelKey(event: KeyEvent): Boolean {
+        val keyCode = event.keyCode
+        val isChannelKey = keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+        if (!isChannelKey || liveChannelId < 0 || isControlsOverlayVisible) {
+            // 局を変えてきた直後の「閉じたまま」は、コントロールを開く操作をしたところで解く。音量は
+            // 局を変えた直後に合わせ直すことが多いので除く——解くと再生の開始に合わせてコントロールが開き、
+            // 続けて局を変えられなくなる。
+            if (event.action == KeyEvent.ACTION_DOWN && keyCode !in VOLUME_KEY_CODES) {
+                holdControlsHidden = false
+            }
+            return false
+        }
+        // 動くのは押した瞬間だけ。離したとき・押しっぱなしの繰り返しは受けるだけで何もしない
+        // (繰り返しまで通すと局が次々に変わり、そのたびに配信を開き直すことになる)。
+        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount > 0) return true
+        if (view == null || switchingProgram) return true
+        switchLiveChannel(forward = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)
+        return true
+    }
+
+    /** 隣の局へ移る。移る先は [PlaybackActivity.liveChannelLineup] が決める。 */
+    private fun switchLiveChannel(forward: Boolean) {
+        val playbackActivity = activity as? PlaybackActivity ?: return
+        playbackActivity.showChannelSwitchArrow(forward)
+        playbackActivity.liveChannelLineup.neighbor(
+            liveChannelId,
+            forward,
+            HiddenLiveChannels.ids(requireContext()),
+            onResult = { target ->
+                // 局の並びを取りに行っていた間に、画面を離れたり別の切り替えが始まったりしていたら何もしない
+                if (target != null && isAdded && !switchingProgram) {
+                    val channel = target.channel
+                    val name = channel.halfWidthName.ifEmpty { channel.name }
+                    Log.d(TAG, "switchLiveChannel: $liveChannelId -> ${channel.id} forward=$forward")
+                    switchingProgram = true
+                    playbackActivity.showChannelToast(
+                        target.programName?.let { "$name\n$it" } ?: name
+                    )
+                    val extras = Bundle().apply {
+                        putBoolean(
+                            if (isLiveMpegTs) DetailsActivity.IS_LIVE_MPEGTS else DetailsActivity.IS_LIVE,
+                            true
+                        )
+                        putLong(DetailsActivity.CHANNEL_ID, channel.id)
+                        putString(DetailsActivity.CHANNEL_NAME, name)
+                        putBoolean(DetailsActivity.IS_CHANNEL_SWITCH, true)
+                    }
+                    // 切り替えはこのフラグメントの同期的な破棄を伴うので、キー処理が終わってから行う
+                    // ([playSeriesEntry] と同じ)。
+                    mainHandler.post {
+                        if (isAdded) playbackActivity.switchLiveChannel(extras, channel.id)
+                    }
+                }
+            },
+            onFailure = {
+                if (isAdded) showMessageToast(getString(R.string.connect_epgstation_failed))
+            }
+        )
+    }
+
+    /**
      * 今の位置から [deltaMs] だけ飛ぶ(負なら戻る)。リモコンの早戻し/早送りキー用。
      *
      * 飛べる範囲はシークバーで選べる範囲と同じ。シークできない再生(ライブ、シーク点の準備が
@@ -1106,8 +1193,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
      * 早送り/巻き戻しであってほしいので、開くたびに毎回シークバーへ揃える。
      *
      * シークバーが無い場合(mpegts直送では隠している)だけ、先頭のボタンへ落とす。
+     *
+     * 左右キーで局を変えてきた直後は開かない([holdControlsHidden])。
      */
     override fun showControlsOverlay(runAnimation: Boolean) {
+        if (holdControlsHidden) return
         val wasVisible = isControlsOverlayVisible
         super.showControlsOverlay(runAnimation)
         if (!wasVisible) view?.post { focusSeekBar() }
@@ -2176,6 +2266,12 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             KeyEvent.KEYCODE_MEDIA_PREVIOUS,
             KeyEvent.KEYCODE_MEDIA_NEXT,
             KeyEvent.KEYCODE_MEDIA_STOP,
+        )
+        // 局を変えてきた直後の「コントロールを閉じたまま」を解かないキー([onChannelKey])。
+        private val VOLUME_KEY_CODES = setOf(
+            KeyEvent.KEYCODE_VOLUME_UP,
+            KeyEvent.KEYCODE_VOLUME_DOWN,
+            KeyEvent.KEYCODE_VOLUME_MUTE,
         )
         // 要求した再生速度と実効値が一致しているとみなす差。ExoPlayerは要求値をそのまま
         // 返してくるので厳密比較でも足りるが、浮動小数の比較なので念のため幅を持たせる。
