@@ -135,10 +135,15 @@ class MainFragment : BrowseSupportFragment() {
     /** ルールID → 行タイトル（キーワード or ルールID表記）。 */
     private val mRuleRowKeyword = HashMap<Long, String>()
 
-    /** 遅延読み込みが有効か。 */
+    /**
+     * 遅延読み込みが有効か。
+     *
+     * 既定値は preferences.xml と同じリソースから読む。前のバージョンから更新した端末では
+     * setDefaultValues() が新しい項目を書き込まないため、設定画面を開くまではここの既定値が使われる。
+     */
     private fun isLazyLoad(): Boolean =
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
-            .getBoolean(getString(R.string.pref_key_lazy_load), false)
+            .getBoolean(getString(R.string.pref_key_lazy_load), resources.getBoolean(R.bool.pref_val_lazy_load_default))
 
     private val mCardPresenter = OriginalCardPresenter()
     private var mLiveChannels: List<ChannelItem>? = null
