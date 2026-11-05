@@ -950,6 +950,11 @@ class MainFragment : BrowseSupportFragment() {
         mMainMenuAdapter.clear()
         // 行を作り直すので、取り直した時刻の控えも捨てる（消えたルールの分を残さない）
         mRuleRowRefreshedAt.clear()
+        // 接続先が変わったかもしれない。前のサーバーの局と番組表を新しい局に当てはめない（取得中の応答も捨てる）
+        mLiveChannels = null
+        mLiveSchedules = emptyList()
+        mLiveSchedulesUntil = Long.MIN_VALUE
+        mLiveScheduleRequestSeq++
 
         //コンテンツをロード。
         // 設定への入口はタイトル行の歯車（addSettingsButton）が担う。一覧の最下段に「設定」の行は置かない。
