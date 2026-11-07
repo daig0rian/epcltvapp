@@ -33,6 +33,7 @@
 - Google TV Streamer (4K)
 - Fire TV Stick 第3世代
 - EPGStation Version 2.10.0
+- EPGStation Version 3.0.0-beta4
 
 ## インストール方法
 
