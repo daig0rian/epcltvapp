@@ -4,10 +4,6 @@ import android.content.Context
 import android.util.Log
 import android.widget.Toast
 import androidx.leanback.widget.*
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
@@ -34,14 +30,6 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
 
                         when(it.get(horizontalIndex)){
                             //アイテムが見つかったら削除する
-                            is RecordedProgram ->{
-                                if(item is RecordedProgram &&
-                                    (it.get(horizontalIndex) as RecordedProgram).id == item.id){
-                                    it.removeItems(horizontalIndex,1)
-                                    horizontalIndex -= 1
-                                    horizontalDeletedCount += 1
-                                }
-                            }
                             is RecordedItem ->{
                                 if(item is RecordedItem &&
                                     (it.get(horizontalIndex) as RecordedItem).id == item.id){
@@ -51,21 +39,6 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
                                 }
                             }
                             //最後尾にある「続きを読み込む」アイテムがきたら、削除した分だけオフセットを下げる
-                            is GetRecordedParam -> {
-                                val currentItem = it.get(horizontalIndex) as GetRecordedParam
-                                val newItem = GetRecordedParam(
-                                    limit = currentItem.limit,
-                                    offset = currentItem.offset - horizontalDeletedCount,
-                                    reverse = currentItem.reverse,
-                                    rule = currentItem.rule,
-                                    genre1 = currentItem.genre1,
-                                    channel = currentItem.channel,
-                                    keyword = currentItem.keyword,
-                                    hasTs = currentItem.hasTs,
-                                    recording = currentItem.recording
-                                )
-                                it.replace(horizontalIndex,newItem)
-                            }
                             is GetRecordedParamV2 -> {
                                 val currentItem = it.get(horizontalIndex) as GetRecordedParamV2
                                 val newItem = GetRecordedParamV2(
@@ -113,7 +86,7 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
         return null
     }
 
-    fun updateContentsListRow(v1Pram: GetRecordedParam, v2Param: GetRecordedParamV2, title:String, id:Long,presenter:Presenter,context: Context){
+    fun updateContentsListRow(v2Param: GetRecordedParamV2, title:String, id:Long,presenter:Presenter,context: Context){
 
 
         // 同じIDを持つ行が存在するかどうか確認する
@@ -138,65 +111,6 @@ open class DeleteEnabledArrayObjectAdapter : ArrayObjectAdapter {
             listRowAdapter.size().toLong()
 
         // APIのコールバックでListRowの中身をセットするように仕掛ける
-        // EPGStation V1.x.x
-        EpgStation.api?.getRecorded(
-            limit = if(numOfLoaded>v1Pram.limit) numOfLoaded else v1Pram.limit,
-            offset = v1Pram.offset,
-            reverse = v1Pram.reverse,
-            rule = v1Pram.rule,
-            genre1 = v1Pram.genre1,
-            channel = v1Pram.channel,
-            keyword = v1Pram.keyword,
-            hasTs = v1Pram.hasTs,
-            recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
-
-            override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                response.body()?.let { getRecordedResponse ->
-
-                    //既存のリストにあって、レスポンスにないアイテムの削除
-                    var horizontalIndex = 0
-                    while(horizontalIndex < listRowAdapter.size()) {
-                        var found = false
-                        getRecordedResponse.recorded.forEach {
-                            if(listRowAdapter.get(horizontalIndex).equals(it) ) found = true
-                        }
-                        if (!found) {
-                            listRowAdapter.removeItems(horizontalIndex,1)
-                        }else {
-                            horizontalIndex += 1
-                        }
-                    }
-
-                    //レスポンスにあって、既存のリストにないアイテムの追加
-                    getRecordedResponse.recorded.forEachIndexed { index, it ->
-                        if(listRowAdapter.indexOf(it) == -1){
-                            listRowAdapter.add(index,it)
-                        }
-                    }
-
-                    //続きがあるなら"次を読み込む"を置く。
-                    val numOfItem = getRecordedResponse.recorded.count().toLong()
-                    if (numOfItem < getRecordedResponse.total) {
-                        listRowAdapter.add(
-                            GetRecordedParam(limit = v1Pram.limit,
-                            offset = numOfItem,
-                            reverse = v1Pram.reverse,
-                            rule = v1Pram.rule,
-                            genre1 = v1Pram.genre1,
-                            channel = v1Pram.channel,
-                            keyword = v1Pram.keyword,
-                            hasTs = v1Pram.hasTs,
-                            recording = v1Pram.recording)
-                        )
-                    }
-
-                }
-            }
-            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                Log.d(TAG,"updateContentsListRow() getRecorded API Failure")
-                Toast.makeText(context, context.getText(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-            }
-        })
         EpgStationV2.api?.getRecorded(
             isHalfWidth = v2Param.isHalfWidth,
             offset = v2Param.offset,

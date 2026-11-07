@@ -1,7 +1,7 @@
 package com.daigorian.epcltvapp
 
-import com.daigorian.epcltvapp.epgstationcaller.EncodedProgram
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
+import com.daigorian.epcltvapp.epgstationv2caller.VideoFile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -15,24 +15,48 @@ import org.junit.Test
  */
 class SeriesPlaylistTest {
 
+    private fun ts(id: Long) = VideoFile(id, "TS", "ep-$id.m2ts", "ts", 0)
+
+    private fun encoded(id: Long, name: String) = VideoFile(id, name, "ep-$id.mp4", "encoded", 0)
+
     private fun program(
         id: Long,
         startAt: Long,
         name: String,
-        original: Boolean = true,
-        encoded: List<EncodedProgram>? = null,
-        protection: Boolean = false,
-    ) = RecordedProgram(
+        videoFiles: List<VideoFile>? = listOf(ts(id * 10)),
+        isProtected: Boolean = false,
+    ) = RecordedItem(
         id = id,
+        ruleId = null,
+        programId = null,
+        channelId = null,
         startAt = startAt,
+        endAt = startAt + 500,
         name = name,
-        hasThumbnail = false,
-        original = original,
-        encoded = encoded,
-        protection = protection,
+        description = null,
+        extended = null,
+        genre1 = null,
+        subGenre1 = null,
+        genre2 = null,
+        subGenre2 = null,
+        genre3 = null,
+        subGenre3 = null,
+        videoType = null,
+        videoResolution = null,
+        videoStreamContent = null,
+        videoComponentType = null,
+        audioSamplingRate = null,
+        audioComponentType = null,
+        isRecording = false,
+        thumbnails = null,
+        videoFiles = videoFiles,
+        dropLog = null,
+        tags = null,
+        isEncoding = false,
+        isProtected = isProtected,
     )
 
-    private fun playlistOf(vararg programs: RecordedProgram) =
+    private fun playlistOf(vararg programs: RecordedItem) =
         SeriesPlaylist.build(programs.map { SeriesEntry.of(it) }, "ためしの冒険")
 
     @Test
@@ -138,7 +162,7 @@ class SeriesPlaylistTest {
 
     @Test
     fun `プロテクトの状態を読める`() {
-        assertTrue(SeriesEntry.of(program(1, 1_000, "ためしの冒険 #1", protection = true)).isProtected)
+        assertTrue(SeriesEntry.of(program(1, 1_000, "ためしの冒険 #1", isProtected = true)).isProtected)
         assertFalse(SeriesEntry.of(program(2, 2_000, "ためしの冒険 #2")).isProtected)
     }
 
@@ -147,14 +171,13 @@ class SeriesPlaylistTest {
         val entry = SeriesEntry.of(
             program(
                 1, 1_000, "ためしの冒険 #2",
-                original = true,
-                encoded = listOf(EncodedProgram(11, "720p", "ep2-720p.mp4")),
+                videoFiles = listOf(ts(10), encoded(11, "720p")),
             )
         )
 
         val ts = entry.resolvePlaybackTarget(preferTs = true, preferredName = null)
         assertTrue("TSを見ていたなら次もTS", ts!!.isTs)
-        assertEquals(VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS, ts.actionId)
+        assertEquals(10L, ts.actionId)
 
         val encoded = entry.resolvePlaybackTarget(preferTs = false, preferredName = "720p")
         assertFalse("エンコード済みを見ていたなら次もエンコード済み", encoded!!.isTs)
@@ -163,12 +186,11 @@ class SeriesPlaylistTest {
 
     @Test
     fun `同じ画質が無ければ有るものへ落とす`() {
-        val tsOnly = SeriesEntry.of(program(1, 1_000, "ためしの冒険 #2", original = true, encoded = null))
+        val tsOnly = SeriesEntry.of(program(1, 1_000, "ためしの冒険 #2", videoFiles = listOf(ts(10))))
         val encodedOnly = SeriesEntry.of(
             program(
                 2, 2_000, "ためしの冒険 #3",
-                original = false,
-                encoded = listOf(EncodedProgram(21, "480p", "ep3-480p.mp4")),
+                videoFiles = listOf(encoded(21, "480p")),
             )
         )
 
@@ -187,11 +209,7 @@ class SeriesPlaylistTest {
         val entry = SeriesEntry.of(
             program(
                 1, 1_000, "ためしの冒険 #2",
-                original = false,
-                encoded = listOf(
-                    EncodedProgram(31, "480p", "ep2-480p.mp4"),
-                    EncodedProgram(32, "720p", "ep2-720p.mp4"),
-                ),
+                videoFiles = listOf(encoded(31, "480p"), encoded(32, "720p")),
             )
         )
 
@@ -202,7 +220,7 @@ class SeriesPlaylistTest {
 
     @Test
     fun `再生できるファイルが無ければ再生対象を返さない`() {
-        val entry = SeriesEntry.of(program(1, 1_000, "ためしの冒険 #2", original = false, encoded = null))
+        val entry = SeriesEntry.of(program(1, 1_000, "ためしの冒険 #2", videoFiles = null))
 
         assertNull(entry.resolvePlaybackTarget(preferTs = true, preferredName = null))
     }

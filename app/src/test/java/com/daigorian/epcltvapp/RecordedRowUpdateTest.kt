@@ -2,12 +2,41 @@ package com.daigorian.epcltvapp
 
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListUpdateCallback
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
+import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class RecordedRowUpdateTest {
-    private fun recording(id: Long) = RecordedProgram(id = id, hasThumbnail = false)
+    private fun recording(id: Long) = RecordedItem(
+        id = id,
+        ruleId = null,
+        programId = null,
+        channelId = null,
+        startAt = 0,
+        endAt = 0,
+        name = "no name",
+        description = null,
+        extended = null,
+        genre1 = null,
+        subGenre1 = null,
+        genre2 = null,
+        subGenre2 = null,
+        genre3 = null,
+        subGenre3 = null,
+        videoType = null,
+        videoResolution = null,
+        videoStreamContent = null,
+        videoComponentType = null,
+        audioSamplingRate = null,
+        audioComponentType = null,
+        isRecording = false,
+        thumbnails = null,
+        videoFiles = null,
+        dropLog = null,
+        tags = null,
+        isEncoding = false,
+        isProtected = false,
+    )
     // Exercise the same DiffUtil callbacks as ArrayObjectAdapter without Android's Observable stub.
     private fun notifications(old: List<Any>, new: List<Any>): List<String> {
         val result = DiffUtil.calculateDiff(object : DiffUtil.Callback() {
@@ -38,7 +67,7 @@ class RecordedRowUpdateTest {
         val original = recording(1)
         assertEquals(
             listOf("change:0:1"),
-            notifications(listOf(original), listOf(original.copy(protection = true)))
+            notifications(listOf(original), listOf(original.copy(isProtected = true)))
         )
     }
 

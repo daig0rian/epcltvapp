@@ -20,7 +20,6 @@ class DetailsActivity : FragmentActivity() {
 
     companion object {
         const val SHARED_ELEMENT_NAME = "hero"
-        const val RECORDEDPROGRAM = "RecordedProgram"
         const val RECORDEDITEM = "RecordedItem"
         const val ACTIONID = "Action.id"
         const val IS_HLS = "IsHls"

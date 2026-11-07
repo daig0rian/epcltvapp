@@ -12,10 +12,6 @@ import androidx.core.app.ActivityOptionsCompat
 import androidx.leanback.app.SearchSupportFragment
 import androidx.leanback.widget.*
 import androidx.preference.PreferenceManager
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
@@ -108,7 +104,6 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
             if (row.adapter.size() == 0) continue
             val query = row.headerItem.name
             mRowsAdapter.updateContentsListRow(
-                GetRecordedParam(keyword = query, reverse = true),
                 GetRecordedParamV2(keyword = query, isReverse = true),
                 query,
                 row.headerItem.id,
@@ -171,21 +166,7 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
         ) {
 
             when (item) {
-                is RecordedProgram -> {
-                    // EPGStation Version 1.x.x
-                    val intent = Intent(context!!, DetailsActivity::class.java)
-                    intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
-
-                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                        activity!!,
-                        (itemViewHolder.view as ImageCardView).mainImageView,
-                        DetailsActivity.SHARED_ELEMENT_NAME
-                    )
-                        .toBundle()
-                    startActivity(intent, bundle)
-                }
                 is RecordedItem -> {
-                    /// EPGStation Version 2.x.x
                     val intent = Intent(context!!, DetailsActivity::class.java)
                     intent.putExtra(DetailsActivity.RECORDEDITEM, item)
 
@@ -219,57 +200,6 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
 
         //このあと行にアイテムを加えていく。
         //検索結果が０件だったらその行は消す。
-
-        // EPGStation Version 1.x.x
-        EpgStation.api?.getRecorded(keyword = query,reverse = true)?.enqueue(object :
-            Callback<GetRecordedResponse> {
-            override fun onResponse(
-                call: Call<GetRecordedResponse>,
-                response: Response<GetRecordedResponse>
-            ) {
-                // レスポンスがあった
-                response.body()?.let{ getRecordedResponse ->
-                    if(getRecordedResponse.total > 0){
-                        // 検索結果にヒットする録画があった
-                        getRecordedResponse.recorded.forEach {
-                            newResultRowContents.add(it)
-                        }
-                        //続きがあるなら"次を読み込む"を置く。
-                        val numOfItem = getRecordedResponse.recorded.count().toLong()
-                        if (numOfItem < getRecordedResponse.total) {
-                            newResultRowContents.add(GetRecordedParam(keyword = query,reverse = true,offset =numOfItem))
-                        }
-                        // 検索履歴にも加える
-                        if(recodeHistory) addHistory(query)
-
-                    }else{
-                        // 検索結果にヒットする録画がなかった
-                        // 結果行は消す
-                        mRowsAdapter.remove(newResultRow)
-                        // 見つからなかったよメッセージを出す。
-                        if(showErrorToast && isAdded) {
-                            Toast.makeText(
-                                context!!,
-                                getString(R.string.programs_not_found, query),
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                    }
-
-                }
-            }
-            override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                // 通信エラーなどで応答がなかったら接続できませんでしたメッセージを出す
-                if(showErrorToast && isAdded) {
-                    Toast.makeText(
-                        context!!,
-                        R.string.connect_epgstation_failed,
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-            }
-        })
-        // EPGStation Version 2.x.x
         EpgStationV2.api?.getRecorded(keyword = query,isReverse = true)?.enqueue(object :
             Callback<Records> {
             override fun onResponse(
@@ -326,62 +256,11 @@ class SearchFragment : SearchSupportFragment() , SearchSupportFragment.SearchRes
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
             when (item) {
-                is GetRecordedParam -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
-                    val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
-
-                    //APIで続きを取得して続きに加えていく
-                    // EPGStation V1.x.x
-                    EpgStation.api?.getRecorded(
-                        limit = item.limit,
-                        offset = item.offset,
-                        reverse = item.reverse,
-                        rule = item.rule,
-                        genre1 = item.genre1,
-                        channel = item.channel,
-                        keyword = item.keyword,
-                        hasTs = item.hasTs,
-                        recording = item.recording
-                    )?.enqueue(object : Callback<GetRecordedResponse> {
-                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            response.body()?.let { getRecordedResponse ->
-                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
-                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
-                                val replacePosition = adapter.indexOf(item)
-                                if (replacePosition < 0) {
-                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
-                                    return@let
-                                }
-
-                                //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
-                                //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
-                                getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
-                                    if(index == 0) {
-                                        adapter.replace(replacePosition,recordedProgram)
-                                    }else{
-                                        adapter.add(recordedProgram)
-                                    }
-                                }
-                                //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = getRecordedResponse.recorded.count().toLong() + item.offset
-                                if (numOfItem < getRecordedResponse.total) {
-                                    adapter.add(item.copy(offset = numOfItem))
-                                }
-
-                            }
-                        }
-                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                            Log.d(TAG,"loadRows() getRecorded API Failure")
-                            if (isAdded) Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-                        }
-                    })
-                }
                 is GetRecordedParamV2 -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
+                    // 続きを取得するアイテム
                     val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
 
                     //APIで続きを取得して続きに加えていく
-                    // EPGStation V2.x.x
                     EpgStationV2.api?.getRecorded(
                         isHalfWidth = item.isHalfWidth,
                         offset = item.offset,

@@ -1,6 +1,5 @@
 package com.daigorian.epcltvapp
 
-import com.daigorian.epcltvapp.epgstationcaller.StorageInfoV1
 import com.daigorian.epcltvapp.epgstationv2caller.StorageInfo
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -12,7 +11,7 @@ import kotlin.math.roundToInt
  * Android に依存しないので、単体テストから直接呼べる。
  */
 data class DiskUsage(
-    /** config.yml で付けた保存先名。EPGStation v1 は名前を返さないので null。 */
+    /** config.yml で付けた保存先名。応答に無ければ null。 */
     val name: String?,
     val usedBytes: Long,
     val availableBytes: Long,
@@ -85,11 +84,6 @@ data class DiskUsage(
                 .map { DiskUsage(it.name, it.used, it.available) }
                 .filter { it.isValid }
                 .take(MAX_ENTRIES)
-
-        /** EPGStation v1 の応答から。v1 の保存先は1つだけ。 */
-        fun fromV1(info: StorageInfoV1?): List<DiskUsage> =
-            listOfNotNull(info?.let { DiskUsage(null, it.used, it.free) })
-                .filter { it.isValid }
 
         /**
          * 使用量と容量を `282GB/435GB` の形で書く。

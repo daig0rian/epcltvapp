@@ -33,10 +33,10 @@ class DeepLinkActivity : FragmentActivity() {
 
         EpgStationApiInitializer.initialize(this) { result ->
             when (result) {
-                is EpgStationApiInitializer.Result.V2 -> fetchThenStart(target)
+                is EpgStationApiInitializer.Result.Connected -> fetchThenStart(target)
 
-                is EpgStationApiInitializer.Result.V1 ->
-                    failWith(getString(R.string.deep_link_requires_v2))
+                is EpgStationApiInitializer.Result.UnsupportedV1 ->
+                    failWith(getString(R.string.epgstation_v1_unsupported))
 
                 is EpgStationApiInitializer.Result.Failed ->
                     failWith(getString(R.string.connect_epgstation_failed) + "\n" + result.detail)

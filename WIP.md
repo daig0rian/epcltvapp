@@ -1,0 +1,52 @@
+# WIP: EPGStation v1 のサポート終了（Issue #121 の PR 1）
+
+方針・実装の条件・確認のしかたは Issue #121 のコメントにある（合意済み）。
+https://github.com/daig0rian/epcltvapp/issues/121#issuecomment-6640753788
+
+## このブランチでやること（PR 1）
+
+- `epgstationcaller/` パッケージと、各画面にある V1 の分岐を消す
+- 接続時の判定を作り直し、サーバーのバージョンを1か所に持つ
+  - `/api/version` が返る → 接続（メジャー番号が2以上、または読めない番号）
+  - `/api/version` が 404 で `/api/storage` が 200 → V1。接続せず、サポート終了を伝える
+  - それ以外 → 今と同じ接続失敗
+  - ホーム画面とディープリンクの両方で同じ判定を使う
+- V1 と V2 の両方を受け取っていた関数の引数と、詳細画面・再生画面で2本立てだった変数を1本にする
+- README とマニュアルを直す（対応サーバーは EPGStation v2 と v3、どちらも動作確認済み）
+
+名前から「V2」を外す改名は PR 2 で行う（このブランチではやらない）。
+
+## 実装の条件（壊しやすい点）
+
+- レジューム位置の保存キーの接頭辞 `v2:` は変えない
+- `EpgStation.BasicAuthorization`（Glide の認証ヘッダー）を V2 側へ移す
+- `SeriesPlaylistTest` / `RecordedRowUpdateTest` は消さずに素材を `RecordedItem` へ差し替える
+- `DiskUsageTest` は `fromV1` のケースだけ消す
+
+## 完了済み
+
+- V1 の削除と判定の作り直し（コード・文言・テスト）
+  - 手元の kotlinc で全ソースを型チェック（古い R.jar に無い文言の参照以外にエラーなし）
+  - 影響する単体テスト 53 件を手元で実行して全件成功
+- README（必要な環境）・マニュアルの v1/v2 の記述
+
+## 残タスク
+
+- README の「テスト環境」に v3 のバージョンを書く（v3 サーバーの番号を確かめてから）
+- 確認（Issue のとおり）
+  - 削除前後でアプリが送るリクエストを比べる。削除前は Streamer に入っている master 相当のビルド
+    （#133 の実装コミット後に入れたもの・非 debuggable）で、モックにつないで記録する
+  - v2・v3 のサーバーと、v1 と同じ応答（`/api/version` 404・`/api/storage` 200）を返すサーバーで判定を確かめる
+    （v1 相当は手元のプロキシで作る。ホームのトーストとディープリンクの両方）
+  - Basic 認証付き URL でサムネイルが出ること（認証を要求するプロキシをモックの前に置く）
+- リリースノート（v1 のサポート終了を目立つ位置に）はリリース時
+
+## 決定事項
+
+- 判定の中身は `ServerCompatibility`（Android 非依存・単体テストあり）。`EpgStationApiInitializer` は通信だけ
+- 初期化の結果は `Connected` / `UnsupportedV1` / `Failed`（意味が変わったので PR 1 で名前を付け直した）。
+  それ以外の V2 付きの名前は PR 2 まで触らない
+- サーバーの番号は `EpgStationV2.serverVersion` に持つ（今は使う画面なし。機能の対応表は v3 の機能を使うときに作る）
+- v1 のときはホームで「EPGStation v1 のサポートは終了しました。v2 以降へ更新してください。」をトースト（接続失敗と同じ出し方）
+- v1 専用だった文言 `play_original_ts` / `deep_link_requires_v2` と、定数 `ACTION_WATCH_ORIGINAL_TS` を削除
+- `/api/version` が 5xx・401 などのときは、以前は v1 扱いだったが接続失敗になる
