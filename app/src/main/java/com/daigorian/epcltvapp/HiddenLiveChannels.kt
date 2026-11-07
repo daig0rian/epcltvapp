@@ -8,6 +8,11 @@ object HiddenLiveChannels {
     const val KEY = "KEY_HIDDEN_LIVE_CHANNELS"
     private const val NAME_PREFIX = "hidden_live_channel_name_"
 
+    /** 「有料放送の非表示」が ON か。 */
+    fun hidesPaid(context: Context): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(context)
+            .getBoolean(context.getString(R.string.pref_key_hide_paid_live_channels), false)
+
     fun ids(context: Context): Set<String> =
         PreferenceManager.getDefaultSharedPreferences(context).getStringSet(KEY, emptySet())
             .orEmpty().toSet()

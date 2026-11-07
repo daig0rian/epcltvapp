@@ -39,11 +39,13 @@ class LiveChannelLineup {
      * [currentId] の隣の局を求めて [onResult] へ渡す。移れる局が無ければ null を渡す。
      * 控えが無いか古ければ取り直してから求め、取れなかったら [onFailure] を呼ぶ。
      * @param forward 右（行の後ろ）へ移るなら true
+     * @param hidesPaid 「有料放送の非表示」が ON なら true
      */
     fun neighbor(
         currentId: Long,
         forward: Boolean,
         hiddenIds: Set<String>,
+        hidesPaid: Boolean,
         onResult: (Target?) -> Unit,
         onFailure: () -> Unit
     ) {
@@ -53,7 +55,8 @@ class LiveChannelLineup {
                 onFailure()
             } else {
                 val programs = LiveLineup.currentPrograms(schedules, System.currentTimeMillis())
-                val channel = LiveLineup.neighbor(loaded, hiddenIds, programs.keys, currentId, forward)
+                val paidIds = if (hidesPaid) LiveLineup.paidIds(programs) else emptySet()
+                val channel = LiveLineup.neighbor(loaded, hiddenIds, programs.keys, currentId, forward, paidIds)
                 onResult(channel?.let { Target(it, programs[it.id]?.name) })
             }
         }

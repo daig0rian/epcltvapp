@@ -14,6 +14,8 @@ data class ScheduleProgramItem(
     val channelId: Long = 0,
     val startAt: Long = 0,
     val endAt: Long = 0,
+    // 無料放送か。項目が無いサーバーでは無料とみなす（有料放送の非表示で何も消さないように）
+    val isFree: Boolean = true,
     val name: String = "",
     val description: String? = null,
     val extended: String? = null,

@@ -122,6 +122,7 @@
 
     <!-- Display settings preference categories -->
     <string name="pref_category_general_display">General</string>
+    <string name="pref_category_live_display">Live TV Display</string>
     <string name="pref_category_rules_display">Rule Display</string>
     <string name="pref_category_history_display">History Display</string>
 
@@ -186,6 +187,8 @@
     <string name="hidden_live_channels">Hidden live channels</string>
     <string name="hidden_live_channels_count">%1$d hidden channels</string>
     <string name="hidden_live_channels_empty">No hidden channels</string>
+    <string name="pref_key_hide_paid_live_channels" translatable="false">KEY_HIDE_PAID_LIVE_CHANNELS</string>
+    <string name="hide_paid_live_channels">Hide pay-TV programs</string>
     <string name="play_live_hls">Play via HLS</string>
     <string name="hide_live_channel">Hide this channel</string>
     <string name="hide_live_channel_confirm">Hide %1$s? You can show it again in Display settings.</string>

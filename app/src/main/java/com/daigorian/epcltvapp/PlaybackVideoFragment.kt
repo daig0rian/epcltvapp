@@ -809,6 +809,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             liveChannelId,
             forward,
             HiddenLiveChannels.ids(requireContext()),
+            HiddenLiveChannels.hidesPaid(requireContext()),
             onResult = { target ->
                 // 局の並びを取りに行っていた間に、画面を離れたり別の切り替えが始まったりしていたら何もしない
                 if (target != null && isAdded && !switchingProgram) {

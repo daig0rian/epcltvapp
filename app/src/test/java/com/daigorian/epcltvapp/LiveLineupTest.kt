@@ -4,9 +4,12 @@ import com.daigorian.epcltvapp.epgstationv2caller.ChannelItem
 import com.daigorian.epcltvapp.epgstationv2caller.Schedule
 import com.daigorian.epcltvapp.epgstationv2caller.ScheduleChannelItem
 import com.daigorian.epcltvapp.epgstationv2caller.ScheduleProgramItem
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiveLineupTest {
@@ -22,6 +25,9 @@ class LiveLineupTest {
         Schedule(ScheduleChannelItem(channelId), programs.map { (start, end) ->
             ScheduleProgramItem(channelId = channelId, startAt = start, endAt = end, name = "P$start")
         })
+
+    private fun program(channelId: Long, start: Long, end: Long, isFree: Boolean) =
+        ScheduleProgramItem(channelId = channelId, startAt = start, endAt = end, isFree = isFree, name = "P$start")
 
     // --- サブチャンネルの判定 ---
 
@@ -92,6 +98,21 @@ class LiveLineupTest {
         assertEquals(emptyList<ChannelItem>(), LiveLineup.visible(listOf(main, idleSub), setOf(main.id.toString()), emptySet()))
     }
 
+    @Test fun paidChannelIsRemovedAndOthersKeepOrder() {
+        val free = sat("BS", 141, "BS13_0")
+        val paid = sat("BS", 191, "BS03_0")
+        val cs = sat("CS", 218, "CS08", networkId = 6)
+        val channels = listOf(free, paid, cs)
+        val onAir = channels.map { it.id }.toSet()
+        assertEquals(listOf(free, cs), LiveLineup.visible(channels, emptySet(), onAir, setOf(paid.id)))
+    }
+
+    @Test fun paidSubChannelWithProgramIsRemoved() {
+        val main = gr(1024)
+        val sub = gr(1025)
+        assertEquals(listOf(main), LiveLineup.visible(listOf(main, sub), emptySet(), setOf(main.id, sub.id), setOf(sub.id)))
+    }
+
     // --- 左右キーで移る先 ---
 
     @Test fun rightAndLeftMoveToAdjacentChannels() {
@@ -133,6 +154,26 @@ class LiveLineupTest {
         assertSame(first, LiveLineup.neighbor(channels, hiddenIds, emptySet(), hidden.id, forward = false))
     }
 
+    @Test fun skipsPaidChannel() {
+        val first = sat("BS", 141, "BS13_0")
+        val paid = sat("BS", 191, "BS03_0")
+        val last = sat("BS", 211, "BS09_2")
+        val channels = listOf(first, paid, last)
+        val onAir = channels.map { it.id }.toSet()
+        assertSame(last, LiveLineup.neighbor(channels, emptySet(), onAir, first.id, forward = true, paidIds = setOf(paid.id)))
+        assertSame(first, LiveLineup.neighbor(channels, emptySet(), onAir, last.id, forward = false, paidIds = setOf(paid.id)))
+    }
+
+    @Test fun fromChannelThatTurnedPaidMovesByPosition() {
+        val first = sat("BS", 141, "BS13_0")
+        val paid = sat("BS", 191, "BS03_0")
+        val last = sat("BS", 211, "BS09_2")
+        val channels = listOf(first, paid, last)
+        val onAir = channels.map { it.id }.toSet()
+        assertSame(last, LiveLineup.neighbor(channels, emptySet(), onAir, paid.id, forward = true, paidIds = setOf(paid.id)))
+        assertSame(first, LiveLineup.neighbor(channels, emptySet(), onAir, paid.id, forward = false, paidIds = setOf(paid.id)))
+    }
+
     @Test fun noOtherChannelIsNull() {
         val only = gr(1024)
         val idleSub = gr(1025)
@@ -158,6 +199,36 @@ class LiveLineupTest {
     @Test fun channelInGapHasNoCurrentProgram() {
         val schedules = listOf(schedule(1, 0L to 100L, 300L to 400L))
         assertNull(LiveLineup.currentPrograms(schedules, 200)[1])
+    }
+
+    // --- 有料放送中の局 ---
+
+    @Test fun paidIdsAreChannelsWhoseCurrentProgramIsPaid() {
+        val schedules = listOf(
+            Schedule(ScheduleChannelItem(1), listOf(program(1, 0, 100, isFree = true))),
+            Schedule(ScheduleChannelItem(2), listOf(program(2, 0, 100, isFree = false))),
+            // 有料の局で、いまは無料放送
+            Schedule(ScheduleChannelItem(3), listOf(program(3, 0, 60, isFree = false), program(3, 60, 100, isFree = true))),
+            // いまは番組が無い。有料か分からないので外さない
+            Schedule(ScheduleChannelItem(4), listOf(program(4, 0, 40, isFree = false), program(4, 80, 100, isFree = false)))
+        )
+        assertEquals(setOf(2L), LiveLineup.paidIds(LiveLineup.currentPrograms(schedules, 70)))
+    }
+
+    @Test fun paidChannelReturnsWhenFreeProgramStarts() {
+        val schedules = listOf(
+            Schedule(ScheduleChannelItem(1), listOf(program(1, 0, 100, isFree = false), program(1, 100, 200, isFree = true)))
+        )
+        assertEquals(setOf(1L), LiveLineup.paidIds(LiveLineup.currentPrograms(schedules, 99)))
+        assertEquals(emptySet<Long>(), LiveLineup.paidIds(LiveLineup.currentPrograms(schedules, 100)))
+    }
+
+    @Test fun programWithoutIsFreeIsTreatedAsFree() {
+        // 項目が無いサーバーで、すべての局を有料扱いにして消さないこと
+        val json = """[{"channel":{"id":1},"programs":[{"id":10,"channelId":1,"startAt":0,"endAt":100,"name":"P"}]}]"""
+        val schedules = Gson().fromJson<List<Schedule>>(json, object : TypeToken<List<Schedule>>() {}.type)
+        assertTrue(schedules[0].programs[0].isFree)
+        assertEquals(emptySet<Long>(), LiveLineup.paidIds(LiveLineup.currentPrograms(schedules, 50)))
     }
 
     // --- 次に変わる時刻 ---

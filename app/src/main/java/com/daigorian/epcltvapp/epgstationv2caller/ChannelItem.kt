@@ -18,6 +18,8 @@ data class ChannelItem(
     var currentProgramStartAt: Long? = null
     @Transient
     var currentProgramEndAt: Long? = null
+    @Transient
+    var currentProgramIsFree: Boolean? = null
 
     companion object {
         /**
