@@ -8,6 +8,7 @@ import com.daigorian.epcltvapp.epgstationv2caller.ScheduleProgramItem
  * ライブ視聴の行に並べる局と、各局でいま放送中の番組を決める。
  *
  * いま番組が無いサブチャンネルは並べない。メインチャンネルは番組が無くても並べる（放送休止中だと分かるように）。
+ * 「有料放送の非表示」が ON なら、いま有料番組を放送している局も並べない。番組が無い局は有料か分からないので残す。
  */
 object LiveLineup {
     /** ライブ視聴のために取る番組表の範囲（いまからこの時間先まで）。番組の始まりを知るには、いまより先が要る */
@@ -30,30 +31,39 @@ object LiveLineup {
             .toSet()
 
     /**
-     * 行に並べる局。映像でないサービス、利用者が隠した局、いま番組が無いサブチャンネルを除く。
+     * 行に並べる局。映像でないサービス、利用者が隠した局、いま番組が無いサブチャンネル、[paidIds] の局を除く。
      * @param onAirIds いま番組がある局の id
+     * @param paidIds 外す有料放送中の局の id。「有料放送の非表示」が OFF なら空にする
      */
-    fun visible(channels: List<ChannelItem>, hiddenIds: Set<String>, onAirIds: Set<Long>): List<ChannelItem> {
+    fun visible(
+        channels: List<ChannelItem>,
+        hiddenIds: Set<String>,
+        onAirIds: Set<Long>,
+        paidIds: Set<Long> = emptySet()
+    ): List<ChannelItem> {
         val idleSubChannels = subChannelIds(channels) - onAirIds
-        return HiddenLiveChannels.visible(channels, hiddenIds).filter { it.id !in idleSubChannels }
+        return HiddenLiveChannels.visible(channels, hiddenIds)
+            .filter { it.id !in idleSubChannels && it.id !in paidIds }
     }
 
     /**
      * ライブ視聴中に左右キーで移る先の局。行に並べる局（[visible]）のうち、全局の並びで [currentId] の隣にあるもの。
-     * 端からは反対の端へ回る。[currentId] が行に無くても（隠した局、番組が終わったサブチャンネル）、全局の並びで
-     * 隣にあたる局へ移る。移れる局が無ければ null。
+     * 端からは反対の端へ回る。[currentId] が行に無くても（隠した局、番組が終わったサブチャンネル、有料放送に
+     * 変わった局）、全局の並びで隣にあたる局へ移る。移れる局が無ければ null。
      * @param forward 右（行の後ろ）へ移るなら true
+     * @param paidIds [visible] と同じ
      */
     fun neighbor(
         channels: List<ChannelItem>,
         hiddenIds: Set<String>,
         onAirIds: Set<Long>,
         currentId: Long,
-        forward: Boolean
+        forward: Boolean,
+        paidIds: Set<Long> = emptySet()
     ): ChannelItem? {
         val position = channels.indexOfFirst { it.id == currentId }
         if (position < 0) return null
-        val visibleIds = visible(channels, hiddenIds, onAirIds).map { it.id }.toSet()
+        val visibleIds = visible(channels, hiddenIds, onAirIds, paidIds).map { it.id }.toSet()
         // いまの局の次から一周する並び。左へ移るときは逆からたどる
         val aroundFromNext = channels.drop(position + 1) + channels.take(position)
         return (if (forward) aroundFromNext else aroundFromNext.asReversed()).firstOrNull { it.id in visibleIds }
@@ -64,6 +74,10 @@ object LiveLineup {
         schedules.mapNotNull { schedule ->
             schedule.programs.firstOrNull { it.startAt <= now && now < it.endAt }?.let { schedule.channel.id to it }
         }.toMap()
+
+    /** [currentPrograms] のうち、有料番組を放送している局の id。 */
+    fun paidIds(currentPrograms: Map<Long, ScheduleProgramItem>): Set<Long> =
+        currentPrograms.filterValues { !it.isFree }.keys
 
     /**
      * [channelIds] のどれかで、放送中の番組が次に変わる時刻。番組の終わりだけでなく始まりも見るので、

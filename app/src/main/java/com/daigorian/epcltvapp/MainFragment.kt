@@ -183,7 +183,7 @@ class MainFragment : BrowseSupportFragment() {
     private val mDisplayPrefChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
         Log.d(TAG, "prefChanged key=$key isResumed=$isResumed adapterSize=${mMainMenuAdapter.size()} selectedPos=$selectedPosition")
         when (key) {
-            HiddenLiveChannels.KEY -> view?.post {
+            HiddenLiveChannels.KEY, getString(R.string.pref_key_hide_paid_live_channels) -> view?.post {
                 if (isUiAlive) renderLiveChannels()
             }
             getString(R.string.pref_key_rules_order_mode) -> {
@@ -545,10 +545,16 @@ class MainFragment : BrowseSupportFragment() {
         val loaded = mLiveChannels ?: return
         val programChangedIds = applyCurrentPrograms(loaded)
         val onAirIds = loaded.filter { it.currentProgramStartAt != null }.map { it.id }.toSet()
+        val paidIds = if (HiddenLiveChannels.hidesPaid(requireContext())) {
+            loaded.filter { it.currentProgramIsFree == false }.map { it.id }.toSet()
+        } else {
+            emptySet()
+        }
         val channels = LiveLineup.visible(
             loaded,
             HiddenLiveChannels.ids(requireContext()),
-            onAirIds
+            onAirIds,
+            paidIds
         )
         val liveHeaderId = Category.LIVE_CHANNELS.ordinal.toLong() * 10000
         val currentListRow = mMainMenuAdapter.getListRowByHeaderId(liveHeaderId)
@@ -560,7 +566,7 @@ class MainFragment : BrowseSupportFragment() {
             notifyProgramChanged(currentCards, programChangedIds)
             return
         }
-        Log.i(TAG, "renderLiveChannels: 並ぶ局 $currentSize → ${channels.size}（番組があるサブ ${(LiveLineup.subChannelIds(loaded) intersect onAirIds).size}）")
+        Log.i(TAG, "renderLiveChannels: 並ぶ局 $currentSize → ${channels.size}（番組があるサブ ${(LiveLineup.subChannelIds(loaded) intersect onAirIds).size}、外した有料放送中の局 ${paidIds.size}）")
 
         val previousRowPosition = mMainMenuAdapter.indexOfListRowByHeaderId(liveHeaderId)
         val previousSelectedRowId = selectedRowHeaderId()
@@ -657,10 +663,12 @@ class MainFragment : BrowseSupportFragment() {
             val program = programs[channel.id]
             if (channel.currentProgramStartAt != program?.startAt ||
                 channel.currentProgramEndAt != program?.endAt ||
-                channel.currentProgramName != program?.name) {
+                channel.currentProgramName != program?.name ||
+                channel.currentProgramIsFree != program?.isFree) {
                 channel.currentProgramName = program?.name
                 channel.currentProgramStartAt = program?.startAt
                 channel.currentProgramEndAt = program?.endAt
+                channel.currentProgramIsFree = program?.isFree
                 changed.add(channel.id)
             }
         }

@@ -66,6 +66,7 @@
 
     <!-- Display settings -->
     <string name="pref_category_general_display">全体設定</string>
+    <string name="pref_category_live_display">放送中の表示設定</string>
     <string name="pref_category_rules_display">ルール表示設定</string>
     <string name="pref_category_history_display">履歴表示設定</string>
     <string name="show_thumbnail_background">サムネイル背景表示</string>
@@ -89,6 +90,7 @@
     <string name="hidden_live_channels">非表示の放送局</string>
     <string name="hidden_live_channels_count">%1$d局を非表示</string>
     <string name="hidden_live_channels_empty">非表示の放送局はありません</string>
+    <string name="hide_paid_live_channels">有料放送の非表示</string>
     <string name="play_live_hls">HLSで再生</string>
     <string name="hide_live_channel">この放送局を非表示</string>
     <string name="hide_live_channel_confirm">%1$sを非表示にしますか？ 表示設定から再表示できます。</string>
