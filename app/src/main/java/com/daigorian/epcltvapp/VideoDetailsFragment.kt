@@ -21,10 +21,6 @@ import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.transition.Transition
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedParam
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.GetRecordedParamV2
@@ -44,7 +40,6 @@ import kotlin.math.roundToInt
  */
 class VideoDetailsFragment : DetailsSupportFragment() {
 
-    private var mSelectedRecordedProgram: RecordedProgram? = null
     private var mSelectedRecordedItem: RecordedItem? = null
 
     private lateinit var mDetailsBackground: DetailsSupportFragmentBackgroundController
@@ -66,15 +61,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         mDetailsBackground = DetailsSupportFragmentBackgroundController(this)
 
-        // EPGStationのバージョンによってintentで渡されてくるオブジェクトタイプが違う。
-        // EPGStation Version 1.x.x
-        mSelectedRecordedProgram = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM, RecordedProgram::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
-        }
-        // EPGStation Version 2.x.x
         mSelectedRecordedItem = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             requireActivity().intent.getSerializableExtra(DetailsActivity.RECORDEDITEM, RecordedItem::class.java)
         } else {
@@ -83,21 +69,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         }
 
         when {
-            mSelectedRecordedProgram != null -> {
-                // EPGStation Version 1.x.x
-                mPresenterSelector = ClassPresenterSelector()
-                mAdapter = DeleteEnabledArrayObjectAdapter(mPresenterSelector)
-                mCardPresenter.objAdapter = mAdapter
-                setupDetailsOverviewRow()
-                setupDetailsOverviewRowPresenter()
-                updateRelatedMovieListRow()
-                adapter = mAdapter
-                initializeBackground(EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString()))
-                onItemViewClickedListener = ItemViewClickedListener()
-                setOnItemViewSelectedListener( ItemViewSelectedListener())
-            }
             mSelectedRecordedItem != null -> {
-                // EPGStation Version 2.x.x
                 mPresenterSelector = ClassPresenterSelector()
                 mAdapter = DeleteEnabledArrayObjectAdapter(mPresenterSelector)
                 mCardPresenter.objAdapter = mAdapter
@@ -134,9 +106,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         mDetailsBackground.enableParallax()
 
         //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
-        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
-            GlideUrl( imageURL, EpgStation.authForGlide)
-        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+        val glideUrl = if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
             GlideUrl( imageURL, EpgStationV2.authForGlide)
         }else{
             GlideUrl ( imageURL )
@@ -163,26 +133,14 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     private fun setupDetailsOverviewRow() {
         Log.d(TAG, "setupDetailsOverviewRow()")
 
-        val row = if (mSelectedRecordedProgram!=null){
-            // EPGStation Version 1.x.x
-            DetailsOverviewRow(mSelectedRecordedProgram)
-        }else {
-            // EPGStation Version 2.x.x
-            DetailsOverviewRow(mSelectedRecordedItem)
-        }
-        val urlString = if (mSelectedRecordedProgram!=null){
-            // EPGStation Version 1.x.x
-            EpgStation.getThumbnailURL(mSelectedRecordedProgram?.id.toString())
-        }else {
-            // EPGStation Version 2.x.x
-            EpgStationV2.getThumbnailURL(
-                if(mSelectedRecordedItem?.thumbnails?.isNotEmpty() == true)
-                {
-                    mSelectedRecordedItem?.thumbnails?.get(0).toString()
-                }else{
-                    ""
-                })
-        }
+        val row = DetailsOverviewRow(mSelectedRecordedItem)
+        val urlString = EpgStationV2.getThumbnailURL(
+            if(mSelectedRecordedItem?.thumbnails?.isNotEmpty() == true)
+            {
+                mSelectedRecordedItem?.thumbnails?.get(0).toString()
+            }else{
+                ""
+            })
 
         mOverviewRow = row
         setOverviewImage(ContextCompat.getDrawable(requireContext(), R.drawable.default_background))
@@ -190,9 +148,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val height = convertDpToPixel(requireContext(), DETAIL_THUMB_HEIGHT)
 
         //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
-        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
-            GlideUrl( urlString, EpgStation.authForGlide)
-        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+        val glideUrl = if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
             GlideUrl( urlString, EpgStationV2.authForGlide)
         }else{
             GlideUrl ( urlString )
@@ -216,18 +172,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                     //サムネのロードが失敗したので、録画中かどうか調べてだし分けする。
                     super.onLoadFailed(errorDrawable)
                     Log.d(TAG, "details overview card image url read on fail: $errorDrawable")
-                    mSelectedRecordedProgram?.let {
-                        // EPGStation Version 1.x.x
-                        if (it.recording) {
-                            setOverviewImage(
-                                ContextCompat.getDrawable(context!!, R.drawable.on_rec))
-                        } else{
-                            setOverviewImage(
-                                ContextCompat.getDrawable(context!!, R.drawable.no_iamge))
-                        }
-                    }
                     mSelectedRecordedItem?.let{
-                        // EPGStation Version 2.x.x
                         if (it.isRecording){
                             setOverviewImage(
                                 ContextCompat.getDrawable(context!!, R.drawable.on_rec))
@@ -243,30 +188,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
         val actionAdapter = ArrayObjectAdapter()
 
-        mSelectedRecordedProgram?.let {
-            // EPGStation Version 1.x.x
-            // オリジナルのTSがある場合は "TS を再生" アクションアダプタを追加
-            // (収録中は「追いかけ再生」の意味を持つラベルにする。収録済みなら通常の再生ラベル)
-            if (it.original) {
-                actionAdapter.add(
-                    Action(
-                        ACTION_WATCH_ORIGINAL_TS,
-                        if (it.recording) getString(R.string.play_ts) else getString(R.string.play_original_ts)
-                    )
-                )
-            }
-            // エンコード済みがある場合は "XX を再生" アクションアダプタを追加
-            it.encoded?.forEach { encodedProgram ->
-                actionAdapter.add(
-                    Action(
-                        encodedProgram.encodedId,
-                        getString(R.string.play_x,encodedProgram.name)
-                    )
-                )
-            }
-        }
         mSelectedRecordedItem?.let {  recordedItem ->
-            // EPGStation Version 2.x.x
             recordedItem.videoFiles?.forEach { videoFIle ->
                 actionAdapter.add(
                     Action(
@@ -297,11 +219,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
 
         actionAdapter.add(Action(ACTION_SHOW_DESCRIPTION, getString(R.string.program_info)))
-
-        // プロテクトを切り替える API は EPGStation v2 にしか無い。v1 は状態を読めるだけなので出さない。
-        if (mSelectedRecordedItem != null) {
-            actionAdapter.add(Action(ACTION_PROTECT, getString(R.string.protect)))
-        }
+        actionAdapter.add(Action(ACTION_PROTECT, getString(R.string.protect)))
 
         row.actionsAdapter = actionAdapter
 
@@ -330,23 +248,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
                 val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT).also { it.timeZone = jst }
                 val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT).also { it.timeZone = jst }
                 val (programName, bodyText) = when {
-                    mSelectedRecordedProgram != null -> {
-                        val it = mSelectedRecordedProgram!!
-                        val channelName = EpgStation.channelMap[it.channelId] ?: ""
-                        val genreText = AribGenre.getGenreText(it.genre1, null)
-                        val recTimeInfo = getString(R.string.start_end_duration,
-                            dfDateAndTime.format(Date(it.startAt)),
-                            dfTime.format(Date(it.endAt)),
-                            (it.endAt - it.startAt) / 60 / 1000)
-                        val body = buildString {
-                            if (channelName.isNotEmpty()) { append(channelName); append("\n") }
-                            if (genreText.isNotEmpty()) { append(genreText); append("\n") }
-                            append(recTimeInfo)
-                            if (!it.description.isNullOrEmpty()) { append("\n\n"); append(it.description) }
-                            if (!it.extended.isNullOrEmpty()) { append("\n"); append(it.extended) }
-                        }
-                        Pair(it.name, body)
-                    }
                     mSelectedRecordedItem != null -> {
                         val it = mSelectedRecordedItem!!
                         val channelName = it.channelId?.let { id -> EpgStationV2.channelMap[id] } ?: ""
@@ -391,45 +292,21 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             if( playerPkgName == getString(R.string.pref_options_movie_player_val_INTERNAL)) {
                 //Preferenceで内蔵プレーヤーが選ばれていた場合
                 val intent = Intent(requireContext(), PlaybackActivity::class.java)
-                //EPGStation Version 1.x.x
-                mSelectedRecordedProgram?.let{intent.putExtra(DetailsActivity.RECORDEDPROGRAM, mSelectedRecordedProgram)}
-                //EPGStation Version 2.x.x
                 mSelectedRecordedItem?.let{intent.putExtra(DetailsActivity.RECORDEDITEM, mSelectedRecordedItem)}
                 intent.putExtra(DetailsActivity.ACTIONID, action.id)
                 // TS コンテンツかどうかを判定して渡す
-                val isTsContent = if (mSelectedRecordedProgram != null) {
-                    action.id == ACTION_WATCH_ORIGINAL_TS
-                } else {
-                    mSelectedRecordedItem?.videoFiles?.find { it.id == action.id }?.type == "ts"
-                }
+                val isTsContent = mSelectedRecordedItem?.videoFiles?.find { it.id == action.id }?.type == "ts"
                 intent.putExtra(DetailsActivity.IS_TS_CONTENT, isTsContent)
                 startActivity(intent)
 
             }else {
                 // Preferenceで外部プレーヤーが選ばれていた場合
-                val urlStrings = if (mSelectedRecordedProgram != null) {
-                    // EPGStation Version 1.x.x
-                    if (action.id == ACTION_WATCH_ORIGINAL_TS) {
-                        // TSだった場合
-                        EpgStation.getTsVideoURL(mSelectedRecordedProgram?.id.toString())
-                    } else {
-                        // Encodedだった場合
-                        EpgStation.getEncodedVideoURL(
-                            mSelectedRecordedProgram?.id.toString(),
-                            action.id.toString()  )
-                    }
-                }else{
-                    // EPGStation Version 2.x.x
-                    EpgStationV2.getVideoURL(action.id.toString())
-                }
+                val urlStrings = EpgStationV2.getVideoURL(action.id.toString())
 
                 val uri = Uri.parse(urlStrings)
                 val extPlayerIntent = Intent(Intent.ACTION_VIEW)
                 extPlayerIntent.setPackage(playerPkgName)
                 extPlayerIntent.setDataAndTypeAndNormalize(uri, "video/*")
-                // EPGStation Version 1.x.x
-                mSelectedRecordedProgram?.let{extPlayerIntent.putExtra("title", mSelectedRecordedProgram?.name)}
-                // EPGStation Version 2.x.x
                 mSelectedRecordedItem?.let{extPlayerIntent.putExtra("title", mSelectedRecordedItem?.name)}
 
                 try {
@@ -454,7 +331,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     /** 今開いている録画がプロテクト済みか。 */
     private fun isSelectedProtected(): Boolean =
-        mSelectedRecordedProgram?.protection ?: mSelectedRecordedItem?.isProtected ?: false
+        mSelectedRecordedItem?.isProtected ?: false
 
     /**
      * 詳細行のサムネイルを差し替える。プロテクト済みなら南京錠を重ねる。
@@ -477,7 +354,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
 
     /**
      * 今開いている録画のプロテクト状態を [isProtected] に合わせ、画面の表示へ反映する。
-     * v2 専用(v1 にはこのアプリから状態を変える手段が無い)。
      */
     private fun applyProtectedState(isProtected: Boolean) {
         val item = mSelectedRecordedItem ?: return
@@ -524,7 +400,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         val item = mSelectedRecordedItem ?: return
         if (mLoadingProtectTargets) return
         mLoadingProtectTargets = true
-        SeriesPlaylist.load(null, item, fetchAll = true) { series ->
+        SeriesPlaylist.load(item, fetchAll = true) { series ->
             mLoadingProtectTargets = false
             if (!isAdded || isStateSaved) return@load
             // 選択肢はシリーズの一覧から組むので、単体の側もそれと同じ時点の状態に揃える。
@@ -612,13 +488,11 @@ class VideoDetailsFragment : DetailsSupportFragment() {
         //    ただしルールを使わず個別に録画したものはルールIDを持たないため、この一覧は出さない
 
         // 番組名 originalTitle
-        val originalTitle :String =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.name
-        else mSelectedRecordedItem!!.name
+        val originalTitle :String = mSelectedRecordedItem!!.name
 
         val searchKeyword = SeriesTitleExtractor.extract(originalTitle)
         if (searchKeyword.isNotEmpty()) {
             mAdapter.updateContentsListRow(
-                GetRecordedParam(keyword = searchKeyword, reverse = true),
                 GetRecordedParamV2(keyword = searchKeyword, isReverse = true),
                 searchKeyword,
                 0,
@@ -627,14 +501,12 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             )
         }
 
-        val ruleId =if(mSelectedRecordedProgram!=null) mSelectedRecordedProgram!!.ruleId
-        else mSelectedRecordedItem!!.ruleId
+        val ruleId = mSelectedRecordedItem!!.ruleId
 
         // 番組表やライブ再生から個別に録画した番組はルールIDを持たない。そのまま検索すると
         // ルールでの絞り込みが効かず、全ルールの録画 (＝「最近の録画」と同じ内容) が並んでしまう。
         if (ruleId != null && ruleId != 0L) {
             mAdapter.updateContentsListRow(
-                GetRecordedParam(rule = ruleId),
                 GetRecordedParamV2(ruleId = ruleId),
                 getString(R.string.videos_in_same_rule),
                 1,
@@ -658,22 +530,7 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             rowViewHolder: RowPresenter.ViewHolder,
             row: Row
         ) {
-            if (item is RecordedProgram) {
-                //EPGStation Version 1.x.x
-                Log.d(TAG, "Item: $item")
-                val intent = Intent(context!!, DetailsActivity::class.java)
-                intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
-
-                val bundle =
-                    ActivityOptionsCompat.makeSceneTransitionAnimation(
-                        activity!!,
-                        (itemViewHolder?.view as ImageCardView).mainImageView,
-                        DetailsActivity.SHARED_ELEMENT_NAME
-                    )
-                        .toBundle()
-                startActivity(intent, bundle)
-            } else if (item is RecordedItem) {
-                //EPGStation Version 2.x.x
+            if (item is RecordedItem) {
                 Log.d(TAG, "Item: $item")
                 val intent = Intent(context!!, DetailsActivity::class.java)
                 intent.putExtra(DetailsActivity.RECORDEDITEM, item)
@@ -696,62 +553,11 @@ class VideoDetailsFragment : DetailsSupportFragment() {
             rowViewHolder: RowPresenter.ViewHolder, row: Row
         ) {
             when (item) {
-                is GetRecordedParam -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
-                    val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
-
-                    //APIで続きを取得して続きに加えていく
-                    // EPGStation V1.x.x
-                    EpgStation.api?.getRecorded(
-                        limit = item.limit,
-                        offset = item.offset,
-                        reverse = item.reverse,
-                        rule = item.rule,
-                        genre1 = item.genre1,
-                        channel = item.channel,
-                        keyword = item.keyword,
-                        hasTs = item.hasTs,
-                        recording = item.recording
-                    )?.enqueue(object : Callback<GetRecordedResponse> {
-                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            response.body()?.let { getRecordedResponse ->
-                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
-                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
-                                val replacePosition = adapter.indexOf(item)
-                                if (replacePosition < 0) {
-                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
-                                    return@let
-                                }
-
-                                //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
-                                //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
-                                getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
-                                    if(index == 0) {
-                                        adapter.replace(replacePosition,recordedProgram)
-                                    }else{
-                                        adapter.add(recordedProgram)
-                                    }
-                                }
-                                //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = getRecordedResponse.recorded.count().toLong() + item.offset
-                                if (numOfItem < getRecordedResponse.total) {
-                                    adapter.add(item.copy(offset = numOfItem))
-                                }
-
-                            }
-                        }
-                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                            Log.d(TAG,"onItemSelected() getRecorded API Failure")
-                            if (isAdded) Toast.makeText(requireContext(), getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-                        }
-                    })
-                }
                 is GetRecordedParamV2 -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
+                    // 続きを取得するアイテム
                     val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
 
                     //APIで続きを取得して続きに加えていく
-                    // EPGStation V2.x.x
                     EpgStationV2.api?.getRecorded(
                         isHalfWidth = item.isHalfWidth,
                         offset = item.offset,
@@ -804,7 +610,6 @@ class VideoDetailsFragment : DetailsSupportFragment() {
     companion object {
         private const val TAG = "VideoDetailsFragment"
 
-        internal const val ACTION_WATCH_ORIGINAL_TS = 0L
         internal const val ACTION_SHOW_DESCRIPTION = -1L
         internal const val ACTION_WATCH_RECORDING_HLS = -2L
         internal const val ACTION_PROTECT = -3L

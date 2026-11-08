@@ -9,7 +9,6 @@ import android.view.ViewTreeObserver
 import android.widget.TextView
 import androidx.leanback.R as LeanbackR
 import androidx.leanback.widget.Presenter
-import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 import java.text.DateFormat
 import java.util.*
@@ -193,21 +192,7 @@ class DetailsDescriptionPresenter : Presenter() {
         val dfDateAndTime = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT).also { it.timeZone = jst }
         val dfTime = DateFormat.getTimeInstance(DateFormat.SHORT).also { it.timeZone = jst }
 
-        if ( item is RecordedProgram) {
-
-            val startAt = dfDateAndTime.format(Date(item.startAt))
-            val endAt = dfTime.format(Date(item.endAt))
-            val duration =  (item.endAt - item.startAt) / 60 / 1000
-            val recTimeInfo = context.getString(R.string.start_end_duration,startAt,endAt,duration)
-            val channelName = EpgStation.channelMap[item.channelId] ?: ""
-            val channelAndTime = if (channelName.isNotEmpty()) "$channelName　$recTimeInfo" else recTimeInfo
-
-            viewHolder.title.text = item.name
-            viewHolder.subtitle.text = item.description.orEmpty()
-            viewHolder.body.text = channelAndTime + "\n" +
-                    item.extended.orEmpty()
-
-        }else if ( item is RecordedItem) {
+        if ( item is RecordedItem) {
 
             val startAt = dfDateAndTime.format(Date(item.startAt))
             val endAt = dfTime.format(Date(item.endAt))

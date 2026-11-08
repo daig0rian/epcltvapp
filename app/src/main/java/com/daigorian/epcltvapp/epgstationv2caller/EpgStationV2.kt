@@ -1,8 +1,9 @@
 package com.daigorian.epcltvapp.epgstationv2caller
 
+import android.util.Base64
+import com.bumptech.glide.load.model.LazyHeaderFactory
 import com.bumptech.glide.load.model.LazyHeaders
 import com.daigorian.epcltvapp.RequestConcurrency
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
 import okhttp3.Credentials
 import okhttp3.Dispatcher
 import okhttp3.Interceptor
@@ -182,11 +183,21 @@ object EpgStationV2 {
      * 待ち行列が埋まり、「最近の録画」の続き取得などがその後ろに並んでしまう。
      * 待ち行列だけを分けて先に通す（接続プールは [api] と共有する）。
      *
-     * [api] が null のとき——接続先が v2 ではない、またはまだ確定していないとき——は必ず null を返す。
-     * 「EpgStationV2.api が null なら接続先は v2 ではない」という判定を、ここで迂回させないため。
+     * [api] が null のとき——接続できなかった、またはまだ確定していないとき——は必ず null を返す。
+     * 「EpgStationV2.api が null なら接続していない」という判定を、ここで迂回させないため。
      */
     val priorityApi: ApiInterface?
         get() = if (api == null) null else priorityApiInstance
+
+    /**
+     * 接続先の EPGStation が `/api/version` で返した番号。接続したときに1回だけ読んでここに持つ。
+     * 接続していないときと、サーバーが番号を返さなかったときは null。
+     *
+     * バージョンで使える機能が変わるときも、画面のコードからこの番号を比べない。
+     * 「その機能が使えるか」を答える口をこのオブジェクトに足し、番号との対応はそこにまとめる。
+     */
+    var serverVersion: String? = null
+        private set
 
     var authForGlide : LazyHeaders? = null
     var channelMap: Map<Long, String> = emptyMap()
@@ -274,8 +285,16 @@ object EpgStationV2 {
         priorityDispatcher.maxRequestsPerHost = priority
     }
 
-    fun initAPI(_baseUrl:String){
+    /** 接続していない状態に戻す。[api] が null になり、各画面は何も取りに行かなくなる。 */
+    fun disconnect() {
+        api = null
+        serverVersion = null
+    }
+
+    /** @param version 接続先が `/api/version` で返した番号（[serverVersion]）。 */
+    fun initAPI(_baseUrl:String, version: String?){
         baseUrl = _baseUrl
+        serverVersion = version
         val userInfo:String? = URL(baseUrl).userInfo
         if(userInfo != null && userInfo.matches(Regex("^[^:]+:[^:]+$")) ) {
             //Basic認証情報を含むURLである
@@ -287,7 +306,7 @@ object EpgStationV2 {
 
             //サムネ読み込みなどで使われるGlideのヘッダを準備してやる
             authForGlide = LazyHeaders.Builder()
-                .addHeader("Authorization", EpgStation.BasicAuthorization(username, password))
+                .addHeader("Authorization", BasicAuthorization(username, password))
                 .build()
         }else{
             //Basic認証情報を含まないURLである
@@ -325,6 +344,17 @@ object EpgStationV2 {
             val authenticatedRequest = request.newBuilder()
                 .header("Authorization", credentials).build()
             return chain.proceed(authenticatedRequest)
+        }
+    }
+
+    /** Glide でサムネイルなどを取るときの Basic 認証ヘッダー（[authForGlide]）。 */
+    class BasicAuthorization(private val username: String, private val password: String) :
+        LazyHeaderFactory {
+        override fun buildHeader(): String {
+            return "Basic " + Base64.encodeToString(
+                "$username:$password".toByteArray(),
+                Base64.NO_WRAP
+            )
         }
     }
 

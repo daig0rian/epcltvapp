@@ -1,9 +1,6 @@
 package com.daigorian.epcltvapp
 
 import android.util.Log
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.RecordedItem
 import com.daigorian.epcltvapp.epgstationv2caller.Records
@@ -89,79 +86,20 @@ class SeriesPlaylist private constructor(
          *                 一部だけの一覧を「シリーズ全体」として扱わせないため。
          */
         fun load(
-            program: RecordedProgram?,
-            item: RecordedItem?,
+            item: RecordedItem,
             fetchAll: Boolean = false,
             onLoaded: (SeriesPlaylist?) -> Unit,
         ) {
-            val programName = program?.name ?: item?.name
-            if (programName == null) {
-                onLoaded(null)
-                return
-            }
-            val seriesTitle = SeriesTitleExtractor.extract(programName)
+            val seriesTitle = SeriesTitleExtractor.extract(item.name)
             if (seriesTitle.isEmpty()) {
-                Log.d(TAG, "load: series title not found in '$programName'")
+                Log.d(TAG, "load: series title not found in '${item.name}'")
                 onLoaded(null)
                 return
             }
-            val currentId = program?.id ?: item!!.id
-            if (program != null) {
-                loadV1(seriesTitle, currentId, mutableListOf(), 0, 0, fetchAll, onLoaded)
-            } else {
-                loadV2(seriesTitle, currentId, mutableListOf(), 0, 0, fetchAll, onLoaded)
-            }
+            loadV2(seriesTitle, item.id, mutableListOf(), 0, 0, fetchAll, onLoaded)
         }
 
-        /** EPGStation v1 用。1ページ取得しては [shouldFetchMore] の判断で自分を呼び直す。 */
-        private fun loadV1(
-            seriesTitle: String,
-            currentId: Long,
-            collected: MutableList<SeriesEntry>,
-            fetchedCount: Long,
-            page: Int,
-            fetchAll: Boolean,
-            onLoaded: (SeriesPlaylist?) -> Unit,
-        ) {
-            val api = EpgStation.api
-            if (api == null) {
-                onLoaded(null)
-                return
-            }
-            api.getRecorded(limit = PAGE_SIZE, offset = fetchedCount, keyword = seriesTitle)
-                .enqueue(object : Callback<GetRecordedResponse> {
-                    override fun onResponse(
-                        call: Call<GetRecordedResponse>,
-                        response: Response<GetRecordedResponse>
-                    ) {
-                        val body = response.body()
-                        if (body == null) {
-                            Log.w(TAG, "loadV1: empty response (HTTP${response.code()})")
-                            onLoaded(null)
-                            return
-                        }
-                        body.recorded
-                            .filter { matchesSeries(it.name, seriesTitle) }
-                            .mapTo(collected) { SeriesEntry.of(it) }
-                        val fetched = fetchedCount + body.recorded.size
-                        if (shouldFetchMore(collected, currentId, fetched, body.total, page, fetchAll)) {
-                            loadV1(seriesTitle, currentId, collected, fetched, page + 1, fetchAll, onLoaded)
-                        } else if (fetchAll && fetched < body.total) {
-                            Log.w(TAG, "loadV1: series too large to fetch all ($fetched/${body.total})")
-                            onLoaded(null)
-                        } else {
-                            onLoaded(build(collected, seriesTitle))
-                        }
-                    }
-
-                    override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                        Log.w(TAG, "loadV1: getRecorded failed: ${t.message}")
-                        onLoaded(null)
-                    }
-                })
-        }
-
-        /** EPGStation v2 用。[loadV1] と同じ流れ。 */
+        /** 1ページ取得しては [shouldFetchMore] の判断で自分を呼び直す。 */
         private fun loadV2(
             seriesTitle: String,
             currentId: Long,
@@ -252,20 +190,16 @@ class SeriesPlaylist private constructor(
     }
 }
 
-/**
- * シリーズ内の録画1本。EPGStation のバージョンで番組を表す型が違うので、その差をここで吸収する。
- * どちらか一方だけが非 null になる。
- */
+/** シリーズ内の録画1本。 */
 class SeriesEntry private constructor(
-    val recordedProgram: RecordedProgram?,
-    val recordedItem: RecordedItem?,
+    val recordedItem: RecordedItem,
 ) {
-    val id: Long = recordedProgram?.id ?: recordedItem!!.id
-    val startAt: Long = recordedProgram?.startAt ?: recordedItem!!.startAt
-    val name: String = recordedProgram?.name ?: recordedItem!!.name
+    val id: Long = recordedItem.id
+    val startAt: Long = recordedItem.startAt
+    val name: String = recordedItem.name
 
     /** 自動削除の対象から外してあるか(プロテクト済みか)。 */
-    val isProtected: Boolean = recordedProgram?.protection ?: recordedItem!!.isProtected
+    val isProtected: Boolean = recordedItem.isProtected
 
     /**
      * この回を再生するときの再生対象を決める。今見ているのと同じものを選ぶ——[preferTs] で
@@ -273,26 +207,12 @@ class SeriesEntry private constructor(
      * 引き継ぐ。同じものが無ければ、あるほうへ落とす。再生できるファイルが1つも無ければ null。
      */
     fun resolvePlaybackTarget(preferTs: Boolean, preferredName: String?): PlaybackTarget? {
-        recordedProgram?.let { program ->
-            val ts = if (program.original) {
-                PlaybackTarget(VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS, isTs = true)
-            } else {
-                null
-            }
-            val encodedList = program.encoded.orEmpty()
-            val encoded = (encodedList.firstOrNull { it.name == preferredName } ?: encodedList.firstOrNull())
-                ?.let { PlaybackTarget(it.encodedId, isTs = false) }
-            return if (preferTs) ts ?: encoded else encoded ?: ts
-        }
-        recordedItem?.let { item ->
-            val files = item.videoFiles.orEmpty()
-            val ts = pickFile(files.filter { it.type == TYPE_TS }, preferredName)
-                ?.let { PlaybackTarget(it.id, isTs = true) }
-            val encoded = pickFile(files.filter { it.type != TYPE_TS }, preferredName)
-                ?.let { PlaybackTarget(it.id, isTs = false) }
-            return if (preferTs) ts ?: encoded else encoded ?: ts
-        }
-        return null
+        val files = recordedItem.videoFiles.orEmpty()
+        val ts = pickFile(files.filter { it.type == TYPE_TS }, preferredName)
+            ?.let { PlaybackTarget(it.id, isTs = true) }
+        val encoded = pickFile(files.filter { it.type != TYPE_TS }, preferredName)
+            ?.let { PlaybackTarget(it.id, isTs = false) }
+        return if (preferTs) ts ?: encoded else encoded ?: ts
     }
 
     private fun pickFile(files: List<VideoFile>, preferredName: String?): VideoFile? =
@@ -301,8 +221,7 @@ class SeriesEntry private constructor(
     companion object {
         private const val TYPE_TS = "ts"
 
-        fun of(program: RecordedProgram) = SeriesEntry(program, null)
-        fun of(item: RecordedItem) = SeriesEntry(null, item)
+        fun of(item: RecordedItem) = SeriesEntry(item)
     }
 }
 

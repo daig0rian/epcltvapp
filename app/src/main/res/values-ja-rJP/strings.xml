@@ -16,12 +16,12 @@
     <string name="manual_recorded">番組表からの録画</string>
     <string name="rule_id_is_x">ルールID %1$s</string>
     <string name="play_ts">簡易追いかけ再生(TS)</string>
-    <string name="play_original_ts">TSを再生</string>
     <string name="play_x">%1$sを再生</string>
     <string name="videos_in_same_rule">同じルールの最新の録画</string>
     <string name="search_results">検索結果</string>
     <string name="connect_epgstation_failed">EPGStationに接続できませんでした.　</string>
     <string name="please_check_ip_and_port">設定メニューからIPアドレスを確認してください. </string>
+    <string name="epgstation_v1_unsupported">EPGStation v1 のサポートは終了しました。v2 以降へ更新してください。</string>
     <string name="ip_addr_of_epgstation">EPGStationのIPアドレス</string>
     <string name="movie_player">録画を再生するプレーヤー</string>
     <string name="please_install_external_player">外部プレーヤーをインストールしてください</string>
@@ -186,7 +186,6 @@
     <string name="speed_not_supported">この音声では再生速度を変えられません。1.00x で再生します。</string>
     <!-- deep link (epcltvapp://live/channelId/<channelId>) -->
     <string name="deep_link_unsupported">このリンクには対応していません。</string>
-    <string name="deep_link_requires_v2">リンクからのライブ視聴には EPGStation v2 が必要です。</string>
     <string name="deep_link_channel_not_found">チャンネルが見つかりません: %1$s</string>
 
 

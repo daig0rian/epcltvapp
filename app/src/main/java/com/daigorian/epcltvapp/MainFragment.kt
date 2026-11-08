@@ -1,6 +1,5 @@
 package com.daigorian.epcltvapp
 import android.annotation.SuppressLint
-import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 
 import android.content.Intent
@@ -434,13 +433,17 @@ class MainFragment : BrowseSupportFragment() {
             // 接続先が応答しないと初期化は数秒かかる。画面を離れた後に返ってきた場合は何もしない。
             if (!isUiAlive) return@initialize
             when (result) {
-                is EpgStationApiInitializer.Result.V2 -> {
+                is EpgStationApiInitializer.Result.Connected -> {
                     EpgStationV2.fetchChannels()
                     EpgStationV2.fetchStreamConfig()
                 }
 
-                is EpgStationApiInitializer.Result.V1 -> {
-                    EpgStation.fetchChannels()
+                is EpgStationApiInitializer.Result.UnsupportedV1 -> {
+                    Toast.makeText(
+                        requireContext(),
+                        getString(R.string.epgstation_v1_unsupported),
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
 
                 is EpgStationApiInitializer.Result.Failed -> {
@@ -688,7 +691,7 @@ class MainFragment : BrowseSupportFragment() {
     private fun updateRows(includeRules: Boolean = true) {
 
         EpgStationV2.api?.let { api ->
-            // EPGStation V2.x.x　の場合だけ「ライブ視聴」列を作る
+            // 「ライブ視聴」列
 
             api.getChannels().enqueue(object : Callback<List<ChannelItem>> {
                 override fun onResponse(call: Call<List<ChannelItem>>, response: Response<List<ChannelItem>>) {
@@ -712,7 +715,7 @@ class MainFragment : BrowseSupportFragment() {
         }
 
         EpgStationV2.api?.let{ api ->
-            // EPGStation V2.x.x　の場合だけ「録画中」列を作る
+            // 「録画中」列
 
             //行のID
             val headerId = Category.ON_RECORDING.ordinal.toLong()*10000
@@ -780,7 +783,6 @@ class MainFragment : BrowseSupportFragment() {
 
         //最近の録画の列
         mMainMenuAdapter.updateContentsListRowWithCategory(
-            GetRecordedParam(),
             GetRecordedParamV2(),
             getString(R.string.recent_videos),
             Category.RECENTLY_RECORDED,
@@ -805,70 +807,6 @@ class MainFragment : BrowseSupportFragment() {
         val ruleLoadGeneration = mRuleLoadGeneration
 
         //次の横の列。録画ルール。録画ルールの数だけ行が増える。
-        EpgStation.api?.getRulesList()?.enqueue(object : Callback<List<RuleList>> {
-            override fun onResponse(call: Call<List<RuleList>>, response: Response<List<RuleList>>) {
-                if (!isUiAlive || ruleLoadGeneration != mRuleLoadGeneration) return
-                response.body()?.let{ it ->
-                    // 受け取った順のまま持ち、表示順は RuleOrder に決めさせる。
-                    val ruleIdsInServerOrder = it.map { rule -> rule.id.toLong() }
-                    // 最新録画日時を集める収集器。下ごしらえの結果もここへ入れ、1ルール分の応答で上書きする。
-                    val ruleOrder = RuleOrderCollector(ruleIdsInServerOrder)
-                    mActiveRuleOrderCollector = ruleOrder
-
-                    // 行を足していく処理。足す順も orderedIds に合わせる
-                    //（行を足すと同時にそのルールの録画を取りに行くので、上に来るルールの録画が先に届く）
-                    val ruleById = it.associateBy { rule -> rule.id }
-                    val addRows: (List<Long>) -> Unit = { orderedIds ->
-                        addRuleRowsChunked(orderedIds) { ruleId ->
-                            val rule = ruleById[ruleId]
-                            if (rule == null) {
-                                Log.i(TAG, "addRows: ルール $ruleId の定義が見つからないので飛ばす")
-                                return@addRuleRowsChunked
-                            }
-
-                            //録画ルールにキーワードが設定されていない場合、キーワードの代わりにルールIDをセット
-                            val keyword:String = if ( rule.keyword.isNullOrEmpty() ){
-                                getString(R.string.rule_id_is_x, rule.id.toString())
-                            }else{
-                                rule.keyword
-                            }
-                            mMainMenuAdapter.updateContentsListRowWithCategory(
-                                GetRecordedParam(rule = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
-                                GetRecordedParamV2(ruleId = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
-                                keyword,
-                                Category.RECORDED_BY_RULES,
-                                rule.id,
-                                orderedIds,
-                                ruleOrder
-                            )
-                        }
-                    }
-
-                    if (ruleSortMode == RuleOrder.MODE_RECORDING_NEWEST) {
-                        // v1 も同じ下ごしらえを使う。1ルール1回の取得を待たずに上位の並びを確定させる。
-                        // 行を足すのは1ページ目が返った時点。2ページ目以降は裏で読み続けて並べ替えの材料に足す。
-                        var rowsAdded = false
-                        fetchLatestRecordedSeed { seed, manualRecorded ->
-                            ruleOrder.seedRecordedAt(seed)
-                            updateManualRecordedRow(manualRecorded)
-                            if (!rowsAdded) {
-                                rowsAdded = true
-                                addRows(ruleOrder.orderedRuleIds(ruleSortMode))
-                            }
-                        }
-                    } else {
-                        // 並びは仮のままでよいが、「番組表からの予約」の行は同じ取得から作る
-                        fetchLatestRecordedSeed { _, manualRecorded -> updateManualRecordedRow(manualRecorded) }
-                        addRows(RuleOrder.provisionalOrder(ruleSortMode, ruleIdsInServerOrder))
-                    }
-                }
-            }
-            override fun onFailure(call: Call<List<RuleList>>, t: Throwable) {
-                if (!isUiAlive) return
-                Log.d(TAG,"loadRows() getRulesList API Failure")
-                Toast.makeText(context!!, R.string.connect_epgstation_failed, Toast.LENGTH_LONG).show()
-            }
-        })
         EpgStationV2.api?.getRules(limit=Int.MAX_VALUE)?.enqueue(object : Callback<Rules> {
             override fun onResponse(call: Call<Rules>, response: Response<Rules>) {
                 if (!isUiAlive || ruleLoadGeneration != mRuleLoadGeneration) return
@@ -940,7 +878,6 @@ class MainFragment : BrowseSupportFragment() {
                                     rule.searchOption?.keyword!!
                                 }
                                 mMainMenuAdapter.updateContentsListRowWithCategory(
-                                    GetRecordedParam(rule = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
                                     GetRecordedParamV2(ruleId = rule.id, limit = RULE_ROW_INITIAL_LIMIT),
                                     keyword,
                                     Category.RECORDED_BY_RULES,
@@ -1206,7 +1143,6 @@ class MainFragment : BrowseSupportFragment() {
             }
             // 既存行の中身だけを差分更新する経路に乗せる（orderedIds / ruleOrder は渡さない）
             mMainMenuAdapter.updateContentsListRowWithCategory(
-                GetRecordedParam(rule = ruleId, limit = RULE_ROW_INITIAL_LIMIT),
                 GetRecordedParamV2(ruleId = ruleId, limit = RULE_ROW_INITIAL_LIMIT),
                 row.headerItem.name,
                 Category.RECORDED_BY_RULES,
@@ -1236,8 +1172,6 @@ class MainFragment : BrowseSupportFragment() {
      * 対象は画面に出ているカードに限る。1回で飛ぶリクエストは横に並ぶ枚数まで。
      * 横へ送って初めて出てくるカードは、次に戻ってきたときか全体の読み込みまで古いまま残る。
      * 消えた録画のカードもここでは外さない（行の顔ぶれを決めるのは全体の読み込みの役目）。
-     *
-     * 録画を1本だけ取る口をこのアプリが持っているのは EPGStation v2 だけなので、v1 では何もしない。
      */
     private fun refreshVisibleManualRecordedCards() {
         val api = EpgStationV2.api ?: return
@@ -1327,7 +1261,6 @@ class MainFragment : BrowseSupportFragment() {
         val item = position?.takeIf { it in 0 until row.adapter.size() }?.let { row.adapter.get(it) } ?: tracked?.first
         val recordId = when (item) {
             is RecordedItem -> item.id
-            is RecordedProgram -> item.id.toLong()
             else -> null
         }
         return RuleSelection(rowId, recordId, item, position, grid?.hasFocus() == true)
@@ -1342,7 +1275,6 @@ class MainFragment : BrowseSupportFragment() {
             val item = row.adapter.get(index)
             if (anchor.recordId != null) when (item) {
                 is RecordedItem -> item.id == anchor.recordId
-                is RecordedProgram -> item.id.toLong() == anchor.recordId
                 else -> false
             } else item == anchor.item
         }
@@ -1449,7 +1381,6 @@ class MainFragment : BrowseSupportFragment() {
 
         orderedHistory.forEachIndexed { index, it ->
             mMainMenuAdapter.updateContentsListRowWithCategory(
-                GetRecordedParam(keyword = it),
                 GetRecordedParamV2(keyword = it),
                 it,
                 Category.SEARCH_HISTORY,
@@ -1491,38 +1422,15 @@ class MainFragment : BrowseSupportFragment() {
             val limit = AGGREGATE_PAGE_LIMIT.toLong()
 
             val apiV2 = EpgStationV2.api
-            if (apiV2 != null) {
-                apiV2.getRecorded(isHalfWidth = true, offset = offset, limit = limit, isReverse = false)
-                    .enqueue(object : Callback<Records> {
-                        override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                            if (!current()) return
-                            val records = response.body()?.records.orEmpty()
-                            onPage(
-                                records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
-                                records.filter { it.ruleId == null },
-                                records.size >= AGGREGATE_PAGE_LIMIT
-                            )
-                        }
-
-                        override fun onFailure(call: Call<Records>, t: Throwable) {
-                            Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
-                            if (current()) onPage(emptyList(), emptyList(), false)
-                        }
-                    })
-                return
-            }
-
-            // EPGStation v1 も /api/recorded の形が違うだけで考え方は同じ
-            val apiV1 = EpgStation.api
-            if (apiV1 == null) {
+            if (apiV2 == null) {
                 onPage(emptyList(), emptyList(), false)
                 return
             }
-            apiV1.getRecorded(limit = limit, offset = offset, reverse = false)
-                .enqueue(object : Callback<GetRecordedResponse> {
-                    override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
+            apiV2.getRecorded(isHalfWidth = true, offset = offset, limit = limit, isReverse = false)
+                .enqueue(object : Callback<Records> {
+                    override fun onResponse(call: Call<Records>, response: Response<Records>) {
                         if (!current()) return
-                        val records = response.body()?.recorded.orEmpty()
+                        val records = response.body()?.records.orEmpty()
                         onPage(
                             records.mapNotNull { r -> r.ruleId?.let { id -> id to r.startAt } },
                             records.filter { it.ruleId == null },
@@ -1530,7 +1438,7 @@ class MainFragment : BrowseSupportFragment() {
                         )
                     }
 
-                    override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
+                    override fun onFailure(call: Call<Records>, t: Throwable) {
                         Log.i(TAG, "ruleOrderSeed: ${page + 1}ページ目で失敗 ${t.javaClass.simpleName}")
                         if (current()) onPage(emptyList(), emptyList(), false)
                     }
@@ -2049,22 +1957,12 @@ class MainFragment : BrowseSupportFragment() {
 
         // 起動直後はルール一覧の取得で待ち行列が埋まるので、先に通るほうのクライアントで頼む
         val v2 = EpgStationV2.priorityApi
-        val v1 = EpgStation.api
         when {
             v2 != null -> v2.getStorages().enqueue(object : Callback<StorageInfo> {
                 override fun onResponse(call: Call<StorageInfo>, response: Response<StorageInfo>) {
                     show(DiskUsage.fromV2(response.body()))
                 }
                 override fun onFailure(call: Call<StorageInfo>, t: Throwable) {
-                    Log.i(TAG, "ディスク使用量: 取得に失敗 $t")
-                    show(emptyList())
-                }
-            })
-            v1 != null -> v1.getStorage().enqueue(object : Callback<StorageInfoV1> {
-                override fun onResponse(call: Call<StorageInfoV1>, response: Response<StorageInfoV1>) {
-                    show(DiskUsage.fromV1(response.body()))
-                }
-                override fun onFailure(call: Call<StorageInfoV1>, t: Throwable) {
                     Log.i(TAG, "ディスク使用量: 取得に失敗 $t")
                     show(emptyList())
                 }
@@ -2161,22 +2059,7 @@ class MainFragment : BrowseSupportFragment() {
             when (item) {
                 is ManualRecordingContinuation -> mManualRecordingPager?.retry()
                 is RuleRowPlaceholder -> mLazyRuleLoader?.retry(item.ruleId)
-                is RecordedProgram -> {
-                    // EPGStation Version 1.x.x のアイテム
-                    Log.d(TAG, "Item: $item")
-                    val intent = Intent(context!!, DetailsActivity::class.java)
-                    intent.putExtra(DetailsActivity.RECORDEDPROGRAM, item)
-
-                    val bundle = ActivityOptionsCompat.makeSceneTransitionAnimation(
-                        activity!!,
-                        (itemViewHolder.view as ImageCardView).mainImageView,
-                        DetailsActivity.SHARED_ELEMENT_NAME
-                    )
-                        .toBundle()
-                    startActivity(intent, bundle)
-                }
                 is RecordedItem -> {
-                    // EPGStation Version 2.x.x のアイテム
                     Log.d(TAG, "Item: $item")
                     val intent = Intent(context!!, DetailsActivity::class.java)
                     intent.putExtra(DetailsActivity.RECORDEDITEM, item)
@@ -2218,13 +2101,7 @@ class MainFragment : BrowseSupportFragment() {
                 mLazyRuleLoader?.onCardSelected(id, item)
             }
             when (item) {
-                is RecordedProgram -> {
-                    // EPGStation Version 1.x.x
-                    mBackgroundUri = EpgStation.getThumbnailURL(item.id.toString())
-                    startBackgroundTimer()
-                }
                 is RecordedItem -> {
-                    // EPGStation Version 2.x.x
                     mBackgroundUri = if(!item.thumbnails.isNullOrEmpty()) {
                         EpgStationV2.getThumbnailURL(item.thumbnails[0].toString())
                     } else {
@@ -2232,64 +2109,11 @@ class MainFragment : BrowseSupportFragment() {
                     }
                     startBackgroundTimer()
                 }
-                is GetRecordedParam -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
-                    val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
-
-                    //APIで続きを取得して続きに加えていく
-                    // EPGStation V1.x.x
-                    EpgStation.api?.getRecorded(
-                        limit = item.limit,
-                        offset = item.offset,
-                        reverse = item.reverse,
-                        rule = item.rule,
-                        genre1 = item.genre1,
-                        channel = item.channel,
-                        keyword = item.keyword,
-                        hasTs = item.hasTs,
-                        recording = item.recording
-                    )?.enqueue(object : Callback<GetRecordedResponse> {
-                        override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                            if (!isUiAlive) return
-                            response.body()?.let { getRecordedResponse ->
-                                // 要求元の「続きを読み込む」アイテムが既に行から消えていることがある
-                                // （同じカードを続けて選んだ、行が作り直された等）。replace(-1, …) で落ちるので何もしない。
-                                val replacePosition = adapter.indexOf(item)
-                                if (replacePosition < 0) {
-                                    Log.i(TAG, "続き読み込み: 要求元のアイテムが既に無いため破棄 offset=${item.offset}")
-                                    return@let
-                                }
-
-                                //APIのレスポンスをひとつづつアイテムとして加える。最初のアイテムだけ、Loadingアイテムを置き換える
-                                //先にremoveしてaddすると高速でスクロールさせたときに描画とremoveがぶつかって落ちるのであえてreplaceに。
-                                getRecordedResponse.recorded.forEachIndexed {  index, recordedProgram ->
-                                    if(index == 0) {
-                                        adapter.replace(replacePosition,recordedProgram)
-                                    }else{
-                                        adapter.add(recordedProgram)
-                                    }
-                                }
-                                //続きがあるなら"次を読み込む"を置く。
-                                val numOfItem = getRecordedResponse.recorded.count().toLong() + item.offset
-                                if (numOfItem < getRecordedResponse.total) {
-                                    adapter.add(item.copy(offset = numOfItem))
-                                }
-
-                            }
-                        }
-                        override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                            if (!isUiAlive) return
-                            Log.d(TAG,"loadRows() getRecorded API Failure")
-                            Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-                        }
-                    })
-                }
                 is GetRecordedParamV2 -> {
-                    // EPGStation Version 1.x.x の続きを取得するアイテム
+                    // 続きを取得するアイテム
                     val adapter =  ((row as ListRow).adapter as ArrayObjectAdapter)
 
                     //APIで続きを取得して続きに加えていく
-                    // EPGStation V2.x.x
                     // 利用者が待っている要求なので、ルール一覧の一斉取得とは待ち行列を分けた方を使う。
                     // 同じクライアントだと数百件の後ろに並んで、いつまでも返ってこない。
                     Log.i(TAG, "続き読み込み: 要求 offset=${item.offset} limit=${item.limit}")
@@ -2360,9 +2184,7 @@ class MainFragment : BrowseSupportFragment() {
         val height = mMetrics.heightPixels
 
         //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
-        val glideUrl = if(EpgStation.api!=null && EpgStation.authForGlide!=null){
-            GlideUrl( uri, EpgStation.authForGlide)
-        }else if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
+        val glideUrl = if(EpgStationV2.api!=null && EpgStationV2.authForGlide!=null){
             GlideUrl( uri, EpgStationV2.authForGlide)
         }else{
             GlideUrl ( uri )
@@ -2594,7 +2416,7 @@ class MainFragment : BrowseSupportFragment() {
          *                  返ってきた時点で、この収集器が [applyRuleOrder] を1回だけ呼ぶ。
          *                  null のカテゴリ（最近の録画・検索履歴）の挙動は変わらない。
          */
-        fun updateContentsListRowWithCategory(v1Pram:GetRecordedParam,v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long,orderedIds:List<Long>?=null,ruleOrder:RuleOrderCollector?=null){
+        fun updateContentsListRowWithCategory(v2Param:GetRecordedParamV2,title:String,category:Category,idInCategory:Long,orderedIds:List<Long>?=null,ruleOrder:RuleOrderCollector?=null){
 
             val headerId = category.ordinal.toLong()*10000 + idInCategory
 
@@ -2645,79 +2467,6 @@ class MainFragment : BrowseSupportFragment() {
             val generation = mRuleLoadGeneration
 
             // APIのコールバックでListRowの中身をセットするように仕掛ける
-            // EPGStation V1.x.x
-            EpgStation.api?.getRecorded(
-                limit = if(numOfLoaded>v1Pram.limit) numOfLoaded else v1Pram.limit,
-                offset = v1Pram.offset,
-                reverse = v1Pram.reverse,
-                rule = v1Pram.rule,
-                genre1 = v1Pram.genre1,
-                channel = v1Pram.channel,
-                keyword = v1Pram.keyword,
-                hasTs = v1Pram.hasTs,
-                recording = v1Pram.recording )?.enqueue(object : Callback<GetRecordedResponse> {
-
-                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                    if (!isUiAlive) return
-                    response.body()?.let { getRecordedResponse ->
-
-                        // 返却順を保ち、既存カードのIDを使った差分でまとめて反映する。
-                        updateRecordedRow(listRowAdapter, getRecordedResponse.recorded)
-
-                        // 「最近の録画」が最初に取れた時点で、番組表から予約した録画（ruleId なし）の行を出す。
-                        // 中身の確定は下ごしらえ（fetchLatestRecordedSeed）が担うので、ここは行を出すだけ。
-                        if (category == Category.RECENTLY_RECORDED) {
-                            Log.i(TAG, "番組表からの録画: 最近の録画が取れたので行だけ出す")
-                            ensureManualRecordedRow()
-                        }
-
-                        //続きがあるなら"次を読み込む"を置く。
-                        val numOfItem = getRecordedResponse.recorded.count().toLong()
-                        if (numOfItem < getRecordedResponse.total) {
-                            listRowAdapter.add(GetRecordedParam(limit = v1Pram.limit,
-                                offset = numOfItem,
-                                reverse = v1Pram.reverse,
-                                rule = v1Pram.rule,
-                                genre1 = v1Pram.genre1,
-                                channel = v1Pram.channel,
-                                keyword = v1Pram.keyword,
-                                hasTs = v1Pram.hasTs,
-                                recording = v1Pram.recording))
-                        }
-
-                        // 遅延追加: API 結果を見てから行を追加 or スキップ
-                        if (!addedUpfront && getListRowByHeaderId(headerId) == null) {
-                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
-                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-                            if (getRecordedResponse.total == 0L && !showEmptyRules) {
-                                return@let  // 空ルールは非表示のままスキップ
-                            }
-                            if (orderedIds != null) {
-                                addToCategoryOrdered(category, ListRow(HeaderItem(headerId, title), listRowAdapter), idInCategory, orderedIds)
-                            } else {
-                                addToCategory(category, ListRow(HeaderItem(headerId, title), listRowAdapter))
-                            }
-                        }
-
-                        // 録画0件かつ設定がOFFの場合は既存ルール行を非表示にする
-                        if (getRecordedResponse.total == 0L && category == Category.RECORDED_BY_RULES) {
-                            val showEmptyRules = PreferenceManager.getDefaultSharedPreferences(context)
-                                .getBoolean(getString(R.string.pref_key_show_empty_rules), true)
-                            if (!showEmptyRules) removeRowFromCategory(category, headerId)
-                        }
-
-                    }
-                    // いま取れた録画のうち最新の startAt を並べ替え用に報告する。このための追加リクエストはしない。
-                    // body が null（APIエラー応答）でも必ず1回報告し、収集器が待ち続けないようにする。
-                    ruleOrder?.report(idInCategory, response.body()?.let { it.recorded.maxOfOrNull { r -> r.startAt } })
-                }
-                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                    if (!isUiAlive) return
-                    Log.d(TAG,"loadRows() getRecorded API Failure")
-                    ruleOrder?.report(idInCategory, null)
-                    Toast.makeText(context!!, getString(R.string.connect_epgstation_failed), Toast.LENGTH_LONG).show()
-                }
-            })
             EpgStationV2.api?.getRecorded(
                 isHalfWidth = v2Param.isHalfWidth,
                 offset = v2Param.offset,

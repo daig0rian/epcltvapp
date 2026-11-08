@@ -19,6 +19,11 @@ class EpgStationV2VersionChecker(
          @GET("version")
         fun getVersion(
         ): Call<Version>
+
+        // EPGStation v1 にだけある（v2 以降は storages）。v1 かどうかを確かめるためだけに送り、
+        // ステータスコードしか見ないので本文は読まない。
+        @GET("storage")
+        fun getV1Storage(): Call<Unit>
     }
 
     private var okHttpClientBuilder = OkHttpClient.Builder()

@@ -20,7 +20,6 @@ import androidx.leanback.widget.ImageCardView
 import androidx.leanback.widget.Presenter
 import com.bumptech.glide.Glide
 import com.bumptech.glide.load.model.GlideUrl
-import com.daigorian.epcltvapp.epgstationcaller.*
 import com.daigorian.epcltvapp.epgstationv2caller.*
 import retrofit2.Call
 import retrofit2.Callback
@@ -157,40 +156,7 @@ class OriginalCardPresenter() : Presenter() {
                 .setTitle(it.context.getString(R.string.do_you_want_to_delete,cardView.titleText.toString()))
                 .setPositiveButton(it.context.getString(R.string.delete)) { dialog, which ->
                     when (item) {
-                        is RecordedProgram -> {
-                            // EPGStation Version 1.x.x のアイテム
-                            EpgStation.api?.deleteRecorded(
-                                item.id
-                            )?.enqueue(object : Callback<ApiError> {
-                                override fun onResponse(
-                                    call: Call<ApiError>,
-                                    response: Response<ApiError>
-                                ) {
-                                    if (response.body() != null &&
-                                        response.body()!!.code != null &&
-                                        response.body()!!.code == 200L
-                                    ) {
-                                        Toast.makeText(it.context, it.context.getString(R.string.successfully_deleted), Toast.LENGTH_SHORT)
-                                            .show()
-                                        objAdapter?.removeItemFromAllListRows(item)
-                                        onRecordedDeleted?.invoke(item.id)
-                                    } else {
-                                        Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
-                                            .show()
-                                    }
-                                }
-
-                                override fun onFailure(
-                                    call: Call<ApiError>,
-                                    t: Throwable
-                                ) {
-                                    Toast.makeText(it.context, it.context.getString(R.string.delete_failed), Toast.LENGTH_LONG)
-                                        .show()
-                                }
-                            })
-                        }
                         is RecordedItem -> {
-                            // EPGStation Version 2.x.x のアイテム
                             EpgStationV2.api?.deleteRecorded(
                                 item.id
                             )?.enqueue(object : Callback<ApiErrorV2> {
@@ -233,37 +199,13 @@ class OriginalCardPresenter() : Presenter() {
 
         val shortened = ShortenCardContentPreferences.shortenCards(cardView.context)
         // 設定を変えた直後だけ反映する（毎回 setMaxLines すると requestLayout が積もる）
-        val wantContentLines = if (shortened && (item is RecordedProgram || item is RecordedItem)) 1 else 4
+        val wantContentLines = if (shortened && item is RecordedItem) 1 else 4
         cardView.findViewById<TextView>(LeanbackR.id.content_text).let { tv ->
             if (tv.maxLines != wantContentLines) tv.maxLines = wantContentLines
         }
 
         when (item) {
-            is RecordedProgram -> {
-                // EPGStation Version 1.x.x
-                cardView.titleText = item.name
-                val channelNameV1 = EpgStation.channelMap[item.channelId] ?: ""
-                cardView.contentText = RecordingCardContent.text(channelNameV1,
-                    "${formatAsJapaneseDateTime(item.startAt)}〜 (${formatDurationMinutes(item.startAt, item.endAt)})",
-                    item.description, shortened)
-                val thumbnailURL = EpgStation.getThumbnailURL(item.id.toString())
-
-                //Glideでイメージを取得する際にBasic認証が必要な場合はヘッダを付与してやる
-                val glideUrl = if(EpgStation.authForGlide!=null){
-                    GlideUrl ( thumbnailURL, EpgStation.authForGlide)
-                }else{
-                    GlideUrl ( thumbnailURL)
-                }
-                //録画中なら録画中アイコンを出す。
-                Glide.with(viewHolder.view.context)
-                    .load(glideUrl)
-                    .centerCrop()
-                    .error(if(item.recording){mOnRecordingCardImage}else{mDefaultCardImage})
-                    .into(cardView.mainImageView)
-
-            }
             is RecordedItem -> {
-                // EPGStation Version 2.x.x
                 cardView.titleText = item.name
                 val channelNameV2 = item.channelId?.let { EpgStationV2.channelMap[it] } ?: ""
                 cardView.contentText = RecordingCardContent.text(channelNameV2,
@@ -320,13 +262,8 @@ class OriginalCardPresenter() : Presenter() {
                     cardView.mainImage = mDefaultCardImage
                 }
             }
-            is GetRecordedParam -> {
-                // EPGStation Version 1.x.x の先を読み込むBOX。ただ黒いBOX
-                cardView.titleText = ""
-                cardView.contentText = ""
-            }
             is GetRecordedParamV2 -> {
-                // EPGStation Version 2.x.x の先を読み込むBOX。ただ黒いBOX
+                // 先を読み込むBOX。ただ黒いBOX
                 cardView.titleText = ""
                 cardView.contentText = ""
             }
@@ -347,7 +284,6 @@ class OriginalCardPresenter() : Presenter() {
         val overlay = cardView.mainImageView?.overlay ?: return
         overlay.clear()
         val (itemId, isProtected) = when (item) {
-            is RecordedProgram -> item.id to item.protection
             is RecordedItem -> item.id to item.isProtected
             else -> return
         }

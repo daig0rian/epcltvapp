@@ -65,9 +65,6 @@ import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.SubtitleView
 import androidx.preference.PreferenceManager
-import com.daigorian.epcltvapp.epgstationcaller.EpgStation
-import com.daigorian.epcltvapp.epgstationcaller.GetRecordedResponse
-import com.daigorian.epcltvapp.epgstationcaller.RecordedProgram
 import com.daigorian.epcltvapp.epgstationv2caller.ApiErrorV2
 import com.daigorian.epcltvapp.epgstationv2caller.EpgStationV2
 import com.daigorian.epcltvapp.epgstationv2caller.HlsStream
@@ -165,8 +162,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     // TS追いかけ再生（Issue #42）: Details画面表示時点で収録中だったTSのみ有効化する。
     // 収録終了を確認した時点でfalseに固定し、以後は再プローブ/再確認を行わない。
     private var tsCatchUpActive = false
-    private var tsCatchUpRecordedProgramId: Long? = null // EPGStation v1
-    private var tsCatchUpRecordedItemId: Long? = null // EPGStation v2
+    private var tsCatchUpRecordedItemId: Long? = null
     // probeHeadの結果は再生中不変のため一度だけ保持し、再プローブのたびに使い回す。
     private var tsHeadPoint: TsProbe.HeadProbeResult? = null
 
@@ -249,12 +245,6 @@ class PlaybackVideoFragment : VideoSupportFragment() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val recordedProgram = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM, RecordedProgram::class.java)
-        } else {
-            @Suppress("DEPRECATION")
-            activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDPROGRAM) as RecordedProgram?
-        }
         val recordedItem = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             activity?.intent?.getSerializableExtra(DetailsActivity.RECORDEDITEM, RecordedItem::class.java)
         } else {
@@ -304,7 +294,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         // レジューム再生: 対象は「録画済みファイルを最初から通して見る」再生だけ。
         // ライブと HLS 追いかけ再生(収録中のものを今のところまで見る)は前回位置に意味がない。
         if (!isAnyLive && !isHls) {
-            resumePositionKey = buildResumePositionKey(recordedProgram?.id, recordedItem?.id, actionId)
+            resumePositionKey = buildResumePositionKey(recordedItem?.id, actionId)
             // 位置の記録自体は設定によらず常に続ける(「毎回確認」に戻したときすぐ使えるように)。
             // 設定が決めるのは、記録された位置をどう使うか(確認する/使わない/黙って飛ぶ)だけ。
             savedResumePositionMs = resumePositionKey
@@ -317,12 +307,11 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
         // シリーズ連続再生: レジューム再生と同じく「録画済みファイルを通して見る」再生だけが
         // 対象。ライブと HLS 追いかけ再生には「シリーズの次の回」という概念が無い。
-        seriesNavigationEnabled = !isAnyLive && !isHls && (recordedProgram != null || recordedItem != null)
+        seriesNavigationEnabled = !isAnyLive && !isHls && recordedItem != null
         if (seriesNavigationEnabled) {
             seriesAutoPlayEnabled = prefs.getBoolean(getString(R.string.pref_key_series_autoplay), true)
-            currentProgramId = recordedProgram?.id ?: recordedItem!!.id
-            currentVideoFileName = recordedProgram?.encoded?.firstOrNull { it.encodedId == actionId }?.name
-                ?: recordedItem?.videoFiles?.firstOrNull { it.id == actionId }?.name
+            currentProgramId = recordedItem!!.id
+            currentVideoFileName = recordedItem.videoFiles?.firstOrNull { it.id == actionId }?.name
             // エピソード一覧をコントロール行の下に置けるよう、行の入れ物を自前で用意する。
             // グルーがこの後 host に繋がるときに再生コントロール行が0番目へ入るので、
             // ここでは空のまま渡しておく(PlaybackSupportFragment.setPlaybackRow が
@@ -344,7 +333,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
                 browsingOtherRows = row is ListRow
                 applyControlsAutoHide()
             })
-            SeriesPlaylist.load(recordedProgram, recordedItem) { playlist ->
+            SeriesPlaylist.load(recordedItem) { playlist ->
                 if (!isAdded) return@load
                 seriesPlaylist = playlist
                 Log.d(TAG, "series playlist loaded: next=${playlist?.next(currentProgramId)?.name}")
@@ -508,8 +497,8 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             hasSubtitleSource(), hasSubAudio, seriesNavigationEnabled
         )
         mTransportControlGlue.host = glueHost
-        mTransportControlGlue.title = recordedProgram?.name ?: recordedItem?.name ?: liveChannelName
-        mTransportControlGlue.subtitle = recordedProgram?.description ?: recordedItem?.description
+        mTransportControlGlue.title = recordedItem?.name ?: liveChannelName
+        mTransportControlGlue.subtitle = recordedItem?.description
         // TS以外はExoPlayerがdurationをネイティブに把握しているため、TSのような事前プロービング
         // 待ちなしで直接シークプロバイダを組める(ExoPlayerネイティブのseekTo(ms)がそのまま使える)。
         // これによりLeanbackはDpadでのスクラブ中に実シークを都度呼ばず確定時に1回だけ呼ぶようになり、
@@ -549,15 +538,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
             return
         }
 
-        if (recordedProgram != null) {
-            movieUrl = if (actionId == VideoDetailsFragment.ACTION_WATCH_ORIGINAL_TS) {
-                EpgStation.getTsVideoURL(recordedProgram.id.toString())
-            } else {
-                EpgStation.getEncodedVideoURL(recordedProgram.id.toString(), actionId.toString())
-            }
-        } else {
-            movieUrl = EpgStationV2.getVideoURL(actionId.toString())
-        }
+        movieUrl = EpgStationV2.getVideoURL(actionId.toString())
 
         okHttpClient = buildOkHttpClient(movieUrl)
         val cleanUrl = stripAuthFromUrl(movieUrl)
@@ -565,8 +546,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         if (isTsContent) {
             tsSeekUrl = cleanUrl
             tsSeekHttpClient = okHttpClient
-            tsCatchUpActive = recordedProgram?.recording == true || recordedItem?.isRecording == true
-            tsCatchUpRecordedProgramId = recordedProgram?.id
+            tsCatchUpActive = recordedItem?.isRecording == true
             tsCatchUpRecordedItemId = recordedItem?.id
             startTsProbing(cleanUrl, okHttpClient)
         }
@@ -890,8 +870,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         switchingProgram = true
         Log.d(TAG, "playSeriesEntry: id=${entry.id} actionId=${target.actionId} isTs=${target.isTs}")
         val extras = Bundle().apply {
-            entry.recordedProgram?.let { putSerializable(DetailsActivity.RECORDEDPROGRAM, it) }
-            entry.recordedItem?.let { putSerializable(DetailsActivity.RECORDEDITEM, it) }
+            putSerializable(DetailsActivity.RECORDEDITEM, entry.recordedItem)
             putLong(DetailsActivity.ACTIONID, target.actionId)
             putBoolean(DetailsActivity.IS_TS_CONTENT, target.isTs)
         }
@@ -931,15 +910,13 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * 前回停止位置の保存先キー。動画ファイル1本を一意に指す必要があるため、
-     * 番組IDだけでなく再生対象(TS/エンコード済みの別、v2ならvideoFileのID)まで含める。
+     * 録画IDだけでなく再生対象(videoFile の ID。actionId がそれ)まで含める。
+     *
+     * 接頭辞の `v2:` は、v1 と v2 の両方に対応していた頃に付けたもの。変えると保存済みの
+     * 再生位置が読めなくなるので、v1 をやめた今もこのままにする。
      */
-    private fun buildResumePositionKey(programId: Long?, itemId: Long?, actionId: Long): String? = when {
-        // EPGStation v1: actionId は ACTION_WATCH_ORIGINAL_TS または encodedId
-        programId != null -> "v1:$programId:$actionId"
-        // EPGStation v2: actionId は videoFile の ID
-        itemId != null -> "v2:$itemId:$actionId"
-        else -> null
-    }
+    private fun buildResumePositionKey(itemId: Long?, actionId: Long): String? =
+        itemId?.let { "v2:$it:$actionId" }
 
     /**
      * コントロール行の組み替えを、Leanback がそのビューを作った後に行う。
@@ -1254,8 +1231,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
         episodeCardPresenter.nowPlayingId = currentProgramId
         val cards = ArrayObjectAdapter(episodeCardPresenter)
         playlist.entries.forEach { entry ->
-            val card: Any = entry.recordedProgram ?: entry.recordedItem ?: return@forEach
-            cards.add(card)
+            cards.add(entry.recordedItem)
         }
         // シリーズ名は空にならない(空ならそもそも一覧を作れず playlist が null になる)が、
         // 見出しが空欄の行は壊れて見えるので保険を置いておく。
@@ -1266,9 +1242,7 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /** エピソード一覧のカードが選ばれたとき。今見ている回なら何もしない。 */
     private fun onEpisodeCardClicked(item: Any?) {
-        val entry = seriesPlaylist?.entries?.firstOrNull {
-            it.recordedProgram === item || it.recordedItem === item
-        } ?: return
+        val entry = seriesPlaylist?.entries?.firstOrNull { it.recordedItem === item } ?: return
         if (entry.id == currentProgramId) {
             showMessageToast(getString(R.string.series_already_playing))
             setSelectedPosition(0)
@@ -1365,37 +1339,22 @@ class PlaybackVideoFragment : VideoSupportFragment() {
 
     /**
      * 収録中TS追いかけ再生（Issue #42）: 現在の収録状況をEPGStation APIへ再確認する。
-     * v1/v2とも単一IDで収録状況を問い合わせるエンドポイントが存在しないため、「収録中一覧」を
-     * 取得して対象IDが含まれるかで判定する。収録終了を確認したら tsCatchUpActive を false に
+     * 「収録中一覧」を取得して対象IDが含まれるかで判定する。収録終了を確認したら tsCatchUpActive を false に
      * 固定し、以後は呼び出し元(startTsProbing/restartTsPlaybackAt)がこの再確認自体を呼ばなくなる。
      * 問い合わせ失敗時は現状維持とし、次回のシーク/再オープン時に再試行する。
      */
     private fun refreshCatchUpRecordingStatus() {
-        val programId = tsCatchUpRecordedProgramId
-        val itemId = tsCatchUpRecordedItemId
-        if (programId != null) {
-            EpgStation.api?.getRecorded(recording = true)?.enqueue(object : Callback<GetRecordedResponse> {
-                override fun onResponse(call: Call<GetRecordedResponse>, response: Response<GetRecordedResponse>) {
-                    if (response.isSuccessful) {
-                        tsCatchUpActive = response.body()?.recorded?.any { it.id == programId } == true
-                    }
+        val itemId = tsCatchUpRecordedItemId ?: return
+        EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
+            override fun onResponse(call: Call<Records>, response: Response<Records>) {
+                if (response.isSuccessful) {
+                    tsCatchUpActive = response.body()?.records?.any { it.id == itemId } == true
                 }
-                override fun onFailure(call: Call<GetRecordedResponse>, t: Throwable) {
-                    Log.w(TAG, "refreshCatchUpRecordingStatus(v1) failed: ${t.message}")
-                }
-            })
-        } else if (itemId != null) {
-            EpgStationV2.api?.getRecording()?.enqueue(object : Callback<Records> {
-                override fun onResponse(call: Call<Records>, response: Response<Records>) {
-                    if (response.isSuccessful) {
-                        tsCatchUpActive = response.body()?.records?.any { it.id == itemId } == true
-                    }
-                }
-                override fun onFailure(call: Call<Records>, t: Throwable) {
-                    Log.w(TAG, "refreshCatchUpRecordingStatus(v2) failed: ${t.message}")
-                }
-            })
-        }
+            }
+            override fun onFailure(call: Call<Records>, t: Throwable) {
+                Log.w(TAG, "refreshCatchUpRecordingStatus failed: ${t.message}")
+            }
+        })
     }
 
     /**

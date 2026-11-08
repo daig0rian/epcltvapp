@@ -25,7 +25,7 @@
 画面ごとの操作方法は **[操作マニュアル](MANUAL.md)** を参照してください。
 
 ## 必要な環境
-- EPGStation Version 1.x.x または 2.x.x（Version 1.x.x については動作確認が限定的です）
+- EPGStation Version 2.x.x または 3.x.x（Version 1.x.x には対応していません）
 - Android 5.1 以上の Android TV / Fire TV
 
 ## テスト環境
@@ -33,6 +33,7 @@
 - Google TV Streamer (4K)
 - Fire TV Stick 第3世代
 - EPGStation Version 2.10.0
+- EPGStation Version 3.0.0-beta4
 
 ## インストール方法
 

@@ -1,6 +1,5 @@
 package com.daigorian.epcltvapp
 
-import com.daigorian.epcltvapp.epgstationcaller.StorageInfoV1
 import com.daigorian.epcltvapp.epgstationv2caller.StorageInfo
 import com.daigorian.epcltvapp.epgstationv2caller.StorageItem
 import org.junit.Assert.assertEquals
@@ -133,17 +132,6 @@ class DiskUsageTest {
         assertEquals(emptyList<DiskUsage>(), DiskUsage.fromV2(null))
         assertEquals(emptyList<DiskUsage>(), DiskUsage.fromV2(StorageInfo(null)))
         assertEquals(emptyList<DiskUsage>(), DiskUsage.fromV2(StorageInfo(emptyList())))
-        assertEquals(emptyList<DiskUsage>(), DiskUsage.fromV1(null))
-        assertEquals(emptyList<DiskUsage>(), DiskUsage.fromV1(StorageInfoV1(free = 0, used = 0, total = 0)))
-    }
-
-    @Test
-    fun `v1 は名前の無い保存先1つになる`() {
-        val usage = DiskUsage.fromV1(StorageInfoV1(free = 30 * gb, used = 90 * gb, total = 125 * gb)).single()
-
-        assertEquals(null, usage.name)
-        assertEquals(75, usage.usedPercent)
-        assertEquals("Used 90GB/120GB · 75%", usage.labelBody)
     }
 
     @Test
